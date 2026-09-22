@@ -803,12 +803,30 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         `RepoAccessError` covers 403 (rate-limit/blocked) and network-level
         failures (DNS, connection refused, timeout). **T10 integration test
         added 2026-09-22** in `tests/test_pipeline_integration.py` — see T10.
-- [ ] **T3 (P1, human: ~4h / CC: ~30min)** — llm-client — Implement
+- [x] **T3 (P1, human: ~4h / CC: ~30min)** — llm-client — Implement
       infra-retry policy (timeout/rate-limit backoff, separate from
       wrapper-repair budget; auth fails fast).
       - Surfaced by: CEO Review Findings #2
-      - Files: `legwork/llm_client.py` (planned)
+      - Files: `legwork/llm_client.py`
       - Verify: unit tests mocking each failure class
+      - **DONE 2026-09-22:** `legwork/llm_client.py`, stdlib-only
+        (`urllib`), 12 unit tests, all passing (mocked HTTP, no network).
+        Config via env vars: `LEGWORK_LLM_ENDPOINT`, `LEGWORK_LLM_API_KEY`,
+        `LEGWORK_LLM_MODEL` (OpenAI-compatible chat-completions endpoint,
+        per the Decided section — no bundled provider shim). Infra-retry:
+        1 initial attempt + 2 retries on timeout/rate-limit/5xx,
+        exponential backoff (2s, 4s) — resolves the "2 attempts" range in
+        the original decision to a concrete number. 401/403 fail fast as
+        `LLMAuthError`, no retry. A 200 response that isn't shaped like a
+        chat-completion (bad JSON, missing `choices[0].message.content`)
+        raises `LLMMalformedOutputError` — reusing the design doc's
+        existing class rather than inventing a new untracked one, since
+        both cases mean "the endpoint returned something Legwork can't use
+        as codegen output," whether that's a bad response shape at the
+        client level or bad generated code content at the codegen level.
+        **Not smoke-tested against a real endpoint** (no OpenAI-compatible
+        API key available in this environment, unlike T2/T10's real-network
+        tests) — noted honestly rather than skipped silently.
 - [ ] **T4 (P1, human: ~2h / CC: ~20min)** — readme-parser — Implement
       50KB size cap with truncation flag; retry prompts carry latest
       failure only, not accumulated history.
