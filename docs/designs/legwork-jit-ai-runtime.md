@@ -774,16 +774,28 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Verify: success-fraction report from the spike
       - **DONE 2026-09-22:** [legwork-validation-spike-2026-09-22.md](legwork-validation-spike-2026-09-22.md)
         — 1/8 clean success, 1/8 malicious payload found. See T10.
-- [ ] **T2 (P1, human: ~6h / CC: ~45min)** — repo-fetcher — Implement
+- [x] **T2 (P1, human: ~6h / CC: ~45min)** — repo-fetcher — Implement
       reachability/access precondition check (404/403/malformed URL, fail
       fast, no retry-budget consumption), then shallow-clone the full repo
       (moved earlier at eng review, 2026-09-22 — T10's scanner and README
       parsing both read from this clone, not a separate API call).
       - Surfaced by: CEO Review Findings #1; eng review pass 2 (clone
         timing gap, 2026-09-22)
-      - Files: `legwork/repo_fetcher.py` (planned)
+      - Files: `legwork/repo_fetcher.py`
       - Verify: unit tests for malformed/private/missing repo; integration
         test confirming T10 runs against the clone before README parse
+      - **DONE 2026-09-22:** `legwork/repo_fetcher.py` + 21 unit tests, all
+        passing (mocked HTTP/subprocess, no network in the test suite).
+        Also smoke-tested against the real GitHub API and a real clone of
+        `2akouwu/reverify` (the validation spike's success case). One
+        implementation-level correction from the design doc's assumption:
+        GitHub's API returns 404 (not 403) for private repos when
+        unauthenticated, so `RepoNotFoundError` and "private" are
+        genuinely indistinguishable without an authorized token — the
+        error message says so rather than claiming false certainty.
+        `RepoAccessError` covers 403 (rate-limit/blocked) and network-level
+        failures (DNS, connection refused, timeout). The T10 integration
+        test is still pending T10's own implementation.
 - [ ] **T3 (P1, human: ~4h / CC: ~30min)** — llm-client — Implement
       infra-retry policy (timeout/rate-limit backoff, separate from
       wrapper-repair budget; auth fails fast).
