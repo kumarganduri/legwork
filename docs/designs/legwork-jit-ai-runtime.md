@@ -98,8 +98,19 @@ can't be replaced by wiring together existing OSS this weekend.
 
 **Decision made from this:** wrapper caching should be public/versioned/shared
 from day one (not pure ephemeral regeneration) — the repo itself becomes the
-cache, so this needs zero extra hosting infrastructure while still resolving
-premises #3 and #4 the way the subagent proposed.
+cache, so this needs zero extra hosting infrastructure.
+
+**Correction (from Outside Voice review):** caching does NOT resolve premise
+#4 (security), and the phrase above overstated it. The automated smoke test
+only proves "the tool call executed without raising" — it says nothing about
+whether a wrapper quietly does something malicious. A wrapper that clears
+that low bar now gets **redistributed to every future user who trusts the
+cache instead of resynthesizing** — the reuse Success Criteria explicitly
+wants. That converts a single-victim risk into a supply-chain distribution
+risk. This is a known, disclosed limitation of the automated-smoke-test-only
+model (see Decided section's injection-defense entry, corrected below), not
+a resolved problem. Caching still resolves premise #3 (cost) cleanly — that
+part of the original claim stands.
 
 **Scope note:** this goes slightly beyond the subagent's raw one-weekend
 recommendation, which cut all orchestration. The gap is narrow on purpose:
@@ -174,6 +185,12 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   path (`python demo.py`), a CLI invocation, or a `Dockerfile`/`CMD`. The
   synthesizer's first job is locating this from the README's stated install/
   run instructions before it can write a wrapper around it.
+  **Named gap (Outside Voice review):** locating the entrypoint is NOT the
+  same problem as inferring a correctly-typed MCP tool schema (named
+  parameters, input/output types) from that entrypoint — the harder, more
+  novel half of premise #2 that this doc had not actually specified. The
+  validation spike below exists specifically to find out how that inference
+  step behaves on real READMEs before more architecture is built around it.
 - **Prompt-injection defense is NOT deferred to Approach B — it's a known,
   unmitigated risk that v1 ships with and discloses.** v1 auto-executes
   LLM-synthesized code against untrusted READMEs from day one, so the risk
@@ -185,14 +202,19 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   to unrelated paths; (2) **entrypoint-invocation phase** — network access
   cut once dependencies are installed and the wrapper actually runs. This
   doesn't stop a poisoned README from producing a bad wrapper, but it
-  bounds what that wrapper can do once it's actually executing. The
-  residual risk (a malicious README steering the codegen step itself, or
-  a malicious install script run during phase 1) is disclosed plainly in
-  the README, matching the Constraints requirement to name risk rather
-  than hide it. A fuller defense (e.g. sandboxing the codegen LLM call
-  itself, static analysis of the generated wrapper before first run, a
-  vetted-package-only dependency policy) is real, separate design work for
-  Approach B, not solved here.
+  bounds what that wrapper can do once it's actually executing.
+  **Correction (Outside Voice review):** phase 1 — network-open dependency
+  install (`pip install`, arbitrary `setup.py`/install scripts) — is the
+  **primary named attack surface**, not a secondary footnote to codegen
+  injection. Malicious PyPI packages exfiltrating env vars or sandbox
+  contents during install are a live, common real-world supply-chain
+  pattern; a malicious README steering the codegen step is the second risk,
+  not the main one. Both are disclosed plainly in the README, matching the
+  Constraints requirement to name risk rather than hide it — but install-
+  time gets named first and clearly. A fuller defense (e.g. sandboxing the
+  codegen LLM call itself, static analysis of the generated wrapper before
+  first run, a vetted-package-only dependency policy) is real, separate
+  design work for Approach B, not solved here.
 - **LLM shim ownership:** Legwork does not bundle a compatibility shim in
   v1. It expects the user to point it at an OpenAI-compatible chat-
   completions endpoint URL (their own key, their own provider — direct
@@ -203,6 +225,45 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   an auto-PR bot.** The CLI writes the wrapper + manifest to a local
   output directory; the user opens the PR themselves. An auto-PR bot
   (Approach C's model) is explicitly future work, not v1.
+
+## CEO Review Findings (architecture, error-handling, security, observability)
+
+Six gaps surfaced reviewing the above against HOLD SCOPE rigor — each decided
+individually, all folded into v1 scope (none of these expand beyond Approach A,
+they make it correctly built):
+
+1. **Bad repo URL is a distinct failure from a bad README.** Before any README
+   parsing, verify the repo is reachable and public. On 404/403/invalid URL,
+   fail immediately with `RepoNotFoundError`/`RepoAccessError` and a clear
+   message — do not burn any of the 3 wrapper-repair attempts on a repo that
+   will never work.
+2. **LLM infrastructure failures get their own retry policy, separate from
+   the 3-attempt wrapper-repair budget.** Timeout/rate-limit get a short
+   backoff-and-retry (e.g. 2 attempts, exponential backoff) that does NOT
+   count against the 3 wrapper attempts. Auth failure (bad/missing key) fails
+   immediately — retrying a bad key wastes time and API calls for nothing.
+3. **README/repo content sent to the LLM is size-capped.** Truncate to a
+   stated max (exact number is an eng-review detail) before it reaches
+   codegen; if truncation likely caused a synthesis failure, say so in the
+   failure message. Bounds worst-case cost per run — matters directly for a
+   tool whose pitch is "the only cost is your own LLM usage, and it's small."
+4. **API key sourcing is env-var only, with an explicit scrub before any
+   public write.** Never a CLI flag (shell history) or config file (accidental
+   commit). Before writing the cache manifest or any log line destined for
+   the public cache/PR, scrub for anything matching the key's format. Closes
+   the most likely accidental-leak path into a public, shared artifact.
+5. **Every retry attempt logs its own structured outcome, not just the final
+   result.** Each of the 3 attempts records: what changed from the prior
+   attempt, the exact failure class, and whether it retried or stopped. On
+   final failure, print all attempts' summaries together. Makes the retry
+   loop's self-correction — the actual novel, hard part per premise #2 —
+   visible and debuggable instead of a black box.
+6. **A bad/gamed cache entry is reverted with a plain `git revert` on its
+   manifest + wrapper files.** No special invalidation tooling — the cache is
+   just files in the repo (per the earlier caching decision), so this is
+   already true; stating it as explicit policy here prevents a future
+   contributor from building unnecessary infrastructure to solve an
+   already-solved problem.
 
 ## Open Questions
 
@@ -231,6 +292,17 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   locate an entrypoint produces a clear "insufficient information" failure
   message, not a retry loop burning attempts against a wrapper that can
   never succeed.
+- **Explicit caveat (Outside Voice review):** passing the 3-5 hand-picked
+  smoke-test fixtures does NOT itself demonstrate success on an arbitrary,
+  never-seen repo — the two are different claims. The fixture set is a
+  regression gate for the cache (did a change break a known-good wrapper);
+  it is not evidence the synthesizer generalizes. The validation spike
+  (Next Steps #1) and the live unscripted demo itself are what actually
+  test generalization — not the fixture set.
+- A target repo that requires its own credentials to run (gated Hugging
+  Face models, API-backed demos) fails with a clear, correctly-labeled
+  `CredentialRequiredError` — distinct from `InsufficientReadmeError` — and
+  is explicitly unsupported in v1, not silently mishandled.
 
 ## Distribution Plan
 
@@ -252,29 +324,273 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   wrapper is stale and should be resynthesized against a new commit — the
   actual mechanism for "cache per repo-version" from the Cross-Model
   Perspective section.
+- **License policy (Outside Voice review closed this gap):** a copyleft
+  (GPL/AGPL) or missing-license source repo gets a visible flag in the
+  manifest AND a warning line in the PR description, so the human merging
+  the PR actually sees it and decides — it does not block cache entry
+  automatically. This makes the license field an actual disclosure step
+  (per Constraints) rather than silent, unread metadata.
 - README leads with the live/unscripted demo, not a feature list — matches
   the "prove it, don't pitch it" positioning from the cross-model review.
 
 ## Next Steps
 
-1. Prototype the core loop: repo URL → README parse → locate entrypoint →
-   LLM-drafted MCP wrapper (Python target, OpenAI-compatible LLM call) →
-   attempt run → capture failure (execution failure or insufficient-README)
-   → retry up to 3x → clear success/failure report.
+0. **Validation spike, before eng review locks architecture (Outside Voice
+   review — do this first).** Hand-run 5-10 real, currently-trending READMEs
+   through raw LLM codegen only — no retry loop, no cache, no CI, no
+   sandbox hardening. Specifically test the actual novel step: does the
+   model reliably infer a correctly-typed MCP tool schema (not just "the
+   run command") from unstructured README prose? Record the success
+   fraction and failure patterns. If it mostly works, every decision
+   already made in this doc stays valid — proceed to eng review. If it
+   doesn't, the retry taxonomy, manifest schema, and CI gating already
+   designed may need to change, and it's far cheaper to learn that now
+   (~1 day) than after building the scaffolding around a broken core.
+1. Prototype the core loop: verify repo reachable/public (fail fast on
+   404/403/invalid) → README parse (size-capped before it reaches the LLM)
+   → locate entrypoint → LLM-drafted MCP wrapper (Python target,
+   OpenAI-compatible LLM call, own short backoff-retry on
+   timeout/rate-limit, immediate fail on auth error) → attempt run →
+   capture failure (execution failure or insufficient-README) → retry up
+   to 3x, each attempt logged with what changed and why it failed → clear
+   success/failure report showing all attempts on final failure.
 2. Hand-pick 3-5 real, CPU-only/lightweight trending repos as the first
    smoke-test fixtures (not scraped — satisfies premise #3; GPU-heavy repos
    explicitly out of v1's smoke-test set per Success Criteria).
 3. Implement the cache manifest per the schema in Distribution Plan (repo
    URL, commit SHA, synthesis date, wrapper language, license, smoke-test
    result) as a folder inside this repo — no external hosting needed for v1.
-   The CLI writes wrapper + manifest to a local output directory; opening
-   the PR to contribute it is a manual step for v1 (no auto-PR bot).
+   Scrub for anything matching the API key format before any manifest or
+   log line is written to this output. The CLI writes wrapper + manifest to
+   a local output directory; opening the PR to contribute it is a manual
+   step for v1 (no auto-PR bot). A bad entry reverts with a plain
+   `git revert` on its files — no separate invalidation tooling.
 4. Record the first unscripted demo (a repo that trended that same morning,
    never seen before) as the README's opening proof — and disclose the
    prompt-injection risk plainly in that same README (see Decided section).
 5. Run `/plan-eng-review` next to lock architecture (Python packaging
    choice, sandbox mechanism for v1, exact manifest schema) before writing
    code.
+
+## NOT in Scope (v1)
+
+| Item | Rationale |
+|------|-----------|
+| Live scraping / trending-index service | Reintroduces hosted infra cost premise #3 rules out; index stays hand-picked+static |
+| Semantic intent router | Commodity — `mcp-gateway-registry` already solves this; Approach B territory |
+| Orchestrated multi-tenant sandbox platform | XL effort, high risk before any demo exists; two-sequential-container is sufficient for v1's single-user CLI use case |
+| GPU/CUDA repo support | v1's container-based two-phase sandbox doesn't resolve driver/GPU mismatches; named gap in Success Criteria, Approach B's job |
+| Human-review verification tier | Contradicts the "automated smoke test only" decision; Approach C's model, deferred whole |
+| Auto-PR bot for cache contribution | v1 is a manual PR step; automating it is real, separate scope (Approach C) |
+| Multi-provider LLM shim | User brings an OpenAI-compatible endpoint directly; bundling a shim is an eng-review/Approach B question |
+| Configurable retry bound | Fixed at 3 for v1 to keep the surface small; revisit if real usage shows 3 is wrong |
+| Prompt-injection defense beyond phase-based network cutoff | Named, disclosed, unmitigated risk for v1; static analysis / codegen sandboxing is Approach B design work |
+
+## What Already Exists (and why v1 doesn't just wire it together)
+
+- **`mcp-gateway-registry`** — dynamic semantic tool discovery + routing, off the shelf. Not used in v1 because v1 has no router yet (Approach B); when it lands, this is the reuse target, not a rebuild.
+- **E2B / Daytona / `kindling-mcp`** — mature ephemeral sandbox orchestration (Firecracker microVMs). Not used in v1 because v1's two-sequential-container approach is sufficient for a single-user local CLI; real orchestration is Approach B's job when multi-tenant/hosted use cases exist.
+- **`cnoe-io/openapi-mcp-codegen`, ReadMe.com's MCP generator** — auto-generate MCP servers, but only from a *structured OpenAPI spec*. Cannot be reused for Legwork's core problem (synthesizing from unstructured README prose, per premise #2) — this is precisely the gap nothing in the landscape fills.
+
+## Dream State Delta
+
+```
+  CURRENT STATE                    THIS PLAN (v1)                   12-MONTH IDEAL (Approach B)
+  ──────────────                   ───────────────                  ───────────────────────────
+  Developer manually        --->   CLI synthesizes a working  --->   Full JIT pipeline: trending
+  reads README, fights            MCP wrapper from a repo            repos auto-discovered,
+  deps, writes glue code          URL + README, self-repairs         routed by intent, sandboxed
+  by hand for every                across 3 attempts, caches          end-to-end with hardened
+  trending repo.                  the result publicly.                isolation — zero manual
+                                                                        steps from intent to tool.
+```
+
+## Diagrams
+
+### System architecture
+
+```
+┌──────────────┐   ┌───────────────┐   ┌──────────────────┐   ┌─────────────────┐
+│ Legwork CLI   │──▶│ Repo Fetcher   │──▶│ README Parser     │──▶│ Entrypoint       │
+│ (repo URL in) │   │ (reachability, │   │ (size-capped)      │   │ Locator          │
+└──────────────┘   │  fail-fast)    │   └──────────────────┘   └────────┬─────────┘
+                    └───────────────┘                                    │
+                                                                          ▼
+┌───────────────┐   ┌───────────────────┐   ┌──────────────────────────────────┐
+│ Cache Writer   │◀──│ Retry Loop (≤3x)   │◀──│ LLM Codegen Step                  │
+│ (key-scrub     │   │ - logs each        │   │ (OpenAI-compatible endpoint,       │
+│  before write) │   │   attempt          │   │  own infra-retry: timeout/         │
+└───────┬───────┘   │ - wrapper-repair   │   │  ratelimit backoff, auth=fail-fast)│
+        │            │   budget only      │   └──────────────┬────────────────────┘
+        ▼            └───────────────────┘                    │
+┌───────────────┐                                              ▼
+│ Public Cache   │                                   ┌──────────────────────────┐
+│ (repo folder,  │◀──────────────────────────────────│ Sandbox (container-based)  │
+│  CI smoke-test │        smoke-test result            │ Phase 1: install, network  │
+│  gated)        │                                     │ Phase 2: invoke, no network│
+└───────────────┘                                     └──────────────────────────┘
+```
+
+### Data flow with shadow paths
+
+```
+INPUT(URL) ──▶ REACHABILITY ──▶ README PARSE ──▶ ENTRYPOINT ──▶ CODEGEN ──▶ SANDBOX RUN ──▶ CACHE WRITE
+    │               │                 │                │              │              │              │
+    ▼               ▼                 ▼                ▼              ▼              ▼              ▼
+[malformed?]   [404/403? →      [empty/huge? →   [not found in  [LLM timeout/   [install fails/ [key-shaped
+→Invalid-       RepoNotFound/    Insufficient-    README? →      ratelimit/auth  runtime raises  string? →
+RepoURLError,   RepoAccess-      ReadmeError, or   Insufficient-  → own infra-    → wrapper-       Secret-
+fail fast]      Error, fail      truncate+warn]    ReadmeError,   retry, not      repair retry,   Scrub-
+                fast]                              fail fast]     wrapper         capped at 3]    Triggered,
+                                                                   budget]                         block write]
+```
+
+### State machine: retry loop
+
+```
+        ┌───────┐
+        │ START │
+        └───┬───┘
+            ▼
+   ┌──────────────────┐
+   │ ATTEMPT (n=1..3)   │◀────────────────┐
+   └─────────┬──────────┘                  │
+             ▼                             │
+    ┌──────────────────┐          n<3 AND retryable
+    │ Codegen + Sandbox  │           (LLMMalformedOutput,
+    │ Run                │           DependencyInstall,
+    └─────────┬──────────┘           WrapperRuntime)
+              │                             │
+      ┌───────┴────────┐                   │
+      ▼                ▼                   │
+┌───────────┐   ┌────────────────┐          │
+│  SUCCESS   │   │    FAILURE      │──────────┘
+│ → cache    │   │ (log this       │
+│   write    │   │  attempt)       │
+└───────────┘   └────────┬────────┘
+                          │
+                  n==3 OR non-retryable
+                  (bad URL, auth error,
+                   insufficient README)
+                          ▼
+                 ┌─────────────────┐
+                 │  FINAL FAILURE   │
+                 │ (report all      │
+                 │  attempts)       │
+                 └─────────────────┘
+```
+Impossible transition: no attempt fires after SUCCESS or FINAL FAILURE — both are
+terminal, guarded by the attempt counter plus a success flag checked before each
+loop iteration.
+
+### Deployment sequence (cache contribution)
+
+```
+Contributor          Legwork CLI            Local output dir       GitHub PR         CI (GitHub Actions)
+    │                     │                        │                    │                    │
+    │── repo URL ────────▶│                        │                    │                    │
+    │                     │── wrapper+manifest ───▶│                    │                    │
+    │                     │   (key-scrubbed)        │                    │                    │
+    │◀── local files ─────│                        │                    │                    │
+    │── manual PR open ──────────────────────────────────────────────▶│                    │
+    │                     │                        │                    │── smoke test ─────▶│
+    │                     │                        │                    │◀── pass/fail ───────│
+    │                     │                        │                    │  pass → merge into  │
+    │                     │                        │                    │  public cache        │
+    │                     │                        │                    │  fail → blocked,     │
+    │                     │                        │                    │  contributor fixes   │
+```
+
+### Rollback flowchart (bad cache entry)
+
+```
+  Bad/gamed wrapper discovered in public cache
+                    │
+                    ▼
+       Open a normal PR reverting that
+       entry's manifest + wrapper files
+       (plain `git revert`, no special
+        invalidation tooling)
+                    │
+                    ▼
+       CI runs the same smoke-test gate
+       on the revert PR like any other
+                    │
+                    ▼
+              Merge → entry gone
+```
+
+## Error & Rescue Registry
+
+```
+  METHOD/CODEPATH             | WHAT CAN GO WRONG              | EXCEPTION CLASS
+  -----------------------------|--------------------------------|---------------------------
+  Repo Fetcher#check            | URL malformed                  | InvalidRepoURLError
+                                 | Repo private/403               | RepoAccessError
+                                 | Repo doesn't exist/404         | RepoNotFoundError
+  README Parser#parse           | README missing entirely        | InsufficientReadmeError
+                                 | README oversized               | ReadmeTruncatedWarning (not fatal)
+  Entrypoint Locator#locate     | No install/run info found      | InsufficientReadmeError
+  Sandbox Runner#invoke         | Target repo needs its own       | CredentialRequiredError
+                                 | credentials to run              |
+  LLM Codegen#call              | API timeout                    | LLMTimeoutError
+                                 | API rate-limited                | LLMRateLimitError
+                                 | API auth failure (bad/no key)  | LLMAuthError
+                                 | Malformed/unparseable output   | LLMMalformedOutputError
+  Sandbox Runner#install        | Dependency install fails       | DependencyInstallError
+  Sandbox Runner#invoke         | Wrapper raises at runtime      | WrapperRuntimeError
+  Retry Loop#run                | 3 attempts exhausted            | RetryBudgetExhaustedError
+  Cache Writer#write            | Smoke test fails               | SmokeTestFailedError
+                                 | Key-shaped string in output    | SecretScrubTriggeredError (blocks write)
+  -----------------------------|--------------------------------|---------------------------
+
+  EXCEPTION CLASS                | RESCUED? | RESCUE ACTION                          | USER SEES
+  --------------------------------|----------|------------------------------------------|---------------------------------
+  InvalidRepoURLError            | Y        | Fail fast, no retry                       | "Invalid repo URL: <reason>"
+  RepoAccessError                | Y        | Fail fast, no retry                       | "Repo is private or inaccessible"
+  RepoNotFoundError               | Y        | Fail fast, no retry                       | "Repo not found: <url>"
+  InsufficientReadmeError        | Y        | Fail fast, no retry (not a wrapper-repair | "README doesn't contain enough
+                                  |          | attempt)                                  |  install/run info"
+  ReadmeTruncatedWarning         | Y        | Truncate, continue, flag in output        | "README truncated to <N>KB —
+                                  |          |                                            |  synthesis may be incomplete"
+  LLMTimeoutError                | Y        | Infra backoff-retry (2x), separate budget | Nothing if recovered; else
+                                  |          | from wrapper-repair                       | "LLM endpoint timed out"
+  LLMRateLimitError               | Y        | Infra backoff-retry (2x)                  | Nothing if recovered; else
+                                  |          |                                            | "LLM endpoint rate-limited"
+  LLMAuthError                    | Y        | Fail fast, no retry                       | "LLM auth failed — check your
+                                  |          |                                            |  API key env var"
+  CredentialRequiredError        | Y        | Fail fast, no retry, not a wrapper-repair | "This repo needs its own
+                                  |          | attempt                                   |  credentials — not supported
+                                  |          |                                            |  in v1"
+  LLMMalformedOutputError        | Y        | Counts as wrapper-repair attempt          | Nothing if recovered; else
+                                  |          |                                            | shown in final attempt summary
+  DependencyInstallError          | Y        | Counts as wrapper-repair attempt          | Shown in per-attempt log
+  WrapperRuntimeError              | Y        | Counts as wrapper-repair attempt          | Shown in per-attempt log
+  RetryBudgetExhaustedError       | Y        | Stop, report all 3 attempts together      | Full attempt-by-attempt summary
+  SmokeTestFailedError            | Y        | Block cache entry, no auto-retry          | "Smoke test failed — not added
+                                  |          |                                            |  to cache" (CI output)
+  SecretScrubTriggeredError       | Y        | Block the write entirely, no partial write| "Possible API key detected in
+                                  |          |                                            |  output — write blocked"
+```
+
+No unrescued gaps: every exception class above has a named rescue action and user-visible message — this is what closed CEO-review finding 2 (LLM infra failures) and finding 4 (secret scrub).
+
+## Failure Modes Registry
+
+```
+  CODEPATH                  | FAILURE MODE            | RESCUED? | TEST?  | USER SEES?          | LOGGED?
+  ---------------------------|--------------------------|----------|--------|----------------------|--------
+  Repo Fetcher                | Invalid/private/404 repo | Y        | Yes*   | Clear error message  | Y
+  README Parser                | Missing/oversized README| Y        | Yes*   | Clear error/warning  | Y
+  Entrypoint Locator           | No entrypoint found      | Y        | Yes*   | Clear error message  | Y
+  LLM Codegen                  | Timeout/rate-limit/auth  | Y        | Yes*   | Message or silent    | Y
+                                |                          |          |        | recovery             |
+  Sandbox Runner                | Install/runtime failure | Y        | Yes*   | Per-attempt log      | Y
+  Retry Loop                    | Budget exhausted         | Y        | Yes*   | Full attempt summary | Y
+  Cache Writer                  | Smoke test / secret scrub| Y        | Yes*   | CI output / block msg| Y
+  ---------------------------|--------------------------|----------|--------|----------------------|--------
+```
+`*` = "Yes" means a test is specified in Next Steps #1-3 and Success Criteria; the actual test code doesn't exist yet (no implementation started) — this is tracked as the eng-review handoff, not a gap in this plan. No row has RESCUED=N or USER SEES=Silent — no CRITICAL GAPs.
 
 ## What I noticed about how you think
 
