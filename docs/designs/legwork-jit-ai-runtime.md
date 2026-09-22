@@ -512,6 +512,7 @@ they make it correctly built):
 - **`mcp-gateway-registry`** — dynamic semantic tool discovery + routing, off the shelf. Not used in v1 because v1 has no router yet (Approach B); when it lands, this is the reuse target, not a rebuild.
 - **E2B / Daytona / `kindling-mcp`** — mature ephemeral sandbox orchestration (Firecracker microVMs). Not used in v1 because v1's two-sequential-container approach is sufficient for a single-user local CLI; real orchestration is Approach B's job when multi-tenant/hosted use cases exist.
 - **`cnoe-io/openapi-mcp-codegen`, ReadMe.com's MCP generator** — auto-generate MCP servers, but only from a *structured OpenAPI spec*. Cannot be reused for Legwork's core problem (synthesizing from unstructured README prose, per premise #2) — this is precisely the gap nothing in the landscape fills.
+- **`vndee/llm-sandbox`** — evaluated for T5 (2026-09-22), rejected for this environment: its only backends (Docker, Kubernetes, Podman, Micromamba) all need an external runtime, and none were available on the dev machine — confirmed by trying each. Not a mark against the library, just a real result. Built on macOS's native `sandbox-exec` instead; worth re-evaluating once a container runtime is actually available (Approach B, portability).
 
 ## Dream State Delta
 
@@ -854,15 +855,47 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         against the real file: now finds 7 real priority sections,
         including install-related content deep in the document that a
         flat cut would have lost.
-- [ ] **T5 (P1, human: ~1d / CC: ~1h)** — sandbox — Evaluate `vndee/llm-sandbox`
+- [x] **T5 (P1, human: ~1d / CC: ~1h)** — sandbox — Evaluate `vndee/llm-sandbox`
       against the phase-based network-cutoff requirement; implement
       two-phase container execution (120s install timeout, 60s invoke
       timeout, network-open install / network-closed invoke) either via
       that library or custom orchestration.
       - Surfaced by: Step 0 search check; CEO Review Findings (injection
         defense); Outside Voice (eng-review pass 2, timeout gaps)
-      - Files: `legwork/sandbox_runner.py` (planned)
+      - Files: `legwork/sandbox_runner.py`
       - Verify: integration test for both phases + timeout enforcement
+      - **DONE 2026-09-22:** `legwork/sandbox_runner.py`, 12 real tests
+        (no mocks — mocking subprocess for an isolation module would
+        validate nothing about the properties that actually matter) plus a
+        manual end-to-end smoke test (venv creation → real `pip install` of
+        a real package, network open → invoke code from it, network
+        closed). 88 tests passing project-wide.
+        **`vndee/llm-sandbox` evaluated and rejected for this environment**
+        (not a mark against the library): its only backends are Docker,
+        Kubernetes, Podman, and Micromamba, and none of the four had a
+        working runtime on the evaluation machine — confirmed by actually
+        trying each, not assumed. Built instead on macOS's native
+        `sandbox-exec`, hardening the spike's own quick-and-dirty profile:
+        the spike's version allowed unrestricted reads everywhere, which is
+        a real exfiltration risk specifically during the network-open
+        install phase (env vars, SSH keys, cloud credentials all live
+        under `$HOME`). Production version confines both reads and writes
+        under `$HOME` to the sandbox workdir, while leaving system paths
+        outside `$HOME` (Python, pip, system libraries) readable.
+        **Real bug found while testing against realistic usage:** the
+        first test run used `sys.executable`, which in this dev checkout
+        resolves to `.venv/bin/python` — itself under `$HOME`, so the
+        sandbox correctly blocked it. Not a bug in the module; it confirmed
+        the real pipeline must run install/invoke against a venv created
+        fresh inside `workdir` (which the sandbox allows) or a system
+        interpreter, never the surrounding dev environment's own venv —
+        exactly what the end-to-end smoke test above does.
+        **Disclosed limitation, not silently scoped around:**
+        `sandbox-exec` is macOS-only (`SandboxUnavailableError` on other
+        platforms, never a silent unsandboxed fallback) and gives real
+        filesystem/network confinement but not full container-grade
+        isolation (no PID namespace, no cgroup limits). A Linux/Windows
+        Docker-based backend is real follow-up work for Approach B.
 - [ ] **T6 (P1, human: ~2h / CC: ~20min)** — retry-loop — Implement 3-attempt
       wrapper-repair budget with 10min total-run ceiling (hard abort) and
       per-attempt structured logging.
