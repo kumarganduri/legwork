@@ -215,6 +215,20 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   codegen LLM call itself, static analysis of the generated wrapper before
   first run, a vetted-package-only dependency policy) is real, separate
   design work for Approach B, not solved here.
+- **Pre-execution static obfuscation scan (validation spike finding,
+  2026-09-22 — closes a real gap, not deferred).** The phase-based cutoff
+  above protects the *execution* phases, but the spike found a real
+  malicious payload that fired at **import time** — before either phase
+  applies — via XOR-encoded string literals decoded and `exec()`'d into
+  the module namespace on module load. Before the sandbox spins up at all,
+  the fetched source gets a static scan for: encoded/obfuscated string
+  literals feeding `exec()`/`eval()`, dynamic `__import__()` of a
+  runtime-decoded module name, and similarly-shaped patterns. Not
+  foolproof — a determined attacker can evade static heuristics — but it
+  would have caught this exact case, and it's cheap (pure text/AST
+  analysis, no execution required). A repo that trips the scan gets
+  `ObfuscatedPayloadDetectedError` and is refused before install or invoke
+  ever run.
 - **LLM shim ownership:** Legwork does not bundle a compatibility shim in
   v1. It expects the user to point it at an OpenAI-compatible chat-
   completions endpoint URL (their own key, their own provider — direct
@@ -266,8 +280,15 @@ they make it correctly built):
 3. **README/repo content sent to the LLM is size-capped at 50KB** (locked at
    eng review, 2026-09-22 — covers the vast majority of real project READMEs
    while bounding worst-case token cost per attempt to a predictable amount).
-   Truncate before it reaches codegen; if truncation likely caused a
-   synthesis failure, say so in the failure message. Bounds worst-case cost
+   **Truncation is section-aware, not a flat byte cut (validation spike
+   finding, 2026-09-22):** before cutting, look for headings like "Quick
+   Start," "Usage," "Installation" (case-insensitive, common variants) and
+   prioritize keeping those sections intact, cutting boilerplate (badges,
+   long feature lists, changelogs) first. The spike found a flat cut can
+   retain the wrong section entirely — e.g. an HTTP-service-backed install
+   path when a simpler, self-contained alternative was mentioned later in
+   the same README. If truncation likely caused a synthesis failure, say
+   so in the failure message. Bounds worst-case cost
    per LLM call — matters directly for a tool whose pitch is "the only cost
    is your own LLM usage, and it's small." **Does NOT by itself bound total
    cost across a 3-attempt run** — see the new "Retry prompt content" entry
@@ -392,28 +413,34 @@ they make it correctly built):
 
 ## Next Steps
 
-0. **Validation spike, before eng review locks architecture (Outside Voice
-   review — do this first).** Hand-run 5-10 real, currently-trending READMEs
-   through raw LLM codegen only — no retry loop, no cache, no CI, no
-   sandbox hardening. Specifically test the actual novel step: does the
-   model reliably infer a correctly-typed MCP tool schema (not just "the
-   run command") from unstructured README prose? Record the success
-   fraction and failure patterns. If it mostly works, every decision
-   already made in this doc stays valid — proceed to eng review. If it
-   doesn't, the retry taxonomy, manifest schema, and CI gating already
-   designed may need to change, and it's far cheaper to learn that now
-   (~1 day) than after building the scaffolding around a broken core.
+0. ~~Validation spike~~ — **DONE, 2026-09-22.** Ran against 8 real repos
+   pulled from GitHub's search API (not pre-selected for friendliness).
+   Results, full method, and 4 new decisions folded into this doc are in
+   [`legwork-validation-spike-2026-09-22.md`](legwork-validation-spike-2026-09-22.md).
+   Headline: 1/8 clean success (proves premise #2's optimistic case is
+   real), 1/8 contained an **obfuscated, exec()'d malicious payload** that
+   fired unsandboxed on the reviewer's machine before this spike built its
+   own sandbox — the single most important finding in this document, and
+   the reason the obfuscation scanner below is now in v1 scope, not deferred.
 1. Prototype the core loop: verify repo reachable/public (fail fast on
-   404/403/invalid) → README parse (size-capped before it reaches the LLM)
-   → locate entrypoint → LLM-drafted MCP wrapper (Python target,
-   OpenAI-compatible LLM call, own short backoff-retry on
-   timeout/rate-limit, immediate fail on auth error) → attempt run →
-   capture failure (execution failure or insufficient-README) → retry up
-   to 3x, each attempt logged with what changed and why it failed → clear
-   success/failure report showing all attempts on final failure.
+   404/403/invalid) → **static obfuscation scan on fetched source (new
+   step, refuses before any install/invoke on a hit)** → README parse
+   (size-capped at 50KB, section-aware truncation prioritizing Quick
+   Start/Usage headings) → locate entrypoint → LLM-drafted MCP wrapper
+   (Python target, OpenAI-compatible LLM call, prefers the more complete
+   install variant when the README describes several, own short
+   backoff-retry on timeout/rate-limit, immediate fail on auth error) →
+   attempt run → capture failure (execution failure, insufficient-README,
+   no-programmatic-entrypoint, not-a-wrappable-capability, or
+   external-hardware-required) → retry up to 3x, each attempt logged with
+   what changed and why it failed → clear success/failure report showing
+   all attempts on final failure.
 2. Hand-pick 3-5 real, CPU-only/lightweight trending repos as the first
    smoke-test fixtures (not scraped — satisfies premise #3; GPU-heavy repos
-   explicitly out of v1's smoke-test set per Success Criteria).
+   explicitly out of v1's smoke-test set per Success Criteria). The
+   validation spike's `reverify` case is a strong candidate — real success,
+   clean JSON output, already README-documented install variants to test
+   the install-preference logic against.
 3. Implement the cache manifest per the schema in Distribution Plan (repo
    URL, commit SHA, synthesis date, wrapper language, license, smoke-test
    result) as a folder inside this repo — no external hosting needed for v1.
@@ -425,9 +452,13 @@ they make it correctly built):
 4. Record the first unscripted demo (a repo that trended that same morning,
    never seen before) as the README's opening proof — and disclose the
    prompt-injection risk plainly in that same README (see Decided section).
+   Consider using the malicious `ai-data-extractor` case (with attribution
+   and care about not amplifying it) as a companion "here's exactly why the
+   obfuscation scanner exists" note — a real example lands harder than an
+   abstract warning.
 5. Run `/plan-eng-review` next to lock architecture (Python packaging
-   choice, sandbox mechanism for v1, exact manifest schema) before writing
-   code.
+   choice, sandbox mechanism for v1, exact manifest schema, obfuscation
+   scanner's specific heuristics) before writing code.
 
 ## NOT in Scope (v1)
 
@@ -585,11 +616,24 @@ Contributor          Legwork CLI            Local output dir       GitHub PR    
   Repo Fetcher#check            | URL malformed                  | InvalidRepoURLError
                                  | Repo private/403               | RepoAccessError
                                  | Repo doesn't exist/404         | RepoNotFoundError
+  Obfuscation Scanner#scan      | Encoded literals feeding        | ObfuscatedPayloadDetectedError
+                                 | exec()/eval(), or dynamic       | (blocks before install/invoke)
+                                 | __import__ of decoded names     |
   README Parser#parse           | README missing entirely        | InsufficientReadmeError
-                                 | README oversized               | ReadmeTruncatedWarning (not fatal)
+                                 | README oversized                | ReadmeTruncatedWarning (not fatal,
+                                 |                                  | now section-aware — see below)
   Entrypoint Locator#locate     | No install/run info found      | InsufficientReadmeError
+                                 | Product has no programmatic     | NoProgrammaticEntrypointError
+                                 | interface (GUI/installer-only)  |
+                                 | Repo is a full app/scaffolder,  | NotAWrappableCapabilityError
+                                 | not a wrappable capability      |
+                                 | Target needs external hardware  | ExternalHardwareRequiredError
+                                 | + interactive OS pairing        |
   Sandbox Runner#invoke         | Target repo needs its own       | CredentialRequiredError
                                  | credentials to run              |
+  LLM Codegen#codegen           | README describes multiple       | DegradedInstallWarning (not
+                                 | install variants, wrapper used  | fatal — flags a better install
+                                 | a less-complete one              | target existed)
   LLM Codegen#call              | API timeout                    | LLMTimeoutError
                                  | API rate-limited                | LLMRateLimitError
                                  | API auth failure (bad/no key)  | LLMAuthError
@@ -611,10 +655,26 @@ Contributor          Legwork CLI            Local output dir       GitHub PR    
   InvalidRepoURLError            | Y        | Fail fast, no retry                       | "Invalid repo URL: <reason>"
   RepoAccessError                | Y        | Fail fast, no retry                       | "Repo is private or inaccessible"
   RepoNotFoundError               | Y        | Fail fast, no retry                       | "Repo not found: <url>"
+  ObfuscatedPayloadDetectedError  | Y        | Fail fast before install/invoke ever run  | "Source contains obfuscated
+                                  |          |                                            |  code patterns — refusing to
+                                  |          |                                            |  run for safety"
   InsufficientReadmeError        | Y        | Fail fast, no retry (not a wrapper-repair | "README doesn't contain enough
                                   |          | attempt)                                  |  install/run info"
-  ReadmeTruncatedWarning         | Y        | Truncate, continue, flag in output        | "README truncated to <N>KB —
-                                  |          |                                            |  synthesis may be incomplete"
+  NoProgrammaticEntrypointError   | Y        | Fail fast, no retry                       | "This tool has no CLI/API —
+                                  |          |                                            |  install/GUI only, not
+                                  |          |                                            |  supported in v1"
+  NotAWrappableCapabilityError    | Y        | Fail fast, no retry                       | "This looks like a full app or
+                                  |          |                                            |  project scaffolder, not a
+                                  |          |                                            |  wrappable tool"
+  ExternalHardwareRequiredError   | Y        | Fail fast, no retry                       | "This tool requires paired
+                                  |          |                                            |  external hardware — not
+                                  |          |                                            |  supported in v1"
+  DegradedInstallWarning          | Y        | Retry synthesis preferring the more       | "Wrapper works but used a
+                                  |          | complete install variant found in README  |  degraded install path —
+                                  |          |                                            |  <better option> may work
+                                  |          |                                            |  better"
+  ReadmeTruncatedWarning         | Y        | Section-aware cut (prioritize Quick        | "README truncated to <N>KB —
+                                  |          | Start/Usage headings), continue, flag     |  synthesis may be incomplete"
   LLMTimeoutError                | Y        | Infra backoff-retry (2x), separate budget | Nothing if recovered; else
                                   |          | from wrapper-repair                       | "LLM endpoint timed out"
   LLMRateLimitError               | Y        | Infra backoff-retry (2x)                  | Nothing if recovered; else
@@ -734,6 +794,17 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Surfaced by: Architecture review (eng review)
       - Files: `pyproject.toml` (planned)
       - Verify: `uvx` install + run smoke test
+- [ ] **T10 (P1, human: ~4h / CC: ~40min)** — obfuscation-scanner — Implement
+      the static pre-execution scan (encoded literals feeding
+      exec()/eval(), dynamic `__import__` of decoded names) that refuses a
+      repo before install/invoke on a hit. Blocking gate, runs before T2's
+      repo-fetch precondition check even starts the pipeline proper.
+      - Surfaced by: Validation spike, 2026-09-22 (real malicious payload
+        found on the first repo tried)
+      - Files: `legwork/obfuscation_scanner.py` (planned)
+      - Verify: unit test against the actual `ai-data-extractor` pattern
+        (XOR-decoded strings feeding `exec()`) as a fixture — real evidence
+        beats a synthetic test case here
 
 ## What I noticed about how you think
 
