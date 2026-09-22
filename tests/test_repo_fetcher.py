@@ -17,7 +17,6 @@ from legwork.repo_fetcher import (
     fetch,
 )
 
-
 # --- URL parsing / InvalidRepoURLError -------------------------------------
 
 
@@ -128,9 +127,8 @@ def test_clone_repo_timeout_raises_repo_access_error(tmp_path):
     with patch(
         "legwork.repo_fetcher.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="git clone", timeout=120),
-    ):
-        with pytest.raises(RepoAccessError, match="exceeded 120s"):
-            clone_repo(ref, dest)
+    ), pytest.raises(RepoAccessError, match="exceeded 120s"):
+        clone_repo(ref, dest)
 
 
 # --- fetch() orchestration ---------------------------------------------------

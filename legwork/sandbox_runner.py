@@ -51,6 +51,19 @@ limits, a runaway process can still consume host CPU/memory up to the
 timeout). Approach B's move to real container orchestration is still the
 eventual, more complete answer; this is what's actually available and
 verifiable on this machine today.
+
+## Environment isolation (found integrating T6, fixed here — 2026-09-22)
+
+The filesystem/network sandboxing above says nothing about environment
+*variables*. `subprocess.run()` with no `env=` override inherits the
+**full parent process environment** — including secrets like
+`LEGWORK_LLM_API_KEY` (llm_client.py). During the install phase, network is
+open: a malicious install script wouldn't even need file access to
+exfiltrate that key, `os.environ` is enough on its own. `install()` and
+`invoke()` now build a minimal environment (PATH + a workdir-scoped HOME)
+rather than inheriting anything, with an `extra_env` parameter for the one
+thing callers actually need to add (e.g. prepending a fresh venv's `bin/`
+to PATH so `pip`/`python` resolve there, not to Legwork's own environment).
 """
 
 from __future__ import annotations
@@ -65,6 +78,11 @@ from pathlib import Path
 
 INSTALL_TIMEOUT_SECONDS = 120
 INVOKE_TIMEOUT_SECONDS = 60
+
+# Deliberately narrow — no inherited secrets. /opt/homebrew is included
+# since that's where Homebrew-installed tools (including sandbox-exec's own
+# dependencies on some setups) live on Apple Silicon Macs.
+MINIMAL_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin"
 
 
 class SandboxUnavailableError(Exception):
@@ -141,12 +159,22 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     return "\n".join(lines)
 
 
+def _build_env(workdir: Path, extra_env: dict[str, str] | None) -> dict[str, str]:
+    """A minimal environment, NOT inherited from the parent process — see
+    the module docstring's "Environment isolation" section for why."""
+    env = {"PATH": MINIMAL_PATH, "HOME": str(workdir.resolve())}
+    if extra_env:
+        env.update(extra_env)
+    return env
+
+
 def _run_sandboxed(
     command: list[str],
     workdir: Path,
     allow_network: bool,
     timeout: float,
     timeout_error: type[Exception],
+    extra_env: dict[str, str] | None = None,
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
@@ -165,6 +193,8 @@ def _run_sandboxed(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=_build_env(workdir, extra_env),
+            check=False,  # exit code inspected manually by install()/invoke()
         )
     except subprocess.TimeoutExpired as exc:
         raise timeout_error(
@@ -184,16 +214,25 @@ def _run_sandboxed(
 
 
 def install(
-    command: list[str], workdir: Path, timeout: float = INSTALL_TIMEOUT_SECONDS
+    command: list[str],
+    workdir: Path,
+    timeout: float = INSTALL_TIMEOUT_SECONDS,
+    extra_env: dict[str, str] | None = None,
 ) -> ExecutionResult:
     """Run a dependency-install command (e.g. `pip install -r
     requirements.txt`) with network access allowed but filesystem
     reads/writes confined to `workdir` (reads outside $HOME are still
-    allowed, for Python/pip/system libraries). Raises
-    InstallTimeoutExceeded on timeout, DependencyInstallError on a non-zero
-    exit."""
+    allowed, for Python/pip/system libraries) and a minimal, non-inherited
+    environment (`extra_env` to add anything specific — e.g. a venv's PATH).
+    Raises InstallTimeoutExceeded on timeout, DependencyInstallError on a
+    non-zero exit."""
     result = _run_sandboxed(
-        command, workdir, allow_network=True, timeout=timeout, timeout_error=InstallTimeoutExceeded
+        command,
+        workdir,
+        allow_network=True,
+        timeout=timeout,
+        timeout_error=InstallTimeoutExceeded,
+        extra_env=extra_env,
     )
     if result.exit_code != 0:
         raise DependencyInstallError(
@@ -203,14 +242,22 @@ def install(
 
 
 def invoke(
-    command: list[str], workdir: Path, timeout: float = INVOKE_TIMEOUT_SECONDS
+    command: list[str],
+    workdir: Path,
+    timeout: float = INVOKE_TIMEOUT_SECONDS,
+    extra_env: dict[str, str] | None = None,
 ) -> ExecutionResult:
     """Run the entrypoint-invocation command with network access cut,
     filesystem reads/writes confined to `workdir` (same read-outside-$HOME
-    allowance as install). Raises TimeoutExceeded on timeout,
-    WrapperRuntimeError on a non-zero exit."""
+    allowance as install), minimal non-inherited environment. Raises
+    TimeoutExceeded on timeout, WrapperRuntimeError on a non-zero exit."""
     result = _run_sandboxed(
-        command, workdir, allow_network=False, timeout=timeout, timeout_error=TimeoutExceeded
+        command,
+        workdir,
+        allow_network=False,
+        timeout=timeout,
+        timeout_error=TimeoutExceeded,
+        extra_env=extra_env,
     )
     if result.exit_code != 0:
         raise WrapperRuntimeError(

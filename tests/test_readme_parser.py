@@ -5,12 +5,11 @@ import pytest
 from legwork.readme_parser import (
     README_MAX_BYTES,
     InsufficientReadmeError,
-    _Section,
     _is_priority,
+    _Section,
     find_readme,
     parse_readme,
 )
-
 
 # --- find_readme -------------------------------------------------------
 
@@ -50,7 +49,7 @@ def test_parse_readme_returns_full_content_when_under_cap(tmp_path):
     result = parse_readme(tmp_path)
     assert result.truncated is False
     assert result.content == "# Hello\n\nShort README.\n"
-    assert result.original_bytes == len("# Hello\n\nShort README.\n".encode("utf-8"))
+    assert result.original_bytes == len(b"# Hello\n\nShort README.\n")
 
 
 # --- truncation: the actual bug this spike found ------------------------

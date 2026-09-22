@@ -896,12 +896,50 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         filesystem/network confinement but not full container-grade
         isolation (no PID namespace, no cgroup limits). A Linux/Windows
         Docker-based backend is real follow-up work for Approach B.
-- [ ] **T6 (P1, human: ~2h / CC: ~20min)** — retry-loop — Implement 3-attempt
+- [x] **T6 (P1, human: ~2h / CC: ~20min)** — retry-loop — Implement 3-attempt
       wrapper-repair budget with 10min total-run ceiling (hard abort) and
       per-attempt structured logging.
       - Surfaced by: CEO Review Findings #5; Outside Voice (eng-review pass 2)
-      - Files: `legwork/retry_loop.py` (planned)
+      - Files: `legwork/retry_loop.py`
       - Verify: E2E test — fail x2 succeed x3, and fail x3 report-all
+      - **DONE 2026-09-22:** `legwork/retry_loop.py` wires T2→T10→T4→(new)
+        `legwork/codegen.py`→T5 into one real pipeline. 45 new tests (16
+        codegen contract, 10 retry-loop logic fully mocked at the module
+        boundary, 1 real end-to-end integration test) — 119 passing
+        project-wide.
+        **Scope note:** "locate entrypoint" and "LLM-drafted wrapper" had
+        no dedicated task number in this list — built here as
+        `legwork/codegen.py` (prompt + response parsing), since a retry
+        loop needs something concrete to retry. Response contract is
+        format-strict (fenced `install`/`python` blocks + one `ENTRYPOINT:`
+        line, or a single `REFUSAL: <CATEGORY> - <reason>` line) rather
+        than freeform parsing — defines the 5 refusal-category exceptions
+        the design doc named but never implemented
+        (`InsufficientReadmeError`, `NoProgrammaticEntrypointError`,
+        `NotAWrappableCapabilityError`, `ExternalHardwareRequiredError`,
+        `CredentialRequiredError`).
+        **Real gap found and fixed while integrating T5+T6:** T5's
+        sandbox restricted filesystem and network but not environment
+        *variables* — `subprocess.run()` with no `env=` override inherits
+        the full parent process env, including `LEGWORK_LLM_API_KEY`.
+        During the install phase network is open, so a malicious install
+        script wouldn't even need file access to exfiltrate it —
+        `os.environ` alone is enough. Fixed in `sandbox_runner.py`:
+        `install()`/`invoke()` now build a minimal environment (PATH + a
+        workdir-scoped HOME) instead of inheriting anything, with an
+        `extra_env` param for the one thing callers need (prepending a
+        fresh venv's `bin/` to PATH). Verified with 3 new sandbox tests
+        proving a real secret set in the test process is NOT visible to
+        the sandboxed child.
+        **Real, end-to-end validated (not just unit-tested):** a full run
+        against the real `2akouwu/reverify` repo — real GitHub fetch, real
+        obfuscation scan, real README parse, real venv creation inside the
+        sandbox, real `pip install "reverify[full]"` with network open,
+        real sandboxed invoke with network closed running a self-test that
+        calls the actual `reverify` CLI against `/bin/ls` and asserts on
+        the output. Only the LLM API call itself is mocked (hand-written
+        to the exact response contract) — no OpenAI-compatible key exists
+        in this environment, disclosed consistently with T3/`codegen.py`.
 - [ ] **T7 (P1, human: ~3h / CC: ~30min)** — cache-writer — Implement
       manifest (repo URL, SHA, date, language, license, model/version,
       smoke-test result), key-scrub before any write, verbatim-copy check,

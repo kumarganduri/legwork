@@ -132,6 +132,41 @@ def test_invoke_timeout_raises_timeout_exceeded(tmp_path):
         invoke([SYSTEM_PYTHON, "-c", "import time; time.sleep(5)"], tmp_path, timeout=1)
 
 
+# --- environment isolation (found integrating T6, fixed in T5) -------------
+
+
+def test_secrets_in_calling_process_env_are_not_inherited(tmp_path, monkeypatch):
+    """The actual gap found: subprocess.run() with no env= override
+    inherits the full parent environment. Set a fake secret in THIS
+    process's env and confirm the sandboxed child can't see it."""
+    monkeypatch.setenv("LEGWORK_LLM_API_KEY", "sk-should-not-leak")
+    result = invoke(
+        [SYSTEM_PYTHON, "-c", "import os; print(repr(os.environ.get('LEGWORK_LLM_API_KEY')))"],
+        tmp_path,
+    )
+    assert result.stdout.strip() == "None"
+
+
+def test_extra_env_is_applied(tmp_path):
+    result = invoke(
+        [SYSTEM_PYTHON, "-c", "import os; print(os.environ['MY_VAR'])"],
+        tmp_path,
+        extra_env={"MY_VAR": "hello"},
+    )
+    assert result.stdout.strip() == "hello"
+
+
+def test_path_defaults_to_minimal_not_inherited(tmp_path):
+    """Don't monkeypatch THIS process's real PATH — that would also break
+    the backend check (shutil.which('sandbox-exec')), which runs in-process,
+    not in the sandbox. Instead confirm the child sees exactly the module's
+    declared minimal PATH, not whatever the parent happens to have."""
+    from legwork.sandbox_runner import MINIMAL_PATH
+
+    result = invoke([SYSTEM_PYTHON, "-c", "import os; print(os.environ['PATH'])"], tmp_path)
+    assert result.stdout.strip() == MINIMAL_PATH
+
+
 # --- exit codes --------------------------------------------------------------
 
 

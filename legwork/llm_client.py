@@ -62,7 +62,7 @@ class LLMConfig:
     model: str
 
     @classmethod
-    def from_env(cls) -> "LLMConfig":
+    def from_env(cls) -> LLMConfig:
         endpoint = os.environ.get("LEGWORK_LLM_ENDPOINT")
         api_key = os.environ.get("LEGWORK_LLM_API_KEY")
         model = os.environ.get("LEGWORK_LLM_MODEL")

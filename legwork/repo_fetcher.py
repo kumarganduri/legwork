@@ -134,6 +134,7 @@ def clone_repo(ref: RepoRef, dest: Path) -> Path:
             capture_output=True,
             text=True,
             timeout=CLONE_TIMEOUT_SECONDS,
+            check=False,  # exit code inspected manually below
         )
     except subprocess.TimeoutExpired as exc:
         raise RepoAccessError(
