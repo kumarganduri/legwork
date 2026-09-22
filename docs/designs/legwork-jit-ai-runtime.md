@@ -827,12 +827,33 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         **Not smoke-tested against a real endpoint** (no OpenAI-compatible
         API key available in this environment, unlike T2/T10's real-network
         tests) — noted honestly rather than skipped silently.
-- [ ] **T4 (P1, human: ~2h / CC: ~20min)** — readme-parser — Implement
+- [x] **T4 (P1, human: ~2h / CC: ~20min)** — readme-parser — Implement
       50KB size cap with truncation flag; retry prompts carry latest
       failure only, not accumulated history.
       - Surfaced by: CEO Review Findings #3; Outside Voice (eng-review pass 2)
-      - Files: `legwork/readme_parser.py` (planned)
+      - Files: `legwork/readme_parser.py`
       - Verify: unit test for oversized README truncation + flag
+      - **DONE 2026-09-22:** `legwork/readme_parser.py`, 25 unit tests, all
+        passing. Scope note: only the locate/read/truncate primitives are
+        here — composing what actually goes into a retry prompt (README +
+        only the latest failure, not accumulated history) is T6's job
+        using this module's output; building that composition without T6's
+        surrounding retry loop would have been speculative, so it's not
+        solved here, not silently dropped.
+        **Real bug found and fixed via smoke-testing against the actual
+        100KB `watermarks-remover` README from the spike, not a synthetic
+        one:** the first implementation matched priority headings by exact
+        string equality after normalization ("install" only matches a
+        heading that IS literally "install"). Against the real file this
+        matched **zero** sections — including "Install (agent skill)" —
+        silently defeating section-aware truncation on the exact file it
+        was built to fix, while every unit test using synthetic headings
+        like `"## Quick Start"` still passed. Fixed to a word-boundary
+        prefix match (`\binstall` matches "install"/"installing"/
+        "installation" but not "uninstall" mid-word) and re-verified
+        against the real file: now finds 7 real priority sections,
+        including install-related content deep in the document that a
+        flat cut would have lost.
 - [ ] **T5 (P1, human: ~1d / CC: ~1h)** — sandbox — Evaluate `vndee/llm-sandbox`
       against the phase-based network-cutoff requirement; implement
       two-phase container execution (120s install timeout, 60s invoke
