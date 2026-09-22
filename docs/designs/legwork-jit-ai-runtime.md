@@ -221,14 +221,35 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   malicious payload that fired at **import time** — before either phase
   applies — via XOR-encoded string literals decoded and `exec()`'d into
   the module namespace on module load. Before the sandbox spins up at all,
-  the fetched source gets a static scan for: encoded/obfuscated string
-  literals feeding `exec()`/`eval()`, dynamic `__import__()` of a
-  runtime-decoded module name, and similarly-shaped patterns. Not
-  foolproof — a determined attacker can evade static heuristics — but it
-  would have caught this exact case, and it's cheap (pure text/AST
-  analysis, no execution required). A repo that trips the scan gets
+  the fetched source (the full clone, not just the entrypoint file — see
+  "Clone timing" below) gets a static scan.
+  **Heuristic scope, corrected at eng review (2026-09-22):** the actual
+  malicious file contains **no literal `exec(` or `eval(` token anywhere**
+  — the call is resolved via `getattr(module, xor_decoded_string)` where
+  `module` itself comes from `__import__(xor_decoded_string)`, specifically
+  to evade a naive exec()/eval() grep. A scanner scoped to literal
+  exec()/eval() calls would have MISSED this exact, already-confirmed
+  file. The scan therefore also flags: `__import__()` called with a
+  non-literal/computed argument; `getattr()` called with a
+  non-literal/computed attribute-name argument (especially stacked with
+  the above — this is the specific pattern that evaded the narrow
+  version); large int/byte-array literals combined with XOR or modular
+  arithmetic (a string-deobfuscation signature); and generally low
+  identifier readability (single/double-character names throughout a
+  file). Not foolproof — a sufficiently determined attacker can still
+  evade static heuristics — but this broadened scope is what actually
+  would have caught the real case this spike found, not just the narrower
+  version's two function names. A repo that trips the scan gets
   `ObfuscatedPayloadDetectedError` and is refused before install or invoke
   ever run.
+  **Clone timing (eng review, 2026-09-22):** the scanner needs the full
+  cloned repository tree, not just the README (which is fetched separately
+  and lightly, via API). The pipeline clones the repo right after the
+  reachability check — before README parsing, which now reads from the
+  clone instead of a separate API call — specifically so the scan (and
+  README parsing) both have the real source tree available. This is
+  slightly heavier than an API-only README fetch for repos that fail
+  early, but the scan has no way to run without the clone existing first.
 - **LLM shim ownership:** Legwork does not bundle a compatibility shim in
   v1. It expects the user to point it at an OpenAI-compatible chat-
   completions endpoint URL (their own key, their own provider — direct
@@ -423,8 +444,13 @@ they make it correctly built):
    own sandbox — the single most important finding in this document, and
    the reason the obfuscation scanner below is now in v1 scope, not deferred.
 1. Prototype the core loop: verify repo reachable/public (fail fast on
-   404/403/invalid) → **static obfuscation scan on fetched source (new
-   step, refuses before any install/invoke on a hit)** → README parse
+   404/403/invalid) → **shallow-clone the full repo (eng review,
+   2026-09-22 — moved earlier than originally drafted: the scan and README
+   parse both need the real tree, not just an API-fetched README)** →
+   **static obfuscation scan on the full clone (broadened heuristic — see
+   Decided section; scoped to __import__/getattr indirection and
+   deobfuscation signatures, not just literal exec()/eval() — refuses
+   before any install/invoke on a hit)** → README parse from the clone
    (size-capped at 50KB, section-aware truncation prioritizing Quick
    Start/Usage headings) → locate entrypoint → LLM-drafted MCP wrapper
    (Python target, OpenAI-compatible LLM call, prefers the more complete
@@ -616,9 +642,12 @@ Contributor          Legwork CLI            Local output dir       GitHub PR    
   Repo Fetcher#check            | URL malformed                  | InvalidRepoURLError
                                  | Repo private/403               | RepoAccessError
                                  | Repo doesn't exist/404         | RepoNotFoundError
-  Obfuscation Scanner#scan      | Encoded literals feeding        | ObfuscatedPayloadDetectedError
-                                 | exec()/eval(), or dynamic       | (blocks before install/invoke)
-                                 | __import__ of decoded names     |
+  Obfuscation Scanner#scan      | Computed __import__/getattr     | ObfuscatedPayloadDetectedError
+                                 | args, XOR/byte-array string      | (blocks before install/invoke;
+                                 | deobfuscation, low identifier    | scans the full clone, not just
+                                 | readability (broadened at eng    | the entrypoint file)
+                                 | review — literal exec()/eval()   |
+                                 | alone misses the real case)      |
   README Parser#parse           | README missing entirely        | InsufficientReadmeError
                                  | README oversized                | ReadmeTruncatedWarning (not fatal,
                                  |                                  | now section-aware — see below)
@@ -736,19 +765,25 @@ Synthesized from this review's findings (CEO review + eng review, both
 passes, native and outside-voice). Each task derives from a specific
 finding above. Run with Claude Code or Codex; checkbox as you ship.
 
-- [ ] **T1 (P1, human: ~1d / CC: ~2h)** — validation — Run the validation
+- [x] **T1 (P1, human: ~1d / CC: ~2h)** — validation — Run the validation
       spike (Next Steps #0): 5-10 real READMEs through raw LLM codegen,
       confirm the README→typed-MCP-schema inference actually works before
       building more.
       - Surfaced by: Outside Voice (CEO review pass)
       - Files: none yet (spike is throwaway code)
       - Verify: success-fraction report from the spike
-- [ ] **T2 (P1, human: ~4h / CC: ~30min)** — repo-fetcher — Implement
+      - **DONE 2026-09-22:** [legwork-validation-spike-2026-09-22.md](legwork-validation-spike-2026-09-22.md)
+        — 1/8 clean success, 1/8 malicious payload found. See T10.
+- [ ] **T2 (P1, human: ~6h / CC: ~45min)** — repo-fetcher — Implement
       reachability/access precondition check (404/403/malformed URL, fail
-      fast, no retry-budget consumption).
-      - Surfaced by: CEO Review Findings #1
+      fast, no retry-budget consumption), then shallow-clone the full repo
+      (moved earlier at eng review, 2026-09-22 — T10's scanner and README
+      parsing both read from this clone, not a separate API call).
+      - Surfaced by: CEO Review Findings #1; eng review pass 2 (clone
+        timing gap, 2026-09-22)
       - Files: `legwork/repo_fetcher.py` (planned)
-      - Verify: unit tests for malformed/private/missing repo
+      - Verify: unit tests for malformed/private/missing repo; integration
+        test confirming T10 runs against the clone before README parse
 - [ ] **T3 (P1, human: ~4h / CC: ~30min)** — llm-client — Implement
       infra-retry policy (timeout/rate-limit backoff, separate from
       wrapper-repair budget; auth fails fast).
@@ -794,16 +829,27 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Surfaced by: Architecture review (eng review)
       - Files: `pyproject.toml` (planned)
       - Verify: `uvx` install + run smoke test
-- [ ] **T10 (P1, human: ~4h / CC: ~40min)** — obfuscation-scanner — Implement
-      the static pre-execution scan (encoded literals feeding
-      exec()/eval(), dynamic `__import__` of decoded names) that refuses a
-      repo before install/invoke on a hit. Blocking gate, runs before T2's
-      repo-fetch precondition check even starts the pipeline proper.
+- [ ] **T10 (P1, human: ~6h / CC: ~1h)** — obfuscation-scanner — Implement
+      the static pre-execution scan against the **full cloned repo tree**
+      (corrected at eng review pass 2, 2026-09-22 — T2 now clones before
+      this runs; scanning just the entrypoint file would have missed the
+      real payload, which lived in an imported submodule). Heuristic scope
+      **broadened at eng review pass 2** beyond literal `exec()`/`eval()`
+      calls (which the real malicious file evades entirely via indirection)
+      to also catch: `__import__()`/`getattr()` called with non-literal,
+      computed arguments (especially stacked); large int/byte-array
+      literals combined with XOR or modular arithmetic; low identifier
+      readability across a file. Blocking gate — refuses the repo
+      (`ObfuscatedPayloadDetectedError`) before install or invoke ever run.
       - Surfaced by: Validation spike, 2026-09-22 (real malicious payload
-        found on the first repo tried)
+        found on the first repo tried); eng review pass 2, 2026-09-22
+        (clone-timing gap + heuristic-evasion gap, both closed above)
       - Files: `legwork/obfuscation_scanner.py` (planned)
       - Verify: unit test against the actual `ai-data-extractor` pattern
-        (XOR-decoded strings feeding `exec()`) as a fixture — real evidence
+        (the real file — `getattr(__import__(xor_decoded), xor_decoded)`
+        resolving to `exec`, with no literal exec()/eval() token anywhere)
+        as the primary fixture, specifically because it's the case that
+        broke the narrower first draft of this scanner — real evidence
         beats a synthetic test case here
 
 ## What I noticed about how you think
