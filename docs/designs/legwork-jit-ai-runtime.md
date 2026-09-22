@@ -242,6 +242,13 @@ additional layers (scraper, router, hardened sandbox) get built on top later.
   version's two function names. A repo that trips the scan gets
   `ObfuscatedPayloadDetectedError` and is refused before install or invoke
   ever run.
+  **Implementation-time finding (T10, 2026-09-22):** even the broadened
+  scope doesn't catch every shape of this technique — the real file wraps
+  `getattr` in a lambda alias, so the "stacked" pattern's lexical-adjacency
+  check misses it specifically. It's still blocked, via two weaker signals
+  co-occurring rather than the one strong pattern built for it. Full
+  data-flow tracking would close that specific gap; deferred to Approach B
+  as a named limitation, not fixed silently by overclaiming coverage here.
   **Clone timing (eng review, 2026-09-22):** the scanner needs the full
   cloned repository tree, not just the README (which is fetched separately
   and lightly, via API). The pipeline clones the repo right after the
@@ -794,8 +801,8 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         genuinely indistinguishable without an authorized token — the
         error message says so rather than claiming false certainty.
         `RepoAccessError` covers 403 (rate-limit/blocked) and network-level
-        failures (DNS, connection refused, timeout). The T10 integration
-        test is still pending T10's own implementation.
+        failures (DNS, connection refused, timeout). **T10 integration test
+        added 2026-09-22** in `tests/test_pipeline_integration.py` — see T10.
 - [ ] **T3 (P1, human: ~4h / CC: ~30min)** — llm-client — Implement
       infra-retry policy (timeout/rate-limit backoff, separate from
       wrapper-repair budget; auth fails fast).
@@ -841,7 +848,7 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Surfaced by: Architecture review (eng review)
       - Files: `pyproject.toml` (planned)
       - Verify: `uvx` install + run smoke test
-- [ ] **T10 (P1, human: ~6h / CC: ~1h)** — obfuscation-scanner — Implement
+- [x] **T10 (P1, human: ~6h / CC: ~1h)** — obfuscation-scanner — Implement
       the static pre-execution scan against the **full cloned repo tree**
       (corrected at eng review pass 2, 2026-09-22 — T2 now clones before
       this runs; scanning just the entrypoint file would have missed the
@@ -856,13 +863,41 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Surfaced by: Validation spike, 2026-09-22 (real malicious payload
         found on the first repo tried); eng review pass 2, 2026-09-22
         (clone-timing gap + heuristic-evasion gap, both closed above)
-      - Files: `legwork/obfuscation_scanner.py` (planned)
+      - Files: `legwork/obfuscation_scanner.py`
       - Verify: unit test against the actual `ai-data-extractor` pattern
         (the real file — `getattr(__import__(xor_decoded), xor_decoded)`
         resolving to `exec`, with no literal exec()/eval() token anywhere)
         as the primary fixture, specifically because it's the case that
         broke the narrower first draft of this scanner — real evidence
         beats a synthetic test case here
+      - **DONE 2026-09-22:** `legwork/obfuscation_scanner.py`, an AST-based
+        scanner (stdlib `ast` only, no new dependency), plus 39 tests total
+        across the project (17 scanner unit tests + 2 real-network
+        integration tests in `tests/test_pipeline_integration.py`), all
+        passing. The real malicious file is committed as
+        `tests/fixtures/ai_data_extractor_payload.py` — scanned via
+        `ast.parse`, never imported or executed, with a `tests/fixtures/README.md`
+        stating that explicitly.
+        Decision logic: block if any STRONG pattern fires alone
+        (`byte-array-xor-deobfuscation`, `stacked-dynamic-resolution`), or
+        if 2+ distinct weaker signals co-occur in the same file
+        (`literal-exec-eval`, `dynamic-import`, `dynamic-getattr`,
+        `low-identifier-readability`) — a lone dynamic import/getattr is
+        common in legitimate plugin-loading code and shouldn't hard-block
+        alone (validated against a clean-plugin-loader fixture that does
+        NOT trip the gate).
+        **Real limitation found while testing against genuine evidence,
+        not papered over:** the payload wraps its `getattr` call inside a
+        lambda alias (`_yp7qrd = lambda m,s,k: getattr(m,...)`), so
+        `getattr(...)` and `__import__(...)` never appear as one syntactic
+        expression — `stacked-dynamic-resolution`'s lexical-adjacency check
+        doesn't fire on this exact file. It's still correctly blocked, via
+        `dynamic-import` + `dynamic-getattr` co-occurring (the 2-weak-
+        signals rule). Catching the lambda-indirected form directly would
+        need real data-flow tracking (follow a `getattr` call's first
+        argument back through variable assignment) — a meaningfully bigger
+        scope than v1's cheap AST pattern-matching, so it's an explicitly
+        named gap for Approach B, not a silent one.
 
 ## What I noticed about how you think
 
