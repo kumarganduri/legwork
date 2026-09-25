@@ -36,7 +36,13 @@ from dataclasses import dataclass
 
 from legwork.llm_client import ChatMessage, LLMMalformedOutputError
 
-SYSTEM_PROMPT = """You are Legwork's codegen step. You are given a GitHub \
+# Legwork installs this itself after the model's install command, so the
+# wrapper always runs against the 1.x API the prompt describes. mcp 2.x
+# renamed FastMCP to MCPServer and changed other APIs; current models write
+# 1.x code (found in the live run, 2026-09-25). Revisit once models know 2.x.
+MCP_SDK_PIN = "mcp<2"
+
+SYSTEM_PROMPT = f"""You are Legwork's codegen step. You are given a GitHub \
 repo's README and must either produce a working Python MCP (Model Context \
 Protocol) tool wrapper for it, or explain precisely why one can't be built.
 
@@ -49,17 +55,23 @@ ENTRYPOINT: <one-line description of what you identified as the callable capabil
 ```install
 <shell command(s) to install the target repo's own dependencies -- prefer \
 the most complete install variant the README describes (e.g. an extras \
-group like "package[full]") over a bare minimal install>
+group like "package[full]") over a bare minimal install. Do NOT install, \
+upgrade, or pin the `mcp` package: Legwork installs `{MCP_SDK_PIN}` itself.>
 ```
 
 ```python
-<complete Python source for an MCP tool wrapper that installs cleanly and \
-exposes the identified capability as one or more typed MCP tools. MUST \
-include an `if __name__ == "__main__":` block that calls the primary tool \
-function directly with a reasonable example input drawn from the README \
-(not mocked, not skipped) and raises if the result looks wrong. Running \
-this file standalone (`python wrapper.py`) is the only signal Legwork has \
-that the wrapper actually works, not just that it imports.>
+<complete Python source for an MCP tool wrapper that exposes the identified \
+capability as one or more typed MCP tools. Use the MCP Python SDK 1.x API \
+exactly like this: `from mcp.server.fastmcp import FastMCP`, \
+`mcp = FastMCP("<name>")`, and decorate each tool function with \
+`@mcp.tool()`. The decorated function stays directly callable. MUST include \
+an `if __name__ == "__main__":` self-test. The self-test calls the SIMPLEST, \
+most basic documented command or function with a trivial input (not an \
+advanced or showcase feature), and checks only that it ran and returned \
+the expected shape -- the right type and expected keys or fields -- and \
+raises if not. Do NOT assert on domain-specific verdicts or the tool's own \
+pass/fail semantics. Running this file standalone (`python wrapper.py`) is \
+the only signal Legwork has that the wrapper actually works.>
 ```
 
 SHAPE 2 -- no usable entrypoint exists. Emit exactly one line, nothing else:
@@ -127,15 +139,28 @@ class WrapperDraft:
     wrapper_code: str
 
 
-def build_messages(readme_content: str, prior_failure: str | None = None) -> list[ChatMessage]:
-    """Compose the chat messages for one codegen attempt. On retry,
-    `prior_failure` carries only the immediately prior attempt's failure —
-    never a growing transcript of all attempts (design doc, "Retry prompt
-    content", eng-review pass 2)."""
+EARLIER_FAILURE_SUMMARY_CHARS = 200
+
+
+def _one_line(failure: str) -> str:
+    first = failure.strip().splitlines()[0] if failure.strip() else ""
+    return first[:EARLIER_FAILURE_SUMMARY_CHARS]
+
+
+def build_messages(readme_content: str, prior_failures: list[str] | None = None) -> list[ChatMessage]:
+    """Compose the chat messages for one codegen attempt. On retry, the most
+    recent failure goes in full and each earlier one as a one-line summary.
+    Latest-only (the eng review's original cost choice) failed in the live
+    run: attempt 3 repeated attempt 1's exact mistake because it never saw
+    it. One-liners keep the extra cost to a few lines per retry."""
     user_parts = [f"README:\n\n{readme_content}"]
-    if prior_failure:
+    if prior_failures:
+        *earlier, latest = prior_failures
+        if earlier:
+            summary = "\n".join(f"- attempt {i}: {_one_line(f)}" for i, f in enumerate(earlier, 1))
+            user_parts.append(f"\nEarlier attempts also failed (do not repeat these):\n{summary}")
         user_parts.append(
-            f"\nYour previous attempt failed:\n{prior_failure}\n"
+            f"\nYour most recent attempt failed:\n{latest}\n"
             "Fix the wrapper (or the install command) accordingly."
         )
     return [

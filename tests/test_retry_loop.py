@@ -266,3 +266,33 @@ def test_codegen_call_uses_the_longer_codegen_timeout(tmp_path):
     ):
         run("owner/repo", tmp_path, CONFIG)
     assert mocks["complete"].call_args.kwargs["timeout"] == CODEGEN_TIMEOUT_SECONDS
+
+
+def test_mcp_pin_is_installed_after_the_models_install_command(tmp_path):
+    from legwork.codegen import MCP_SDK_PIN
+
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"))
+    with (
+        _MultiPatch(patches) as mocks,
+        patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT),
+    ):
+        run("owner/repo", tmp_path, CONFIG)
+    shell_cmd = mocks["sandbox_install"].call_args.args[0][-1]
+    assert MCP_SDK_PIN in shell_cmd
+    assert shell_cmd.index(VALID_DRAFT.install_command) < shell_cmd.index(MCP_SDK_PIN)
+
+
+def test_third_attempt_prompt_includes_first_attempts_failure(tmp_path):
+    """The live run's exact failure: attempt 3 repeated attempt 1's mistake
+    because the prompt only carried attempt 2's error."""
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"))
+    failures = [WrapperRuntimeError("bad hex input"), WrapperRuntimeError("no .tool attribute"), VALID_DRAFT]
+    with (
+        _MultiPatch(patches) as mocks,
+        patch("legwork.retry_loop.codegen.parse_response", side_effect=failures),
+    ):
+        run("owner/repo", tmp_path, CONFIG)
+    third_call_messages = mocks["complete"].call_args_list[2].args[1]
+    user_content = third_call_messages[1].content
+    assert "bad hex input" in user_content
+    assert "no .tool attribute" in user_content

@@ -71,6 +71,22 @@ def _is_literal_str(node: ast.expr | None) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
+def _is_computed_name(node: ast.expr) -> bool:
+    """True when a module/attribute name is built by an inline expression
+    (e.g. `decode(blob).decode()`), not a string literal and not a name
+    simply passed in through a variable or attribute.
+
+    Why variables don't count (live-run finding, 2026-09-25): the scanner
+    blocked phone-harness on an ordinary proxy class
+    (`def __getattr__(self, name): return getattr(self._wrapped, name)`)
+    plus the exec() of the script the tool exists to run — two legitimate
+    patterns. The real malicious fixture builds its names inline, so it
+    still trips this (and its XOR/byte-array signal blocks it on its own).
+    Known trade-off: an attacker can store the decoded name in a variable
+    first to dodge this particular signal."""
+    return not _is_literal_str(node) and not isinstance(node, (ast.Name, ast.Attribute))
+
+
 def _is_int_list_literal(node: ast.expr, min_len: int = _BYTE_ARRAY_MIN_LEN) -> bool:
     if not isinstance(node, (ast.List, ast.Tuple)):
         return False
@@ -111,13 +127,13 @@ class _Visitor(ast.NodeVisitor):
             isinstance(func, ast.Name)
             and func.id == "__import__"
             and node.args
-            and not _is_literal_str(node.args[0])
+            and _is_computed_name(node.args[0])
         )
         is_dynamic_getattr = (
             isinstance(func, ast.Name)
             and func.id == "getattr"
             and len(node.args) >= 2
-            and not _is_literal_str(node.args[1])
+            and _is_computed_name(node.args[1])
         )
 
         if isinstance(func, ast.Name) and func.id in ("exec", "eval"):
@@ -131,7 +147,7 @@ class _Visitor(ast.NodeVisitor):
                 isinstance(inner.func, ast.Name)
                 and inner.func.id == "__import__"
                 and inner.args
-                and not _is_literal_str(inner.args[0])
+                and _is_computed_name(inner.args[0])
             )
             if inner_is_dynamic_import:
                 self.findings.append(

@@ -54,13 +54,38 @@ def test_build_messages_includes_readme():
 
 def test_build_messages_without_prior_failure_has_no_retry_language():
     messages = build_messages("# Repo")
-    assert "previous attempt" not in messages[1].content
+    assert "attempt" not in messages[1].content
 
 
-def test_build_messages_with_prior_failure_includes_only_latest_not_history():
-    messages = build_messages("# Repo", prior_failure="WrapperRuntimeError: boom")
-    assert "WrapperRuntimeError: boom" in messages[1].content
-    assert "previous attempt" in messages[1].content
+def test_build_messages_single_prior_failure_in_full():
+    messages = build_messages("# Repo", ["WrapperRuntimeError: boom\ntraceback line"])
+    content = messages[1].content
+    assert "most recent attempt failed" in content
+    assert "traceback line" in content  # latest failure kept in full
+    assert "Earlier attempts" not in content
+
+
+def test_build_messages_earlier_failures_as_one_liners():
+    """The live run's attempt 3 repeated attempt 1's mistake because it only
+    saw attempt 2's failure. Earlier failures now appear as one-liners."""
+    first = "WrapperRuntimeError: bad hex input\n" + "noise line\n" * 50
+    messages = build_messages("# Repo", [first, "AttributeError: no .tool"])
+    content = messages[1].content
+    assert "attempt 1: WrapperRuntimeError: bad hex input" in content
+    assert "noise line" not in content  # earlier failure summarized, not dumped
+    assert "AttributeError: no .tool" in content
+
+
+def test_system_prompt_pins_mcp_1x_api():
+    prompt = build_messages("# Repo")[0].content
+    assert "from mcp.server.fastmcp import FastMCP" in prompt
+    assert "mcp<2" in prompt
+
+
+def test_system_prompt_asks_for_simple_shape_only_self_test():
+    prompt = build_messages("# Repo")[0].content
+    assert "SIMPLEST" in prompt
+    assert "Do NOT assert on domain-specific verdicts" in prompt
 
 
 # --- parse_response: success shape ----------------------------------------

@@ -89,13 +89,40 @@ def test_direct_stacked_getattr_import_is_detected(tmp_path):
     even though the real payload's extra indirection (see above) evades it."""
     f = tmp_path / "direct_stack.py"
     f.write_text(
-        "mod_name = decode(SECRET)\n"
-        "fn_name = decode(OTHER_SECRET)\n"
-        "payload = getattr(__import__(mod_name), fn_name)(data, globals())\n"
+        "payload = getattr(__import__(decode(SECRET)), decode(OTHER_SECRET))(data, globals())\n"
     )
     findings = scan_file(f)
     assert any(x.pattern == "stacked-dynamic-resolution" for x in findings)
     assert is_blocking(findings)
+
+
+def test_phone_harness_shaped_code_does_not_block(tmp_path):
+    """Live-run false positive (2026-09-25): phone-harness was blocked for an
+    ordinary proxy class plus exec() of the script it exists to run. Names
+    passed through variables no longer count as dynamic."""
+    f = tmp_path / "run.py"
+    f.write_text(
+        "class Tee:\n"
+        "    def __getattr__(self, name):\n"
+        "        return getattr(self._wrapped, name)\n"
+        "\n"
+        "def main(code, helpers):\n"
+        "    g = {k: getattr(helpers, k) for k in dir(helpers)}\n"
+        "    exec(code, g)\n"
+    )
+    findings = scan_file(f)
+    assert not any(x.pattern in ("dynamic-getattr", "dynamic-import") for x in findings)
+    assert not is_blocking(findings)
+
+
+def test_known_tradeoff_decoded_name_stored_in_variable_not_flagged(tmp_path):
+    """Documents the accepted evasion: decode into a variable first and the
+    dynamic-name signals don't fire. Other signals (XOR/byte arrays,
+    identifier readability) are what still cover this case."""
+    f = tmp_path / "evasive.py"
+    f.write_text("n = decode(SECRET)\nf = getattr(__import__(n), n)\n")
+    findings = scan_file(f)
+    assert not any(x.pattern in ("dynamic-getattr", "dynamic-import") for x in findings)
 
 
 # --- literal exec()/eval() (the original, narrower signal) -----------------

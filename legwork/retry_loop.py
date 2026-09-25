@@ -137,13 +137,13 @@ def _find_system_python() -> str:
 def _run_one_attempt(
     attempt_dir: Path,
     readme_content: str,
-    prior_failure: str | None,
+    prior_failures: list[str],
     llm_config: LLMConfig,
 ) -> codegen.WrapperDraft:
     """One wrapper-repair attempt: ask the LLM, install into a fresh venv
     isolated from Legwork's own environment, invoke the self-test. Raises
     on any failure — caller decides retryable vs fail-fast."""
-    messages = codegen.build_messages(readme_content, prior_failure)
+    messages = codegen.build_messages(readme_content, prior_failures)
     response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
     draft = codegen.parse_response(response_text)
 
@@ -158,8 +158,15 @@ def _run_one_attempt(
     # so a bare "pip"/"python" in draft.install_command resolves there, not
     # to Legwork's own environment — the isolation gap found integrating
     # T5+T6 (see sandbox_runner.py's "Environment isolation" section).
+    # The MCP SDK pin goes LAST so it wins even if the model's command (or
+    # the target repo's own dependencies) pulled in mcp 2.x — the wrapper
+    # is written against the 1.x API the prompt specifies.
     venv_env = {"PATH": f"{venv_dir / 'bin'}:{sandbox_runner.MINIMAL_PATH}"}
-    combined_install_cmd = f"{shlex.quote(system_python)} -m venv {shlex.quote(str(venv_dir))} && {draft.install_command}"
+    combined_install_cmd = (
+        f"{shlex.quote(system_python)} -m venv {shlex.quote(str(venv_dir))}"
+        f" && {draft.install_command}"
+        f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
+    )
     sandbox_runner.install(["/bin/sh", "-c", combined_install_cmd], attempt_dir, extra_env=venv_env)
 
     sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
@@ -187,15 +194,15 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
     readme = readme_parser.parse_readme(cloned.path)
 
     attempts: list[AttemptLog] = []
-    prior_failure: str | None = None
+    prior_failures: list[str] = []
 
     for attempt_number in range(1, MAX_WRAPPER_ATTEMPTS + 1):
         _check_deadline()
-        what_changed = "initial attempt" if attempt_number == 1 else f"retry after: {prior_failure}"
+        what_changed = "initial attempt" if attempt_number == 1 else f"retry after: {prior_failures[-1]}"
         attempt_dir = workdir / f"attempt-{attempt_number}"
 
         try:
-            draft = _run_one_attempt(attempt_dir, readme.content, prior_failure, llm_config)
+            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config)
         except FAIL_FAST_EXCEPTIONS as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
@@ -203,7 +210,7 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
         except RETRYABLE_EXCEPTIONS as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
-            prior_failure = detail
+            prior_failures.append(detail)
             if attempt_number == MAX_WRAPPER_ATTEMPTS:
                 summary = "; ".join(f"attempt {a.attempt_number}: {a.detail}" for a in attempts)
                 return RunResult(
