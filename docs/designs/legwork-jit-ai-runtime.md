@@ -825,9 +825,10 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         both cases mean "the endpoint returned something Legwork can't use
         as codegen output," whether that's a bad response shape at the
         client level or bad generated code content at the codegen level.
-        **Not smoke-tested against a real endpoint** (no OpenAI-compatible
-        API key available in this environment, unlike T2/T10's real-network
-        tests) — noted honestly rather than skipped silently.
+        **Live-tested 2026-09-25** against gpt-5: the 60s default proved
+        too short (replies took ~45–60s, triggering silent retries), so
+        codegen calls now use 300s — see
+        [legwork-live-runs-2026-09-25.md](legwork-live-runs-2026-09-25.md).
 - [x] **T4 (P1, human: ~2h / CC: ~20min)** — readme-parser — Implement
       50KB size cap with truncation flag; retry prompts carry latest
       failure only, not accumulated history.
@@ -937,9 +938,11 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         sandbox, real `pip install "reverify[full]"` with network open,
         real sandboxed invoke with network closed running a self-test that
         calls the actual `reverify` CLI against `/bin/ls` and asserts on
-        the output. Only the LLM API call itself is mocked (hand-written
-        to the exact response contract) — no OpenAI-compatible key exists
-        in this environment, disclosed consistently with T3/`codegen.py`.
+        the output. That test mocks only the LLM reply; the **live runs on
+        2026-09-25** then exercised the real model end to end (reverify:
+        working FastMCP wrapper on attempt 2; JobFlow and phone-harness
+        refused) and drove six fixes — see
+        [legwork-live-runs-2026-09-25.md](legwork-live-runs-2026-09-25.md).
 - [ ] **T7 (P1, human: ~3h / CC: ~30min)** — cache-writer — Implement
       manifest (repo URL, SHA, date, language, license, model/version,
       smoke-test result), key-scrub before any write, verbatim-copy check,

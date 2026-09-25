@@ -16,12 +16,10 @@ Two exception buckets, per the Error & Rescue Registry:
   failure back into the next attempt's prompt (latest failure only, never
   accumulated history — see codegen.build_messages).
 
-**Not end-to-end validated against a real LLM** — no OpenAI-compatible API
-key is available in this environment. Every piece downstream of the LLM
-response (parsing, venv isolation, sandboxed install/invoke, timeout
-enforcement, retry bucketing) IS validated for real, with a real filesystem
-and a real sandbox; the codegen.py module docstring covers what's
-specifically unvalidated and why.
+Validated end to end against a real model (gpt-5, 2026-09-25): reverify
+produced a working FastMCP wrapper on attempt 2; JobFlow and phone-harness
+were refused correctly. Results in
+docs/designs/legwork-live-runs-2026-09-25.md.
 """
 
 from __future__ import annotations

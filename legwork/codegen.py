@@ -16,17 +16,10 @@ exists. Parsing is format-strict rather than freeform, so a malformed
 response is a clear, testable LLMMalformedOutputError instead of silently
 guessing at unstructured text.
 
-**Not validated against a real LLM in this session** — no OpenAI-compatible
-API key is available in this environment (same gap disclosed in T3's DONE
-note). The prompt/parser contract here is fully unit-testable against
-synthetic responses matching the documented format, but whether a REAL
-model reliably produces that format for a REAL README is exactly the
-question the validation spike answered by having Claude do this reasoning
-directly during that spike — not by exercising this exact code path.
-Flagged as real follow-up work: run this against a live endpoint once a
-key exists, and expect to iterate on SYSTEM_PROMPT's wording based on what
-a real model actually returns, the same way T4's heading matcher needed a
-real-file fix after looking correct against synthetic tests alone.
+Validated live against gpt-5 (2026-09-25, see
+docs/designs/legwork-live-runs-2026-09-25.md): every reply across three repos
+followed this contract. The MCP-pin, self-test, and retry-context wording in
+SYSTEM_PROMPT/build_messages came directly out of those runs.
 """
 
 from __future__ import annotations
