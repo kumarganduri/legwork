@@ -222,3 +222,47 @@ def test_install_uses_venv_bin_first_on_path(tmp_path):
     command = install_call.args[0]
     assert "-m" in command[-1] and "venv" in command[-1]
     assert VALID_DRAFT.install_command in command[-1]
+
+
+# --- venv interpreter selection (found in the first live run) --------------
+
+
+def test_find_system_python_skips_versions_below_310():
+    """macOS's /usr/bin/python3 is 3.9, where pip can't install the MCP SDK
+    at all — the first live run died on exactly this."""
+    from legwork import retry_loop
+
+    locations = {"python3": "/usr/bin/python3", "python3.14": "/opt/homebrew/bin/python3.14"}
+    versions = {"/usr/bin/python3": (3, 9), "/opt/homebrew/bin/python3.14": (3, 14)}
+    with (
+        patch("legwork.retry_loop.shutil.which", side_effect=lambda name, path=None: locations.get(name)),
+        patch("legwork.retry_loop._python_version", side_effect=versions.get),
+    ):
+        assert retry_loop._find_system_python() == "/opt/homebrew/bin/python3.14"
+
+
+def test_find_system_python_raises_when_only_old_python_exists():
+    from legwork import retry_loop
+    from legwork.sandbox_runner import SandboxUnavailableError
+
+    with (
+        patch(
+            "legwork.retry_loop.shutil.which",
+            side_effect=lambda name, path=None: "/usr/bin/python3" if name == "python3" else None,
+        ),
+        patch("legwork.retry_loop._python_version", return_value=(3, 9)),
+        pytest.raises(SandboxUnavailableError, match="3.10"),
+    ):
+        retry_loop._find_system_python()
+
+
+def test_codegen_call_uses_the_longer_codegen_timeout(tmp_path):
+    from legwork.retry_loop import CODEGEN_TIMEOUT_SECONDS
+
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"))
+    with (
+        _MultiPatch(patches) as mocks,
+        patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT),
+    ):
+        run("owner/repo", tmp_path, CONFIG)
+    assert mocks["complete"].call_args.kwargs["timeout"] == CODEGEN_TIMEOUT_SECONDS

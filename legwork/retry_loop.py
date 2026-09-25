@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +51,16 @@ from legwork.llm_client import (
 
 MAX_WRAPPER_ATTEMPTS = 3
 TOTAL_RUN_TIMEOUT_SECONDS = 600
+# Codegen replies are long and reasoning models are slow: the first live run
+# (gpt-5, 2026-09-25) took ~50-60s per reply, so llm_client's 60s default
+# kept timing out and silently spending its infra retries.
+CODEGEN_TIMEOUT_SECONDS = 300
+# The official MCP Python SDK (`mcp` on PyPI) needs 3.10+; macOS's own
+# /usr/bin/python3 is 3.9, where pip finds no installable version at all.
+MIN_VENV_PYTHON = (3, 10)
+# Newest versions sometimes lack wheels for compiled deps, so prefer
+# established ones when several are installed.
+_VENV_PYTHON_CANDIDATES = ("python3.12", "python3.13", "python3.11", "python3.14", "python3.10", "python3")
 
 # Counts as a wrapper-repair attempt: plausibly fixable by trying again,
 # whether that's the LLM producing different code or a transient infra hiccup.
@@ -91,14 +102,36 @@ class RunResult:
     final_error: str | None = None
 
 
+def _python_version(path: str) -> tuple[int, int] | None:
+    try:
+        out = subprocess.run(
+            [path, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        ).stdout.split()
+        return (int(out[0]), int(out[1]))
+    except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+        return None
+
+
 def _find_system_python() -> str:
-    found = shutil.which("python3", path=sandbox_runner.MINIMAL_PATH)
-    if found is None:
-        raise sandbox_runner.SandboxUnavailableError(
-            "No python3 found on the minimal sandbox PATH — can't create an "
-            "isolated venv for the target repo's dependencies."
-        )
-    return found
+    # Must live on the minimal sandbox PATH (outside $HOME): the venv's
+    # interpreter points back at this base install, and the sandbox blocks
+    # reads under $HOME.
+    for name in _VENV_PYTHON_CANDIDATES:
+        found = shutil.which(name, path=sandbox_runner.MINIMAL_PATH)
+        if found is None:
+            continue
+        version = _python_version(found)
+        if version is not None and version >= MIN_VENV_PYTHON:
+            return found
+    raise sandbox_runner.SandboxUnavailableError(
+        f"No Python {MIN_VENV_PYTHON[0]}.{MIN_VENV_PYTHON[1]}+ found outside your home "
+        "directory — can't create an isolated venv the MCP SDK installs into. "
+        "Install one with Homebrew (e.g. `brew install python@3.12`)."
+    )
 
 
 def _run_one_attempt(
@@ -111,7 +144,7 @@ def _run_one_attempt(
     isolated from Legwork's own environment, invoke the self-test. Raises
     on any failure — caller decides retryable vs fail-fast."""
     messages = codegen.build_messages(readme_content, prior_failure)
-    response_text = complete(llm_config, messages)
+    response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
     draft = codegen.parse_response(response_text)
 
     attempt_dir.mkdir(parents=True, exist_ok=True)
