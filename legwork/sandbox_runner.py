@@ -89,7 +89,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 
-INSTALL_TIMEOUT_SECONDS = 120
+# AI repos often pull PyTorch: 5.3 GB on Linux (CUDA build). That took 66s
+# on a GitHub runner's network and would take minutes on a home connection
+# (measured 2026-09-26), so installs get 15 minutes.
+INSTALL_TIMEOUT_SECONDS = 900
 INVOKE_TIMEOUT_SECONDS = 60
 
 # Deliberately narrow — no inherited secrets. /opt/homebrew is included
@@ -234,7 +237,7 @@ def _hidden_dirs() -> list[Path]:
     return sorted(keep, key=lambda p: len(p.parts))
 
 
-def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
+def _bwrap_args(workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = ()) -> list[str]:
     """The Linux equivalent of _generate_profile: everything read-only, home
     directories and every place local sockets live (/tmp, /run) replaced by
     empty private tmpfs, only the workdir writable, and no network unless
@@ -264,6 +267,8 @@ def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
     for d in hidden:
         args += ["--tmpfs", d]
     args += ["--bind", real_workdir, real_workdir]
+    for d in extra_writable:
+        args += ["--bind", str(Path(d).resolve()), str(Path(d).resolve())]
     interpreter = interpreter_home()
     if interpreter is not None:
         args += ["--ro-bind", str(interpreter), str(interpreter)]
@@ -276,10 +281,12 @@ def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
     return args
 
 
-def _sandboxed_argv(command: list[str], workdir: Path, allow_network: bool, profile_path: Path | None) -> list[str]:
+def _sandboxed_argv(
+    command: list[str], workdir: Path, allow_network: bool, profile_path: Path | None, extra_writable: tuple[Path, ...] = ()
+) -> list[str]:
     if platform.system() == "Darwin":
         return ["sandbox-exec", "-f", str(profile_path), *command]
-    return [*_bwrap_args(workdir, allow_network), "--", *command]
+    return [*_bwrap_args(workdir, allow_network, extra_writable), "--", *command]
 
 
 _MACH_SERVICES = (
@@ -319,7 +326,7 @@ def _ancestors_under_home(path: Path, home: Path) -> list[Path]:
     return [a for a in [path, *path.parents] if a.is_relative_to(home)]
 
 
-def _generate_profile(workdir: Path, allow_network: bool) -> str:
+def _generate_profile(workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = ()) -> str:
     real_workdir = str(workdir.resolve())
     home = str(Path.home().resolve())
     lines = [
@@ -357,7 +364,12 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     interpreter = interpreter_home()
     if interpreter is not None:
         lines.append(f'(allow file-read* (subpath "{interpreter}"))')
+    extra = [Path(d).resolve() for d in extra_writable]
+    for d in extra:
+        lines.append(f'(allow file-read* file-write* (subpath "{d}"))')
     metadata = set(_ancestors_under_home(workdir_path, home_path))
+    for d in extra:
+        metadata |= set(_ancestors_under_home(d, home_path))
     if interpreter is not None:
         metadata |= set(_ancestors_under_home(interpreter, home_path))
     for ancestor in sorted(metadata):
@@ -436,16 +448,17 @@ def _run_sandboxed(
     timeout: float,
     timeout_error: type[Exception],
     extra_env: dict[str, str] | None = None,
+    extra_writable: tuple[Path, ...] = (),
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
     profile_path = None
     if platform.system() == "Darwin":
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sb", delete=False) as f:
-            f.write(_generate_profile(workdir, allow_network=allow_network))
+            f.write(_generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable))
             profile_path = Path(f.name)
 
-    full_command = _sandboxed_argv(command, workdir, allow_network, profile_path)
+    full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable)
     started = time.monotonic()
     try:
         result = subprocess.run(
@@ -480,21 +493,36 @@ def install(
     workdir: Path,
     timeout: float = INSTALL_TIMEOUT_SECONDS,
     extra_env: dict[str, str] | None = None,
+    cache_dir: Path | None = None,
 ) -> ExecutionResult:
     """Run a dependency-install command (e.g. `pip install -r
     requirements.txt`) with network access allowed but filesystem
     reads/writes confined to `workdir` (reads outside $HOME are still
     allowed, for Python/pip/system libraries) and a minimal, non-inherited
     environment (`extra_env` to add anything specific — e.g. a venv's PATH).
+    `cache_dir`, also writable, holds pip/npm/uv downloads so a retry in the
+    same build doesn't fetch a multi-GB dependency again.
     Raises InstallTimeoutExceeded on timeout, DependencyInstallError on a
     non-zero exit."""
+    env = dict(extra_env or {})
+    writable: tuple[Path, ...] = ()
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        writable = (cache_dir,)
+        env.update(
+            PIP_CACHE_DIR=str(cache_dir / "pip"),
+            npm_config_cache=str(cache_dir / "npm"),
+            UV_CACHE_DIR=str(cache_dir / "uv"),
+            XDG_CACHE_HOME=str(cache_dir / "xdg"),
+        )
     result = _run_sandboxed(
         command,
         workdir,
         allow_network=True,
         timeout=timeout,
         timeout_error=InstallTimeoutExceeded,
-        extra_env=extra_env,
+        extra_env=env,
+        extra_writable=writable,
     )
     if result.exit_code != 0:
         raise DependencyInstallError(

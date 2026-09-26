@@ -123,7 +123,7 @@ key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
    needs a toolchain the sandbox doesn't have, and so on.
 5. **Install**, sandboxed, network on.
 6. **Self-test**, sandboxed, network off. A failure goes back to the model
-   and it tries again, up to 3 attempts and 10 minutes.
+   and it tries again, up to 3 attempts and 30 minutes. Attempts share one download cache, so a retry doesn't re-download multi-GB dependencies like PyTorch.
 7. **Serve.** `legwork serve owner/repo` runs the wrapper as an MCP server
    over stdio, sandboxed, network off.
 

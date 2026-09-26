@@ -50,7 +50,11 @@ from legwork.llm_client import (
 )
 
 MAX_WRAPPER_ATTEMPTS = 3
-TOTAL_RUN_TIMEOUT_SECONDS = 600
+# Shared by the attempts of one build, deleted when the build ends.
+DOWNLOAD_CACHE_DIR = ".download-cache"
+# Room for one slow multi-GB install plus retries (installs may take up to
+# sandbox_runner.INSTALL_TIMEOUT_SECONDS each).
+TOTAL_RUN_TIMEOUT_SECONDS = 1800
 # Codegen replies are long and reasoning models are slow: the first live run
 # (gpt-5, 2026-09-25) took ~50-60s per reply, so llm_client's 60s default
 # kept timing out and silently spending its infra retries.
@@ -184,7 +188,12 @@ def _install_and_self_test(
         f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
     )
     progress("installing dependencies in a sandboxed venv")
-    sandbox_runner.install(["/bin/sh", "-c", combined_install_cmd], attempt_dir, extra_env=venv_env)
+    sandbox_runner.install(
+        ["/bin/sh", "-c", combined_install_cmd],
+        attempt_dir,
+        extra_env=venv_env,
+        cache_dir=attempt_dir.parent / DOWNLOAD_CACHE_DIR,
+    )
 
     progress("running the wrapper's self-test (network off)")
     sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
@@ -218,6 +227,17 @@ def _fetch_and_scan(repo_url: str, workdir: Path, progress: Callable[[str], None
     return cloned
 
 
+def _tidy(workdir: Path, result: RunResult) -> RunResult:
+    """After a build: drop the download cache and the environments of
+    attempts that didn't work (a PyTorch venv is ~5 GB). Their wrapper.py
+    and the attempt logs stay, for debugging."""
+    shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
+    for attempt in workdir.glob("attempt-*"):
+        if attempt != result.attempt_dir:
+            shutil.rmtree(attempt / ".venv", ignore_errors=True)
+    return result
+
+
 def run_cached(
     repo_url: str,
     workdir: Path,
@@ -229,6 +249,19 @@ def run_cached(
     fetch and scan, a scan of the cached wrapper itself, then the same
     sandboxed install and self-test. One attempt; the caller falls back to
     `run` if it fails. Raises the precondition errors `run` raises."""
+    try:
+        return _tidy(workdir, _run_cached(repo_url, workdir, install_command, wrapper_code, progress))
+    finally:
+        shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
+
+
+def _run_cached(
+    repo_url: str,
+    workdir: Path,
+    install_command: str,
+    wrapper_code: str,
+    progress: Callable[[str], None],
+) -> RunResult:
     _fetch_and_scan(repo_url, workdir, progress)
     attempt_dir = workdir / "attempt-1"
     attempt_dir.mkdir(parents=True)
@@ -260,6 +293,18 @@ def run(
     MAX_WRAPPER_ATTEMPTS codegen+install+invoke attempts, each logged.
     `progress` gets one short status line per stage (a build takes
     minutes; the CLI shows these so it doesn't look hung)."""
+    try:
+        return _tidy(workdir, _run(repo_url, workdir, llm_config, progress))
+    finally:
+        shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
+
+
+def _run(
+    repo_url: str,
+    workdir: Path,
+    llm_config: LLMConfig,
+    progress: Callable[[str], None],
+) -> RunResult:
     deadline = time.monotonic() + TOTAL_RUN_TIMEOUT_SECONDS
 
     def _check_deadline() -> None:

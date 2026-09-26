@@ -19,6 +19,7 @@ from legwork.readme_parser import ParsedReadme
 from legwork.repo_fetcher import ClonedRepo, RepoRef
 from legwork.retry_loop import (
     MAX_WRAPPER_ATTEMPTS,
+    TOTAL_RUN_TIMEOUT_SECONDS,
     TotalRunTimeoutExceeded,
     _find_system_python,
     run,
@@ -209,7 +210,8 @@ def test_total_run_timeout_aborts_before_starting_an_attempt(tmp_path):
     with _MultiPatch(patches):
         with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
             # Force the deadline to already be in the past.
-            with patch("legwork.retry_loop.time.monotonic", side_effect=[0, 1000, 1000, 1000]):
+            past = TOTAL_RUN_TIMEOUT_SECONDS + 1
+            with patch("legwork.retry_loop.time.monotonic", side_effect=[0, past, past, past]):
                 with pytest.raises(TotalRunTimeoutExceeded):
                     run("owner/repo", tmp_path, CONFIG)
 
@@ -335,3 +337,17 @@ def test_skips_a_python_that_cannot_make_venvs(monkeypatch):
     monkeypatch.setattr("legwork.retry_loop._has_venv", lambda path: False)
     with pytest.raises(SandboxUnavailableError, match="uvx legwork-mcp"):
         _find_system_python()
+
+
+def test_a_finished_build_drops_downloads_and_failed_environments(tmp_path):
+    from legwork.retry_loop import DOWNLOAD_CACHE_DIR, RunResult, _tidy
+
+    for n in (1, 2, 3):
+        (tmp_path / f"attempt-{n}" / ".venv").mkdir(parents=True)
+        (tmp_path / f"attempt-{n}" / "wrapper.py").write_text("")
+    (tmp_path / DOWNLOAD_CACHE_DIR / "pip").mkdir(parents=True)
+    _tidy(tmp_path, RunResult(True, "", "", attempt_dir=tmp_path / "attempt-3"))
+    assert not (tmp_path / DOWNLOAD_CACHE_DIR).exists()
+    assert not (tmp_path / "attempt-1" / ".venv").exists()
+    assert (tmp_path / "attempt-1" / "wrapper.py").exists()  # kept for debugging
+    assert (tmp_path / "attempt-3" / ".venv").exists()  # the one that works

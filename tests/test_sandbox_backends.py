@@ -108,3 +108,12 @@ def test_python_under_home_is_mounted_read_only_after_home_is_hidden():
 def test_interpreter_home_ignores_pythons_outside_home(monkeypatch):
     monkeypatch.setattr("sys.base_prefix", "/opt/homebrew/Cellar/python@3.12/3.12.7")
     assert sandbox_runner.interpreter_home() is None
+
+
+def test_a_download_cache_is_bound_writable_on_linux():
+    with (
+        patch("legwork.sandbox_runner.Path.home", return_value=Path("/home/me")),
+        patch("legwork.sandbox_runner._hidden_dirs", return_value=[Path("/home"), Path("/home/me")]),
+    ):
+        args = _bwrap_args(Path("/home/me/b/attempt-1"), allow_network=True, extra_writable=(Path("/home/me/b/.download-cache"),))
+    assert str(Path("/home/me/b/.download-cache").resolve()) in _pairs(args, "--bind")

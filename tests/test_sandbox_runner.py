@@ -388,3 +388,19 @@ def test_only_allowlisted_system_services_are_reachable(tmp_path):
         timeout_error=sandbox_runner.InstallTimeoutExceeded,
     )
     assert result.stdout.strip() != "0"
+
+
+def test_install_can_use_the_builds_shared_download_cache(tmp_path):
+    """Retries in one build share downloads (a PyTorch install is ~3 GB):
+    the cache folder is writable, everything else outside the workdir isn't."""
+    workdir, cache = tmp_path / "attempt-1", tmp_path / ".download-cache"
+    workdir.mkdir()
+    result = install(
+        ["/bin/sh", "-c", 'echo cached > "$PIP_CACHE_DIR.marker" && echo "$npm_config_cache $UV_CACHE_DIR"'],
+        workdir,
+        cache_dir=cache,
+    )
+    assert (tmp_path / ".download-cache" / "pip.marker").read_text().strip() == "cached"
+    assert result.stdout.split() == [str(cache / "npm"), str(cache / "uv")]
+    with pytest.raises(DependencyInstallError):
+        install(["/bin/sh", "-c", f"echo x > {tmp_path / 'outside.txt'}"], workdir, cache_dir=cache)
