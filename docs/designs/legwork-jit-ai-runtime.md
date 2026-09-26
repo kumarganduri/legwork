@@ -971,6 +971,20 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
+- [x] **Linux sandbox (added 2026-09-26, pre-launch review):** bubblewrap
+      backend with the macOS policy (see sandbox_runner's docstring).
+      Proven on GitHub's ubuntu-latest: 242 tests including real pip
+      installs and a real MCP client over `legwork serve`. Ubuntu 24.04+
+      restricts user namespaces through AppArmor; the fix is a profile for
+      bwrap alone, printed by Legwork and applied verbatim in CI. CI and
+      every release now test on macOS and Linux, and
+      `LEGWORK_REQUIRE_SANDBOX` makes a broken sandbox fail CI instead of
+      skipping. Released in 0.3.0.
+- [x] **Install-phase socket escape (fixed 2026-09-26, 0.2.1):** the macOS
+      install profile's `(allow network*)` let install scripts connect to
+      any local Unix socket — the SSH agent (use the user's SSH keys),
+      Docker (root-equivalent), password-manager agents. Now IP, DNS and
+      workdir sockets only; regression-tested on both platforms.
 - [x] **JavaScript/TypeScript scanning (added 2026-09-26, pre-launch
       review):** the T10 scan only read `.py` files, but one of the trial's
       three builds was an npm package. `obfuscation_scanner.scan_js_file`

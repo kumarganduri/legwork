@@ -36,14 +36,23 @@ under $HOME) — fixed here: reads outside $HOME are allowed (needed for
 Python/pip/system libraries), reads under $HOME are confined to the
 sandbox workdir only, in both phases.
 
-**Real, disclosed limitation:** `sandbox-exec` is macOS-only. A
-Linux/Windows-portable backend (Docker-based, revisiting `llm-sandbox` once
-a container runtime is actually available) is real follow-up work — this
-module raises `SandboxUnavailableError` with a clear message on other
-platforms rather than silently running unsandboxed, which would be a
-disclosed-but-then-secretly-ignored security regression.
+**Linux (added 2026-09-26):** the same policy through bubblewrap
+(`_bwrap_args`): the system read-only, home directories and /tmp, /run
+replaced with empty private tmpfs (stand-in homes then read-only), only
+the workdir writable, and a shared network namespace only while
+installing, with just the DNS folders put back. Ubuntu 24.04+ needs an
+AppArmor profile that allows user namespaces for bwrap alone
+(`BWRAP_APPARMOR_PROFILE`; the error message prints the commands). Other
+platforms raise `SandboxUnavailableError` rather than silently running
+unsandboxed.
 
-**Also disclosed:** `sandbox-exec` gives real filesystem and network
+**Local sockets (fixed 2026-09-26):** the macOS install profile used to
+allow `network*`, which includes connecting to any Unix socket on the
+machine — the SSH agent, Docker, password-manager agents. It now allows IP
+traffic, the DNS socket and sockets inside the workdir only. On Linux
+those sockets live in the hidden directories, so neither phase sees them.
+
+**Also disclosed:** both backends give real filesystem and network
 confinement (which is what the two named threats — install-time
 exfiltration, and the phase-2 cutoff — actually need), but not full
 container-grade isolation (no separate PID namespace, no cgroup resource
