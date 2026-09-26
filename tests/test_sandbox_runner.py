@@ -402,5 +402,10 @@ def test_install_can_use_the_builds_shared_download_cache(tmp_path):
     )
     assert (tmp_path / ".download-cache" / "pip.marker").read_text().strip() == "cached"
     assert result.stdout.split() == [str(cache / "npm"), str(cache / "uv")]
-    with pytest.raises(DependencyInstallError):
+    # macOS refuses the write; Linux lets it land in the sandbox's private
+    # /tmp, which is thrown away. Either way nothing reaches the real one.
+    try:
         install(["/bin/sh", "-c", f"echo x > {tmp_path / 'outside.txt'}"], workdir, cache_dir=cache)
+    except DependencyInstallError:
+        pass
+    assert not (tmp_path / "outside.txt").exists()
