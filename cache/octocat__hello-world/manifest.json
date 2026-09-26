@@ -1,0 +1,9 @@
+{
+  "source_repo_url": "https://github.com/octocat/Hello-World",
+  "commit_sha": "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d",
+  "install_command": "true",
+  "entrypoint": "TEST ENTRY for the cache-check workflow; this PR will be closed",
+  "llm_model": "none",
+  "source_license": "none",
+  "license_flag": null
+}
