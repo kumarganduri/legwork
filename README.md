@@ -160,18 +160,18 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
   writing a wrapper that does something other than what you asked for. The
   wrapper still runs sandboxed with network off, which bounds the damage;
   it doesn't prevent a wrong or misleading tool.
-- **Desktop Linux, during install only:** bubblewrap can't hide
-  "abstract" Unix sockets while the network is shared, so install code
-  could reach services that listen on them, such as an X11 display. The
-  run phase has no network and isn't affected; nor are macOS, servers, or
-  Wayland sessions without Xwayland.
+- **Linux on architectures other than x86-64 and ARM64:** install code
+  can reach "abstract" Unix sockets (such as an X11 display), because the
+  seccomp filter that blocks Unix sockets during install only covers those
+  two. The run phase has no network and isn't affected.
 - **The scanner is heuristic.** It catches the obfuscation patterns seen in
   real payloads so far, and a determined author can get past it.
 
 The sandbox is `sandbox-exec` on macOS and bubblewrap on Linux, with the
 same rules on both: the system read-only, your home directory hidden,
-writes only in the build's own folder, no local sockets (SSH agent, Docker),
-and network only during install. If the sandbox isn't available, Legwork
+writes only in the build's own folder, no local sockets (SSH agent, Docker,
+display servers), only the system services builds need, and network only
+during install. If the sandbox isn't available, Legwork
 refuses to run. It never falls back to running unsandboxed.
 
 ## Commands

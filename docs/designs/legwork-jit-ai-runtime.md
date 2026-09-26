@@ -978,8 +978,10 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       read-only sandbox access to exactly that install. (2) macOS profile
       allowed every system service (clipboard access confirmed); now 13
       services measured against real workloads, with a regression test.
-      Linux abstract sockets during install are documented as a remaining
-      gap. (3) PyTorch on Linux is 5.3 GB (66s on a GitHub runner): install
+      Linux abstract sockets during install: closed in 0.4.1 with a
+      bwrap seccomp filter refusing AF_UNIX sockets during install
+      (internet sockets and socketpair still work; verified with a host
+      abstract socket on Ubuntu and real pip/npm/git installs). (3) PyTorch on Linux is 5.3 GB (66s on a GitHub runner): install
       limit 15 min, build 30 min, a per-build shared download cache, and
       failed attempts' venvs removed. (4) cache PRs are checked by
       `cache-check.yml` (pull_request_target: main's workflow and checker,

@@ -49,8 +49,13 @@ unsandboxed.
 **Local sockets (fixed 2026-09-26):** the macOS install profile used to
 allow `network*`, which includes connecting to any Unix socket on the
 machine — the SSH agent, Docker, password-manager agents. It now allows IP
-traffic, the DNS socket and sockets inside the workdir only. On Linux
-those sockets live in the hidden directories, so neither phase sees them.
+traffic, the DNS socket and sockets inside the workdir only. On Linux,
+path sockets live in the hidden directories, and abstract sockets (which
+belong to the network namespace install shares with the host) are covered
+by a seccomp filter that refuses AF_UNIX sockets during install
+(`no_unix_sockets_filter`, x86-64 and ARM64). The macOS profile also
+allows only the system services builds were measured to need
+(`_MACH_SERVICES`).
 
 **Also disclosed:** both backends give real filesystem and network
 confinement (which is what the two named threats — install-time

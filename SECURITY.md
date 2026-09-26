@@ -35,6 +35,7 @@ or command that reproduces it. You'll get a reply within a week.
 These are documented in the [README](README.md#risks-stated-plainly) and
 aren't vulnerabilities by themselves: installs run with network on,
 prompt injection from a README isn't mitigated, abstract Unix sockets are
-reachable during install on desktop Linux, and the scan covers the
+reachable during install on Linux architectures other than x86-64 and ARM64,
+and the scan covers the
 repo's own Python and JavaScript/TypeScript source, not what installers
 download.
