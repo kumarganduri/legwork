@@ -3,6 +3,8 @@ name = "legwork-mcp"
 version = "0.1.0"
 description = "Point it at a GitHub repo, get a working MCP tool back."
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 keywords = ["mcp", "model-context-protocol", "llm", "agents", "sandbox", "codegen"]
 classifiers = [
