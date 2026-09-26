@@ -211,6 +211,8 @@ def run(
     _check_deadline()
     progress("reading the README")
     readme = readme_parser.parse_readme(cloned.path)
+    if readme.linked_docs:
+        progress(f"also reading {', '.join(str(d.relative_to(cloned.path.resolve())) for d in readme.linked_docs)}")
 
     attempts: list[AttemptLog] = []
     prior_failures: list[str] = []

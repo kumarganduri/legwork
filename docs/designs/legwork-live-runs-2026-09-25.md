@@ -66,6 +66,24 @@ now allows metadata, not contents, on exactly those ancestor folders.
 - ~~**The printed launch path is this checkout's venv**~~ — fixed by T9:
   installed as `legwork-mcp`, it prints the installed command or a `uvx`
   line.
-- **README-only input.** phone-harness shows repos that put install steps
-  in linked files (`install.md`) get refused. The full repo is already
-  cloned, so linked docs could be included.
+- ~~**README-only input.**~~ Fixed 2026-09-26, see below.
+
+## Follow-up: linked setup docs (2026-09-26)
+
+The prompt now carries setup docs the README links to (or that sit at the
+repo root) when their name or link text looks like setup — at most 3,
+inside the same 50KB budget, README first.
+
+Re-run of `ShawnPana/phone-harness` with gpt-5: `install.md` was included
+and the build **succeeded on attempt 2** instead of being refused. Not the
+`EXTERNAL_HARDWARE_REQUIRED` refusal we originally expected, and worth
+being precise about: the wrapper exposes three tools. `skill` and
+`config_show` need no phone, and the self-test passed on `skill`.
+`run_script`, the one that actually drives a phone, needs a connected
+device and was **not** verified — the self-test only ever checks the
+simplest command. So "built" means "starts and its simplest tool works",
+not "every tool works". The README should say so.
+
+The same run caught the printed launch command being relative
+(`.venv/bin/legwork`) when legwork is started by a relative path; it's now
+made absolute.

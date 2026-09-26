@@ -153,3 +153,10 @@ def test_outside_uvx_the_launch_command_is_the_installed_script(monkeypatch):
     monkeypatch.setattr("sys.prefix", "/Users/me/.local/share/uv/tools/legwork-mcp")
     monkeypatch.setattr("sys.argv", ["/Users/me/.local/bin/legwork", "owner/repo"])
     assert cli._self_command() == ["/Users/me/.local/bin/legwork"]
+
+
+def test_a_relative_launch_path_is_made_absolute(monkeypatch, tmp_path):
+    monkeypatch.setattr("sys.prefix", str(tmp_path / ".venv"))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", [".venv/bin/legwork", "owner/repo"])
+    assert cli._self_command() == [str(tmp_path / ".venv" / "bin" / "legwork")]

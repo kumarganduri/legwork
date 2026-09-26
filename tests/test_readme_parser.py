@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from legwork.readme_parser import (
+    MAX_LINKED_DOCS,
     README_MAX_BYTES,
     InsufficientReadmeError,
     _is_priority,
@@ -135,3 +136,71 @@ def test_readme_with_no_headings_still_gets_capped(tmp_path):
     result = parse_readme(tmp_path)
     assert result.truncated is True
     assert len(result.content.encode("utf-8")) <= README_MAX_BYTES
+
+
+# --- linked setup docs (live-run finding: phone-harness's install.md) -------
+
+
+def test_linked_install_doc_is_appended_after_the_readme(tmp_path):
+    (tmp_path / "README.md").write_text("# tool\n\nDetails in [install.md](install.md).\n")
+    (tmp_path / "install.md").write_text("# Install\n\npip install tool\n")
+    parsed = parse_readme(tmp_path)
+    assert parsed.linked_docs == ((tmp_path / "install.md").resolve(),)
+    assert parsed.content.startswith("# tool")
+    assert "Linked setup doc: install.md" in parsed.content
+    assert parsed.content.endswith("pip install tool\n")
+
+
+def test_link_text_can_mark_a_doc_as_setup(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "guide.md").write_text("run it")
+    (tmp_path / "README.md").write_text('See [Getting started](docs/guide.md#first-run "guide").')
+    assert parse_readme(tmp_path).linked_docs == ((tmp_path / "docs" / "guide.md").resolve(),)
+
+
+def test_root_setup_doc_is_included_even_when_not_linked(tmp_path):
+    (tmp_path / "README.md").write_text("# tool")
+    (tmp_path / "INSTALL.md").write_text("make install")
+    assert [p.name for p in parse_readme(tmp_path).linked_docs] == ["INSTALL.md"]
+
+
+def test_unrelated_docs_code_and_web_links_are_not_included(tmp_path):
+    (tmp_path / "README.md").write_text(
+        "[changelog](CHANGELOG.md) [setup](setup.py) [site](https://x.dev/install.md) [top](#install)"
+    )
+    for name in ("CHANGELOG.md", "setup.py", "CONTRIBUTING.md"):
+        (tmp_path / name).write_text("x")
+    assert parse_readme(tmp_path).linked_docs == ()
+
+
+def test_links_that_leave_the_repo_are_ignored(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (tmp_path / "install.md").write_text("outside the repo")
+    (repo / "setup.md").symlink_to(tmp_path / "install.md")
+    (repo / "README.md").write_text("[install](../install.md) [setup](setup.md)")
+    parsed = parse_readme(repo)
+    assert parsed.linked_docs == ()
+    assert "outside the repo" not in parsed.content
+
+
+def test_linked_docs_share_the_readme_byte_budget(tmp_path):
+    (tmp_path / "README.md").write_text("[install](install.md)\n" + "r" * (README_MAX_BYTES - 5000))
+    (tmp_path / "install.md").write_text("# Install\n\n" + "i" * 20_000)
+    parsed = parse_readme(tmp_path)
+    assert parsed.truncated
+    assert len(parsed.content.encode("utf-8")) <= README_MAX_BYTES
+
+
+def test_no_room_left_means_no_linked_docs(tmp_path):
+    (tmp_path / "README.md").write_text("[install](install.md)\n" + "r" * (README_MAX_BYTES - 100))
+    (tmp_path / "install.md").write_text("pip install tool")
+    assert parse_readme(tmp_path).linked_docs == ()
+
+
+def test_at_most_max_linked_docs(tmp_path):
+    names = ["install.md", "setup.md", "usage.md", "quickstart.md"]
+    (tmp_path / "README.md").write_text(" ".join(f"[{n}]({n})" for n in names))
+    for n in names:
+        (tmp_path / n).write_text(n)
+    assert [p.name for p in parse_readme(tmp_path).linked_docs] == names[:MAX_LINKED_DOCS]

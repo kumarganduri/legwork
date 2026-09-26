@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import os
 import re
 import shlex
 import shutil
@@ -110,7 +111,10 @@ def _self_command() -> list[str]:
     argv0 = sys.argv[0]
     if argv0.endswith(".py"):  # python -m legwork.cli, or the file directly
         return [sys.executable, "-m", "legwork.cli"]
-    return [shutil.which(argv0) or str(Path(argv0).resolve())]
+    # Absolute, since MCP clients launch from their own working directory.
+    # abspath, not resolve(): keep ~/.local/bin/legwork rather than
+    # following its symlink into uv's tool folder.
+    return [os.path.abspath(shutil.which(argv0) or argv0)]
 
 
 def _server_name(ref: RepoRef) -> str:

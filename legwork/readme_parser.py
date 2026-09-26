@@ -9,6 +9,14 @@ growing transcript) is the retry loop's job (T6, not yet built) using this
 module's output; not solved here, since building that composition without
 the surrounding retry loop it belongs to would be speculative.
 
+Setup docs the README points to come along (live-run finding, 2026-09-25:
+phone-harness keeps its install steps in a linked install.md, and a
+README-only prompt got it refused as INSUFFICIENT_README). A doc is
+included when the README links to it, or it sits at the repo root, and its
+name or link text looks like setup (install, setup, quick start, getting
+started, usage) — at most MAX_LINKED_DOCS, all inside the same
+README_MAX_BYTES budget, the README claiming it first.
+
 Truncation is section-aware, not a flat byte cut (validation spike finding,
 2026-09-22): a flat cut can retain the wrong part of a README entirely —
 e.g. keeping a complex, service-dependent install path while cutting a
@@ -21,10 +29,18 @@ those do.
 from __future__ import annotations
 
 import re
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
 README_MAX_BYTES = 50 * 1024
+MAX_LINKED_DOCS = 3
+# Not worth a doc's header line and a truncated scrap of its first section.
+_MIN_DOC_BUDGET_BYTES = 1024
+_DOC_SUFFIXES = {".md", ".markdown", ".rst", ".txt", ""}
+# [text](target) — the target up to whitespace or ")", so a title after it
+# ([x](install.md "Install")) is dropped.
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(\s*<?([^)\s>]+)>?[^)]*\)")
 
 # Case-insensitive; matched against a heading's text with punctuation
 # stripped. Order doesn't matter — these are treated as a set.
@@ -66,9 +82,10 @@ class ReadmeTruncatedWarning(Exception):
 @dataclass(frozen=True)
 class ParsedReadme:
     path: Path
-    content: str  # possibly truncated
+    content: str  # possibly truncated; linked setup docs appended after it
     original_bytes: int
     truncated: bool
+    linked_docs: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -181,11 +198,48 @@ def _truncate_section_aware(text: str, max_bytes: int) -> str:
     return "".join(kept_by_index[i] for i in sorted(kept_by_index))
 
 
+def _looks_like_setup(text: str) -> bool:
+    return bool(_PRIORITY_KEYWORD_RE.search(_normalize_heading(re.sub(r"[-_./]", " ", text))))
+
+
+def find_setup_docs(repo_root: Path, readme_path: Path, readme_text: str) -> list[Path]:
+    """Setup docs worth sending with the README: ones it links to first (in
+    link order), then ones at the repo root. Never a path outside the repo."""
+    root = repo_root.resolve()
+    candidates: list[tuple[Path, str]] = []
+    for link_text, target in _MD_LINK_RE.findall(readme_text):
+        parsed = urllib.parse.urlparse(target)
+        if parsed.scheme or parsed.netloc or not parsed.path:
+            continue  # a web link or an in-page #anchor
+        candidates.append((readme_path.parent / urllib.parse.unquote(parsed.path), link_text))
+    candidates += [(p, "") for p in sorted(repo_root.iterdir())]
+
+    docs: list[Path] = []
+    for path, link_text in candidates:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        if (
+            not resolved.is_relative_to(root)
+            or not resolved.is_file()
+            or resolved.suffix.lower() not in _DOC_SUFFIXES
+            or resolved == readme_path.resolve()
+            or resolved in docs
+        ):
+            continue
+        if _looks_like_setup(str(resolved.relative_to(root))) or _looks_like_setup(link_text):
+            docs.append(resolved)
+        if len(docs) == MAX_LINKED_DOCS:
+            break
+    return docs
+
+
 def parse_readme(repo_root: Path) -> ParsedReadme:
     """Locate, read, and (if needed) section-aware-truncate the repo's
-    README. Raises InsufficientReadmeError if no README file exists at
-    all — a repo with no README isn't a truncation case, it's a
-    can't-even-start case."""
+    README, then append the setup docs it points to while budget remains.
+    Raises InsufficientReadmeError if no README file exists at all — a repo
+    with no README isn't a truncation case, it's a can't-even-start case."""
     path = find_readme(repo_root)
     if path is None:
         raise InsufficientReadmeError(f"No README found at the root of {repo_root}")
@@ -193,8 +247,26 @@ def parse_readme(repo_root: Path) -> ParsedReadme:
     raw = path.read_text(encoding="utf-8", errors="replace")
     original_bytes = len(raw.encode("utf-8"))
 
-    if original_bytes <= README_MAX_BYTES:
-        return ParsedReadme(path=path, content=raw, original_bytes=original_bytes, truncated=False)
+    if original_bytes > README_MAX_BYTES:
+        truncated_content = _truncate_section_aware(raw, README_MAX_BYTES)
+        return ParsedReadme(path=path, content=truncated_content, original_bytes=original_bytes, truncated=True)
 
-    truncated_content = _truncate_section_aware(raw, README_MAX_BYTES)
-    return ParsedReadme(path=path, content=truncated_content, original_bytes=original_bytes, truncated=True)
+    content, budget, truncated = raw, README_MAX_BYTES - original_bytes, False
+    included: list[Path] = []
+    root = repo_root.resolve()
+    for doc in find_setup_docs(repo_root, path, raw):
+        header = f"\n\n---\nLinked setup doc: {doc.relative_to(root)}\n---\n\n"
+        doc_budget = budget - len(header.encode("utf-8"))
+        if doc_budget < _MIN_DOC_BUDGET_BYTES:
+            break
+        text = doc.read_text(encoding="utf-8", errors="replace")
+        text_bytes = len(text.encode("utf-8"))
+        original_bytes += text_bytes
+        if text_bytes > doc_budget:
+            text, truncated = _truncate_section_aware(text, doc_budget), True
+        content += header + text
+        budget -= len(header.encode("utf-8")) + len(text.encode("utf-8"))
+        included.append(doc)
+    return ParsedReadme(
+        path=path, content=content, original_bytes=original_bytes, truncated=truncated, linked_docs=tuple(included)
+    )
