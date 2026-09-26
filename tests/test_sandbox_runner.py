@@ -409,3 +409,46 @@ def test_install_can_use_the_builds_shared_download_cache(tmp_path):
     except DependencyInstallError:
         pass
     assert not (tmp_path / "outside.txt").exists()
+
+
+@linux_only
+def test_install_cannot_reach_abstract_unix_sockets(tmp_path):
+    """Abstract sockets live in the network namespace, which install shares
+    with the host; services like an X11 display listen on them. The seccomp
+    filter refuses AF_UNIX sockets during install."""
+    import socket
+
+    name = f"\0legwork-test-{os.getpid()}"
+    server = socket.socket(socket.AF_UNIX)
+    server.bind(name)
+    server.listen(1)
+    code = (
+        "import socket, sys\n"
+        "try:\n"
+        "    s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); print('connected')\n"
+        "except OSError as e:\n"
+        "    print('blocked', e.errno)\n"
+        "socket.socketpair(); print('socketpair ok')\n"
+    )
+    try:
+        result = install([SYSTEM_PYTHON, "-c", code, name], tmp_path)
+        assert result.stdout.split("\n")[0].startswith("blocked")
+        assert "socketpair ok" in result.stdout
+    finally:
+        server.close()
+
+
+@pytest.mark.skipif(not _network_reachable(), reason="no network in this environment")
+@pytest.mark.parametrize(
+    ("tool", "command"),
+    [
+        ("npm", "npm install --no-fund --no-audit --silent left-pad >/dev/null && echo ok"),
+        ("git", "git clone -q --depth 1 https://github.com/octocat/Hello-World.git hw && echo ok"),
+    ],
+)
+def test_real_installers_work_inside_the_install_phase(tmp_path, tool, command):
+    """Every tightening (system-service allowlist, socket rules, the Linux
+    seccomp filter) must leave real installers working."""
+    if shutil.which(tool, path=sandbox_runner.MINIMAL_PATH) is None:
+        pytest.skip(f"{tool} isn't on the sandbox PATH here")
+    assert install(["/bin/sh", "-c", command], tmp_path).stdout.strip().endswith("ok")

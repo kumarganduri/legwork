@@ -77,10 +77,12 @@ to PATH so `pip`/`python` resolve there, not to Legwork's own environment).
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import os
 import platform
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -281,12 +283,71 @@ def _bwrap_args(workdir: Path, allow_network: bool, extra_writable: tuple[Path, 
     return args
 
 
+# --- Linux: no Unix sockets while installing ----------------------------------
+#
+# During install the sandbox shares the host's network namespace (it needs
+# the internet), and abstract Unix sockets belong to the network namespace,
+# not the filesystem — so hiding /tmp and /run doesn't hide them. Services
+# such as an X11 display listen on them. This seccomp filter makes
+# socket(AF_UNIX, ...) fail for install commands; internet sockets and
+# socketpair() (what pipes between processes use) still work. Syscalls from
+# a non-native ABI (32-bit, x32) are refused outright, since their socket
+# calls can't be inspected. Added 2026-09-27.
+
+_BPF_LD_W_ABS, _BPF_JEQ_K, _BPF_JGE_K, _BPF_RET_K = 0x20, 0x15, 0x35, 0x06
+_SECCOMP_RET_ALLOW = 0x7FFF0000
+_SECCOMP_RET_ERRNO = 0x00050000
+_EAFNOSUPPORT, _ENOSYS = 97, 38
+_AF_UNIX = 1
+# machine -> (AUDIT_ARCH value, socket syscall number)
+_SECCOMP_ARCHES = {
+    "x86_64": (0xC000003E, 41),
+    "amd64": (0xC000003E, 41),
+    "aarch64": (0xC00000B7, 198),
+    "arm64": (0xC00000B7, 198),
+}
+
+
+def _bpf(code: int, jt: int, jf: int, k: int) -> bytes:
+    return struct.pack("<HBBI", code, jt, jf, k)
+
+
+def no_unix_sockets_filter(machine: str | None = None) -> bytes | None:
+    """The seccomp program (for bwrap --seccomp), or None on an architecture
+    this doesn't cover."""
+    arch = _SECCOMP_ARCHES.get((machine or platform.machine()).lower())
+    if arch is None:
+        return None
+    audit_arch, socket_nr = arch
+    deny = _SECCOMP_RET_ERRNO | _EAFNOSUPPORT
+    return b"".join(
+        [
+            _bpf(_BPF_LD_W_ABS, 0, 0, 4),  # 0: A = arch
+            _bpf(_BPF_JEQ_K, 1, 0, audit_arch),  # 1: native -> 3
+            _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | _ENOSYS),  # 2: other ABIs refused
+            _bpf(_BPF_LD_W_ABS, 0, 0, 0),  # 3: A = syscall number
+            _bpf(_BPF_JGE_K, 3, 0, 0x40000000),  # 4: x32 calls -> 8
+            _bpf(_BPF_JEQ_K, 0, 3, socket_nr),  # 5: socket() ? 6 : 9
+            _bpf(_BPF_LD_W_ABS, 0, 0, 16),  # 6: A = domain (args[0], low word)
+            _bpf(_BPF_JEQ_K, 0, 1, _AF_UNIX),  # 7: AF_UNIX ? 8 : 9
+            _bpf(_BPF_RET_K, 0, 0, deny),  # 8: refused
+            _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),  # 9: allowed
+        ]
+    )
+
+
 def _sandboxed_argv(
-    command: list[str], workdir: Path, allow_network: bool, profile_path: Path | None, extra_writable: tuple[Path, ...] = ()
+    command: list[str],
+    workdir: Path,
+    allow_network: bool,
+    profile_path: Path | None,
+    extra_writable: tuple[Path, ...] = (),
+    seccomp_fd: int | None = None,
 ) -> list[str]:
     if platform.system() == "Darwin":
         return ["sandbox-exec", "-f", str(profile_path), *command]
-    return [*_bwrap_args(workdir, allow_network, extra_writable), "--", *command]
+    seccomp = ["--seccomp", str(seccomp_fd)] if seccomp_fd is not None else []
+    return [*_bwrap_args(workdir, allow_network, extra_writable), *seccomp, "--", *command]
 
 
 _MACH_SERVICES = (
@@ -458,25 +519,34 @@ def _run_sandboxed(
             f.write(_generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable))
             profile_path = Path(f.name)
 
-    full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable)
     started = time.monotonic()
-    try:
-        result = subprocess.run(
-            full_command,
-            cwd=workdir,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=_build_env(workdir, extra_env),
-            check=False,  # exit code inspected manually by install()/invoke()
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise timeout_error(
-            f"{' '.join(command)!r} exceeded {timeout}s inside the sandbox"
-        ) from exc
-    finally:
-        if profile_path is not None:
-            profile_path.unlink(missing_ok=True)
+    with contextlib.ExitStack() as stack:
+        seccomp_fd = None
+        program = no_unix_sockets_filter() if platform.system() == "Linux" and allow_network else None
+        if program is not None:
+            seccomp_file = stack.enter_context(tempfile.TemporaryFile())
+            seccomp_file.write(program)
+            seccomp_file.seek(0)
+            seccomp_fd = seccomp_file.fileno()
+        full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable, seccomp_fd)
+        try:
+            result = subprocess.run(
+                full_command,
+                pass_fds=(seccomp_fd,) if seccomp_fd is not None else (),
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=_build_env(workdir, extra_env),
+                check=False,  # exit code inspected manually by install()/invoke()
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise timeout_error(
+                f"{' '.join(command)!r} exceeded {timeout}s inside the sandbox"
+            ) from exc
+        finally:
+            if profile_path is not None:
+                profile_path.unlink(missing_ok=True)
     duration = time.monotonic() - started
 
     return ExecutionResult(

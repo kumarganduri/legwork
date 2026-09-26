@@ -4,13 +4,18 @@ tests/test_sandbox_runner.py on the machine that has it."""
 
 from __future__ import annotations
 
+import struct as _struct
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from legwork import sandbox_runner
-from legwork.sandbox_runner import SandboxUnavailableError, _bwrap_args
+from legwork.sandbox_runner import (
+    SandboxUnavailableError,
+    _bwrap_args,
+    no_unix_sockets_filter,
+)
 
 
 def _args(workdir="/home/me/.legwork/wrappers/x/builds/1/attempt-1", network=False, home="/home/me"):
@@ -117,3 +122,50 @@ def test_a_download_cache_is_bound_writable_on_linux():
     ):
         args = _bwrap_args(Path("/home/me/b/attempt-1"), allow_network=True, extra_writable=(Path("/home/me/b/.download-cache"),))
     assert str(Path("/home/me/b/.download-cache").resolve()) in _pairs(args, "--bind")
+
+
+# --- the install-phase seccomp filter, run through a tiny BPF interpreter ----
+
+ALLOW, ERRNO = 0x7FFF0000, 0x00050000
+
+
+def _run_bpf(program: bytes, arch: int, nr: int, arg0: int = 0) -> int:
+    data = _struct.pack("<iIQ6Q", nr, arch, 0, arg0, 0, 0, 0, 0, 0)
+    insns = [_struct.unpack("<HBBI", program[i : i + 8]) for i in range(0, len(program), 8)]
+    pc, acc = 0, 0
+    while True:
+        code, jt, jf, k = insns[pc]
+        if code == 0x20:
+            acc = _struct.unpack_from("<I", data, k)[0]
+        elif code == 0x06:
+            return k
+        elif code in (0x15, 0x35):
+            taken = acc == k if code == 0x15 else acc >= k
+            pc += jt if taken else jf
+        pc += 1
+
+
+@pytest.mark.parametrize(("machine", "arch", "socket_nr"), [("x86_64", 0xC000003E, 41), ("aarch64", 0xC00000B7, 198)])
+def test_filter_refuses_only_unix_sockets(machine, arch, socket_nr):
+    prog = no_unix_sockets_filter(machine)
+    assert _run_bpf(prog, arch, socket_nr, arg0=1) == ERRNO | 97  # AF_UNIX: refused
+    assert _run_bpf(prog, arch, socket_nr, arg0=2) == ALLOW  # AF_INET
+    assert _run_bpf(prog, arch, socket_nr, arg0=10) == ALLOW  # AF_INET6
+    assert _run_bpf(prog, arch, socket_nr + 1, arg0=1) == ALLOW  # any other syscall
+    assert _run_bpf(prog, 0x40000003, 102) == ERRNO | 38  # 32-bit ABI: refused
+
+
+def test_filter_refuses_x32_syscalls():
+    assert _run_bpf(no_unix_sockets_filter("x86_64"), 0xC000003E, 0x40000000 | 41, arg0=1) == ERRNO | 97
+
+
+def test_no_filter_on_unknown_architectures():
+    assert no_unix_sockets_filter("riscv64") is None
+
+
+def test_bwrap_gets_the_filter_only_when_one_is_given(monkeypatch):
+    monkeypatch.setattr("legwork.sandbox_runner.platform.system", lambda: "Linux")
+    monkeypatch.setattr("legwork.sandbox_runner._hidden_dirs", list)
+    args = sandbox_runner._sandboxed_argv(["true"], Path("/w"), True, None, (), seccomp_fd=7)
+    assert args[args.index("--seccomp") + 1] == "7" and args[-2:] == ["--", "true"]
+    assert "--seccomp" not in sandbox_runner._sandboxed_argv(["true"], Path("/w"), True, None)
