@@ -295,3 +295,30 @@ def test_output_can_be_discarded_to_dev_null(tmp_path):
 def test_other_devices_stay_unwritable(tmp_path):
     with pytest.raises(DependencyInstallError, match="not permitted"):
         install(["/bin/sh", "-c", "echo x > /dev/tty.legwork-test"], tmp_path)
+
+
+def test_install_cannot_reach_local_unix_sockets(tmp_path):
+    """With network on, install code must still not reach the machine's own
+    Unix sockets — the SSH agent, Docker, password managers. A bare
+    (allow network*) permitted all of them (found 2026-09-26)."""
+    import socket
+    import tempfile
+
+    sock_dir = Path(tempfile.mkdtemp(dir="/tmp"))  # AF_UNIX paths must be short
+    sock_path = sock_dir / "agent.sock"
+    server = socket.socket(socket.AF_UNIX)
+    server.bind(str(sock_path))
+    server.listen(1)
+    try:
+        code = (
+            "import socket, sys\n"
+            "s = socket.socket(socket.AF_UNIX)\n"
+            "try:\n    s.connect(sys.argv[1]); print('connected')\n"
+            "except OSError:\n    print('blocked')\n"
+        )
+        result = install([SYSTEM_PYTHON, "-c", code, str(sock_path)], tmp_path)
+        assert result.stdout.strip() == "blocked"
+    finally:
+        server.close()
+        sock_path.unlink(missing_ok=True)
+        sock_dir.rmdir()

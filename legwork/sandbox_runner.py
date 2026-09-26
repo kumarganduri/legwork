@@ -187,7 +187,20 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     # writes to exactly these two devices, nothing else under /dev.
     lines.append('(allow file-write-data (literal "/dev/null") (literal "/dev/zero"))')
     if allow_network:
-        lines.append("(allow network*)")
+        # Internet only. A bare (allow network*) also allowed connecting to
+        # any Unix socket on the machine — the SSH agent, Docker (root-
+        # equivalent), password-manager and GPG agents — so an install
+        # script could use your SSH keys (found 2026-09-26, pre-launch).
+        # IP traffic anywhere, DNS's one system socket, and Unix sockets
+        # inside the workdir; nothing else local.
+        lines += [
+            "(allow system-socket)",
+            '(allow network-outbound (remote ip "*:*"))',
+            '(allow network-inbound (local ip "localhost:*"))',
+            '(allow network-bind (local ip "*:*"))',
+            '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
+            f'(allow network* (subpath "{real_workdir}"))',
+        ]
     return "\n".join(lines)
 
 
