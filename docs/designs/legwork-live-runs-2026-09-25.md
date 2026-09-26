@@ -44,11 +44,28 @@ reverify's README example `reverify verify - --claim ...` crashes in its
 released package (`bytes.fromhex("-")`). The model followed the docs
 exactly; on retry it worked around it with a dummy hex input.
 
+## Follow-up: command + serve mode (2026-09-26, commit `c3f9dcb`)
+
+`legwork <repo>` builds and saves a wrapper under `~/.legwork`, then prints
+the `claude mcp add ...` line and an `mcpServers` config block.
+`legwork serve <repo>` runs it as an MCP server over stdio in the sandbox
+(network off, no timeout); Legwork's own launcher finds the FastMCP object,
+so the model never has to write startup code.
+
+Live-verified with gpt-5: built on attempt 2, then a real MCP client
+connected to `legwork serve 2akouwu/reverify`, listed `re_verify_claim`,
+and called it with reverify's README example — `VERIFIED` (eax = 8),
+executed inside the served sandbox.
+
+Found along the way: a workdir under `$HOME` broke Python startup in the
+sandbox (it stats every parent folder resolving its own path). The profile
+now allows metadata, not contents, on exactly those ancestor folders.
+
 ## Open follow-ups
 
-- **Wrappers can't be served yet.** `__main__` runs the self-test only;
-  nothing calls `mcp.run()`, so an agent can't actually connect to the
-  wrapper as an MCP server.
+- **The printed launch path is this checkout's venv**
+  (`~/AwesomeAI/.venv/bin/legwork`) until packaging (T9) gives a stable
+  installed command.
 - **README-only input.** phone-harness shows repos that put install steps
   in linked files (`install.md`) get refused. The full repo is already
   cloned, so linked docs could be included.
