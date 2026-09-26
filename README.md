@@ -181,9 +181,13 @@ refuses to run. It never falls back to running unsandboxed.
 | `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
+| `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 
 Builds live in `~/.legwork` (override with `LEGWORK_HOME`). A failed build
-saves its full error output to `attempts.log` in its build folder.
+saves its full error output to `attempts.log` in its build folder. Each
+build keeps its own environment, which is several GB for repos that use
+PyTorch: `legwork clean` removes old and failed builds and keeps the ones
+you serve (`--dry-run` to preview, `--all` to remove everything).
 
 ## Contributing a wrapper
 

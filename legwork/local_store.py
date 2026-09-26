@@ -86,3 +86,63 @@ def load_current(ref: RepoRef) -> BuildRecord:
             f"rebuild it with `legwork {ref.slug}`."
         )
     return record
+
+
+def disk_usage(path: Path) -> int:
+    """Bytes under `path`, not following symlinks (a venv links to its base
+    Python, which isn't Legwork's to count)."""
+    total = 0
+    for p in path.rglob("*"):
+        try:
+            if p.is_file() and not p.is_symlink():
+                total += p.stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def human_size(n: int) -> str:
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit in ("B", "KB") else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+def cleanup_targets(ref: RepoRef | None = None, everything: bool = False) -> list[Path]:
+    """What `legwork clean` removes: every build except each repo's current
+    one (serve runs it; contribute reads its clone), or with `everything`,
+    whole repo folders. Only ever paths inside LEGWORK_HOME/wrappers."""
+    root = legwork_home() / "wrappers"
+    if not root.is_dir():
+        return []
+    repos = [_wrapper_root(ref)] if ref is not None else sorted(p for p in root.iterdir() if p.is_dir())
+    targets: list[Path] = []
+    for repo_dir in repos:
+        if not repo_dir.is_dir():
+            continue
+        if everything:
+            targets.append(repo_dir)
+            continue
+        current = None
+        pointer = repo_dir / "current.json"
+        if pointer.exists():
+            try:
+                current = Path(json.loads(pointer.read_text())["attempt_dir"])
+            except (ValueError, KeyError, OSError):
+                current = None
+        if current is None or not current.exists():
+            targets.append(repo_dir)  # nothing here works; it all goes
+            continue
+        keep = current.parent
+        builds = sorted(p for p in (repo_dir / "builds").glob("*") if p.is_dir())
+        targets += [b for b in builds if b.resolve() != keep.resolve()]
+        # Inside the kept build: environments of attempts that failed, and
+        # any download cache a crashed build left behind.
+        targets += [a / ".venv" for a in sorted(keep.glob("attempt-*")) if a != current and (a / ".venv").is_dir()]
+        if (keep / ".download-cache").is_dir():
+            targets.append(keep / ".download-cache")
+    resolved_root = root.resolve()
+    return [t for t in targets if t.resolve().is_relative_to(resolved_root) and t.resolve() != resolved_root]
+

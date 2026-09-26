@@ -3,6 +3,9 @@
     legwork <repo>          build an MCP wrapper for a GitHub repo
     legwork build <repo>    same, spelled out
     legwork serve <repo>    run the built wrapper as an MCP server over stdio
+    legwork clean [<repo>] [--all] [--dry-run]
+                            free disk space: old and failed builds (a build
+                            with PyTorch is several GB)
     legwork contribute <repo> [--out DIR]
                             write the built wrapper + manifest as a public-cache
                             entry (default DIR: ./cache), ready for a PR
@@ -207,7 +210,7 @@ def cmd_build(repo: str, use_cache: bool = True) -> int:
             )
             print(f"\nInstalled the cached MCP wrapper for {ref.slug}; it passed its self-test here.")
             print(f"  What it wraps: {record.entrypoint}")
-            print(f"  Saved to: {record.attempt_dir}")
+            print(f"  Saved to: {record.attempt_dir} ({local_store.human_size(local_store.disk_usage(Path(record.attempt_dir).parent))})")
             _print_connect_instructions(ref)
             return 0
 
@@ -243,7 +246,7 @@ def cmd_build(repo: str, use_cache: bool = True) -> int:
     )
     print(f"\nBuilt an MCP wrapper for {ref.slug} on attempt {len(result.attempts)} of {retry_loop.MAX_WRAPPER_ATTEMPTS}.")
     print(f"  What it wraps: {record.entrypoint}")
-    print(f"  Saved to: {record.attempt_dir}")
+    print(f"  Saved to: {record.attempt_dir} ({local_store.human_size(local_store.disk_usage(Path(record.attempt_dir).parent))})")
     _print_connect_instructions(ref)
     return 0
 
@@ -297,9 +300,36 @@ def cmd_contribute(repo: str, out: Path) -> int:
     return 0
 
 
+def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
+    ref = None
+    if repo is not None:
+        try:
+            ref = parse_repo_url(repo)
+        except InvalidRepoURLError as exc:
+            _err(str(exc))
+            return 1
+    targets = local_store.cleanup_targets(ref, everything=everything)
+    if not targets:
+        print("Nothing to clean.")
+        return 0
+    total = 0
+    for target in targets:
+        size = local_store.disk_usage(target)
+        total += size
+        shown = str(target).replace(str(Path.home()), "~", 1)
+        print(f"  {'would remove' if dry_run else 'removed'} {shown} ({local_store.human_size(size)})")
+        if not dry_run:
+            shutil.rmtree(target)
+    verb = "Would free" if dry_run else "Freed"
+    print(f"{verb} {local_store.human_size(total)}.")
+    if everything and not dry_run:
+        print("Rebuild a wrapper with `legwork owner/repo` before serving it again.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "contribute", "-h", "--help"):
+    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "-h", "--help"):
         # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
         argv.insert(0, "build")
 
@@ -315,10 +345,16 @@ def main(argv: list[str] | None = None) -> int:
     contribute.add_argument(
         "--out", type=Path, default=cache_writer.DEFAULT_CACHE_DIR, help="cache folder to write into (default: ./cache)"
     )
+    clean = sub.add_parser("clean", help="free disk space: remove old and failed builds")
+    clean.add_argument("repo", nargs="?", help="only this repo (default: all)")
+    clean.add_argument("--all", action="store_true", help="also remove current builds (rebuild before serving)")
+    clean.add_argument("--dry-run", action="store_true", help="show what would be removed")
     args = parser.parse_args(argv)
 
     if args.command == "build":
         return cmd_build(args.repo, use_cache=not args.no_cache)
+    if args.command == "clean":
+        return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":
         return cmd_contribute(args.repo, args.out)
     return cmd_serve(args.repo)
