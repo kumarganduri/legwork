@@ -176,6 +176,12 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
             if not ancestor.is_relative_to(home_path):
                 break
             lines.append(f'(allow file-read-metadata (literal "{ancestor}"))')
+    # /usr/bin/python3, git, make, cc are xcrun stubs. With full Xcode
+    # selected, their first run caches the tool lookup in xcrun_db in the
+    # per-user temp folder; without that write every call fails ("couldn't
+    # create cache file", exit 72) — found on the first CI run, 2026-09-26.
+    # Only files named xcrun_db* there; the rest of that folder stays shut.
+    lines.append('(allow file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db"))')
     if allow_network:
         lines.append("(allow network*)")
     return "\n".join(lines)

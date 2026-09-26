@@ -267,3 +267,21 @@ def test_mktemp_shim_keeps_explicit_templates(tmp_path, args, where):
     created = tmp_path.resolve() / result.stdout.strip()  # a bare template gives a relative path
     parent = tmp_path.resolve() / ".tmp" if where == "tmp" else tmp_path.resolve()
     assert created.parent == parent
+
+
+def test_only_the_xcrun_cache_is_writable_in_the_user_temp_folder(tmp_path):
+    """xcrun stubs (/usr/bin/python3, git) need to write xcrun_db in the
+    per-user temp folder on machines with full Xcode; nothing else there."""
+    import subprocess
+
+    user_tmp = Path(subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], capture_output=True, text=True).stdout.strip())
+    allowed, denied = user_tmp / "xcrun_db-legwork-test", user_tmp / "legwork-sandbox-test"
+    try:
+        install([SYSTEM_PYTHON, "-c", f"open({str(allowed)!r}, 'w').write('x')"], tmp_path)
+        assert allowed.exists()
+        with pytest.raises(DependencyInstallError, match="not permitted"):
+            install([SYSTEM_PYTHON, "-c", f"open({str(denied)!r}, 'w').write('x')"], tmp_path)
+        assert not denied.exists()
+    finally:
+        allowed.unlink(missing_ok=True)
+        denied.unlink(missing_ok=True)
