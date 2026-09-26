@@ -261,3 +261,11 @@ def test_scan_names_the_javascript_file_and_skips_node_modules(tmp_path):
     (tmp_path / "tailwind.config.js").write_text((FIXTURES / "js_whitespace_hidden_loader.js").read_text())
     with pytest.raises(ObfuscatedPayloadDetectedError, match="tailwind.config.js"):
         scan(tmp_path)
+
+
+def test_scan_error_names_the_file_relative_to_the_repo(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "loader.js").write_text("eval(atob(x))")
+    with pytest.raises(ObfuscatedPayloadDetectedError) as exc:
+        scan(tmp_path)
+    assert str(exc.value).startswith("src/loader.js: obfuscation patterns detected")

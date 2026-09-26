@@ -328,7 +328,9 @@ def scan(root: Path) -> None:
         findings = scanner(path)
         if is_blocking(findings):
             patterns = ", ".join(sorted({f.pattern for f in findings}))
+            # Relative to the repo: the build folder's absolute path is noise.
+            where = path.relative_to(root) if path.is_relative_to(root) else path
             raise ObfuscatedPayloadDetectedError(
-                f"{path}: obfuscation patterns detected ({patterns}) — refusing "
+                f"{where}: obfuscation patterns detected ({patterns}) — refusing "
                 "to install or invoke this repo"
             )
