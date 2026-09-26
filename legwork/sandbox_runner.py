@@ -182,6 +182,10 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     # create cache file", exit 72) — found on the first CI run, 2026-09-26.
     # Only files named xcrun_db* there; the rest of that folder stays shut.
     lines.append('(allow file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/T/xcrun_db"))')
+    # `> /dev/null` is in nearly every install script and xcrun stub; without
+    # this it fails with "Operation not permitted" (second CI run). Data
+    # writes to exactly these two devices, nothing else under /dev.
+    lines.append('(allow file-write-data (literal "/dev/null") (literal "/dev/zero"))')
     if allow_network:
         lines.append("(allow network*)")
     return "\n".join(lines)

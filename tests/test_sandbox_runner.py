@@ -285,3 +285,13 @@ def test_only_the_xcrun_cache_is_writable_in_the_user_temp_folder(tmp_path):
     finally:
         allowed.unlink(missing_ok=True)
         denied.unlink(missing_ok=True)
+
+
+def test_output_can_be_discarded_to_dev_null(tmp_path):
+    result = install(["/bin/sh", "-c", "echo hidden > /dev/null && echo shown 2>/dev/null"], tmp_path)
+    assert result.stdout.strip() == "shown"
+
+
+def test_other_devices_stay_unwritable(tmp_path):
+    with pytest.raises(DependencyInstallError, match="not permitted"):
+        install(["/bin/sh", "-c", "echo x > /dev/tty.legwork-test"], tmp_path)
