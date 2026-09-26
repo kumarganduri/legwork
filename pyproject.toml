@@ -17,6 +17,11 @@ classifiers = [
     "Topic :: Software Development :: Code Generators",
 ]
 
+[project.urls]
+Homepage = "https://github.com/kumarganduri/legwork"
+Repository = "https://github.com/kumarganduri/legwork"
+Issues = "https://github.com/kumarganduri/legwork/issues"
+
 [project.scripts]
 legwork = "legwork.cli:main"
 legwork-mcp = "legwork.cli:main"
