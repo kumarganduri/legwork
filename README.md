@@ -6,6 +6,11 @@
 
 **Point it at a GitHub repo, get a working MCP tool back.**
 
+<p align="center">
+  <img src="docs/assets/demo.svg" width="860" alt="Legwork demo: build an MCP wrapper from the public cache with no API key, connect it to Claude Code, and block a malware repo before install.">
+</p>
+<p align="center"><sub>Real runs, real output. The 24-second install is sped up; the malware repo's name is masked.</sub></p>
+
 Legwork reads a repo's README, has your LLM write an
 [MCP](https://modelcontextprotocol.io) wrapper for it, installs it in a
 sandbox, and proves it runs before handing it to Claude Code, Cursor or any
