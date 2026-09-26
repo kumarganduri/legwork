@@ -63,8 +63,16 @@ Connect it to Claude Code:
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
 clients. For a permanent `legwork` command: `uv tool install legwork-mcp`.
 
+**Repos already in the [public cache](cache/) need no model call and no API
+key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
+
 ## How it works
 
+0. **Cache.** If the repo is in the [public cache](cache/), Legwork uses
+   that wrapper instead of steps 3–4. It still clones and scans the repo,
+   scans the cached wrapper too, and installs and self-tests it locally;
+   if the self-test fails, it writes a fresh wrapper. `--no-cache` skips
+   the cache.
 1. **Fetch.** Checks the repo is public and reachable, then shallow-clones it.
 2. **Scan.** Statically scans every Python file for obfuscated payloads
    (XOR-decoded byte arrays, computed imports and attribute lookups,
@@ -125,7 +133,7 @@ to run. It never falls back to running unsandboxed.
 
 | Command | What it does |
 |---|---|
-| `legwork owner/repo` | Build a wrapper (also `legwork build`). Accepts `owner/repo` or a github.com URL |
+| `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
 
@@ -153,8 +161,6 @@ yourself; a bad entry is removed with a plain `git revert`.
 Early. What's next:
 
 - **Linux sandbox.** Legwork is macOS-only today.
-- **Reuse from the cache**, so a repo someone already wrapped doesn't cost
-  you a build.
 - Better multi-tool verification than a single simplest-command self-test.
 
 ## Development

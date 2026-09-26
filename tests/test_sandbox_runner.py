@@ -274,7 +274,7 @@ def test_only_the_xcrun_cache_is_writable_in_the_user_temp_folder(tmp_path):
     per-user temp folder on machines with full Xcode; nothing else there."""
     import subprocess
 
-    user_tmp = Path(subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], capture_output=True, text=True).stdout.strip())
+    user_tmp = Path(subprocess.run(["getconf", "DARWIN_USER_TEMP_DIR"], capture_output=True, text=True, check=True).stdout.strip())
     allowed, denied = user_tmp / "xcrun_db-legwork-test", user_tmp / "legwork-sandbox-test"
     try:
         install([SYSTEM_PYTHON, "-c", f"open({str(allowed)!r}, 'w').write('x')"], tmp_path)

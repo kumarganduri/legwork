@@ -23,6 +23,7 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("LEGWORK_LLM_ENDPOINT", "https://api.example.com/v1")
     monkeypatch.setenv("LEGWORK_LLM_API_KEY", "sk-test")
     monkeypatch.setenv("LEGWORK_LLM_MODEL", "gpt-test")
+    monkeypatch.setenv("LEGWORK_CACHE_URL", "off")  # tests/test_cache_reader.py covers the cache
 
 
 def _successful_run(repo_url, workdir, config, progress):
@@ -46,7 +47,7 @@ def _successful_run(repo_url, workdir, config, progress):
 def test_bare_repo_argument_means_build():
     with patch("legwork.cli.cmd_build", return_value=0) as build:
         assert cli.main(["owner/repo"]) == 0
-    build.assert_called_once_with("owner/repo")
+    build.assert_called_once_with("owner/repo", use_cache=True)
 
 
 def test_serve_subcommand_routes_to_serve():

@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from legwork import codegen, repo_fetcher, sandbox_runner
+from legwork import cache_reader, codegen, repo_fetcher, sandbox_runner
 from legwork.local_store import BuildRecord, NoBuildError
 from legwork.repo_fetcher import RepoRef
 
@@ -336,7 +336,7 @@ def write_entry(ref: RepoRef, record: BuildRecord, cache_dir: Path = DEFAULT_CAC
     check_verbatim_copy(wrapper_code, clone)
     smoke_test = run_smoke_test(record)
     build_sha = repo_fetcher.head_sha(clone)
-    entry_dir = cache_dir / f"{ref.owner}__{ref.repo}"
+    entry_dir = cache_dir / cache_reader.entry_name(ref)
     warnings, build_behind = check_staleness(ref, build_sha, entry_dir)
     manifest = build_manifest(ref, record, build_sha, detect_license(clone), smoke_test)
     pr_text = pr_description(ref, manifest, str(warnings[-1]) if build_behind else None)

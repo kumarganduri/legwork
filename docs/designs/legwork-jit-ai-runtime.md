@@ -971,6 +971,19 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
+- [x] **Cache read path (added 2026-09-26, found missing in the pre-launch
+      review):** T7 only *wrote* entries; nothing read them, so the v1
+      success criterion (a wrapper reused from the public cache) couldn't
+      happen. `legwork <repo>` now checks `cache/<owner>__<repo>/` in the
+      Legwork repo first (`legwork/cache_reader.py`; `LEGWORK_CACHE_URL`
+      for another URL, a local folder, or `off`). A hit still clones and
+      scans the source repo, scans the cached wrapper, and installs and
+      self-tests it in the sandbox; a failure falls back to a fresh build,
+      and `--no-cache` skips it. No model call, so cached repos build
+      without an API key — verified live with no key set. Seeded with the
+      four wrappers verified so far (reverify, golive-skill, AnyJev,
+      magpie). Stale entries are used with a warning, per the staleness
+      decision (flag, don't force).
 - [x] **T8 (P2, human: ~2h / CC: ~20min)** — cache-writer — Implement
       staleness check on next contribution attempt (compare cached SHA to
       current repo SHA, flag mismatch).

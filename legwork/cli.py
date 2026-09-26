@@ -28,7 +28,15 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from legwork import cache_writer, codegen, local_store, retry_loop, sandbox_runner
+from legwork import (
+    cache_reader,
+    cache_writer,
+    codegen,
+    local_store,
+    repo_fetcher,
+    retry_loop,
+    sandbox_runner,
+)
 from legwork.llm_client import LLMAuthError, LLMConfig
 from legwork.obfuscation_scanner import ObfuscatedPayloadDetectedError
 from legwork.readme_parser import InsufficientReadmeError as NoReadmeError
@@ -131,13 +139,80 @@ def _print_connect_instructions(ref: RepoRef) -> None:
     print(json.dumps(config, indent=2))
 
 
-def cmd_build(repo: str) -> int:
+def _progress(message: str) -> None:
+    print(f"  {message}", file=sys.stderr)
+
+
+def _warn_if_stale(ref: RepoRef, cached: cache_reader.CachedWrapper) -> None:
+    try:
+        current = repo_fetcher.remote_head_sha(ref.clone_url)
+    except RepoAccessError:
+        return
+    built_from = cached.manifest["commit_sha"]
+    if current != built_from:
+        print(
+            f"  Cache entry may be stale — repo has new commits (cached from {built_from[:12]}, now at "
+            f"{current[:12]}). It usually still works; `legwork --no-cache {ref.slug}` writes a fresh one.",
+            file=sys.stderr,
+        )
+
+
+def _build_from_cache(ref: RepoRef) -> tuple[retry_loop.RunResult, cache_reader.CachedWrapper] | None:
+    """A verified build from the public cache, or None to build fresh.
+    Precondition failures (repo gone, malware found) propagate."""
+    try:
+        cached = cache_reader.fetch(ref)
+    except cache_reader.CacheUnavailableError as exc:
+        print(f"  (skipping the Legwork cache: {exc})", file=sys.stderr)
+        return None
+    if cached is None:
+        return None
+    print(
+        f"Found {ref.slug} in the Legwork cache (written by {cached.manifest['llm_model']}); "
+        "installing and testing it — no model call needed",
+        file=sys.stderr,
+    )
+    _warn_if_stale(ref, cached)
+    result = retry_loop.run_cached(
+        ref.slug, local_store.new_build_dir(ref), cached.install_command, cached.wrapper_code, progress=_progress
+    )
+    if not result.success:
+        detail = codegen.failure_summary(result.attempts[-1].detail, 300)
+        print(f"  The cached wrapper didn't pass here ({detail}); writing a fresh one.", file=sys.stderr)
+        return None
+    return result, cached
+
+
+def cmd_build(repo: str, use_cache: bool = True) -> int:
     try:
         ref = parse_repo_url(repo)
-        config = LLMConfig.from_env()
     except InvalidRepoURLError as exc:
         _err(str(exc))
         return 1
+
+    if use_cache:
+        try:
+            hit = _build_from_cache(ref)
+        except _BUILD_ERRORS as exc:
+            _err(f"{type(exc).__name__}: {exc}")
+            return 1
+        if hit is not None:
+            result, cached = hit
+            record = local_store.save_current(
+                ref,
+                result.attempt_dir,
+                install_command=cached.install_command,
+                entrypoint=cached.entrypoint,
+                model=f"{cached.manifest['llm_model']} (Legwork cache)",
+            )
+            print(f"\nInstalled the cached MCP wrapper for {ref.slug}; it passed its self-test here.")
+            print(f"  What it wraps: {record.entrypoint}")
+            print(f"  Saved to: {record.attempt_dir}")
+            _print_connect_instructions(ref)
+            return 0
+
+    try:
+        config = LLMConfig.from_env()
     except LLMAuthError as exc:
         _err(f"{exc}\n  If you keep them in a file: source ~/.legwork.env")
         return 1
@@ -145,7 +220,7 @@ def cmd_build(repo: str) -> int:
     build_dir = local_store.new_build_dir(ref)
     print(f"Building an MCP wrapper for {ref.slug} (usually 1-3 minutes)", file=sys.stderr)
     try:
-        result = retry_loop.run(ref.slug, build_dir, config, progress=lambda m: print(f"  {m}", file=sys.stderr))
+        result = retry_loop.run(ref.slug, build_dir, config, progress=_progress)
     except _BUILD_ERRORS as exc:
         _err(f"{type(exc).__name__}: {exc}")
         return 1
@@ -225,12 +300,14 @@ def cmd_contribute(repo: str, out: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] not in ("build", "serve", "contribute", "-h", "--help"):
-        argv.insert(0, "build")  # `legwork <repo>` shorthand
+        # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
+        argv.insert(0, "build")
 
     parser = argparse.ArgumentParser(prog="legwork", description="Point it at a GitHub repo, get a working MCP tool back.")
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("build", help="build an MCP wrapper for a GitHub repo (also: legwork <repo>)")
     build.add_argument("repo", help="github.com URL or owner/repo")
+    build.add_argument("--no-cache", action="store_true", help="always write a fresh wrapper, even if the repo is in the Legwork cache")
     serve = sub.add_parser("serve", help="run a built wrapper as an MCP server over stdio")
     serve.add_argument("repo", help="github.com URL or owner/repo")
     contribute = sub.add_parser("contribute", help="write a built wrapper + manifest as a public-cache entry")
@@ -241,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "build":
-        return cmd_build(args.repo)
+        return cmd_build(args.repo, use_cache=not args.no_cache)
     if args.command == "contribute":
         return cmd_contribute(args.repo, args.out)
     return cmd_serve(args.repo)

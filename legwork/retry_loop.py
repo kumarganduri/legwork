@@ -139,6 +139,39 @@ def _find_system_python() -> str:
     )
 
 
+def _install_and_self_test(
+    attempt_dir: Path, install_command: str, wrapper_code: str, progress: Callable[[str], None] = _no_progress
+) -> None:
+    """Write the wrapper, install into a fresh venv isolated from Legwork's
+    own environment, invoke the self-test. Shared by freshly written and
+    cached wrappers; raises on any failure."""
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    wrapper_path = attempt_dir / "wrapper.py"
+    wrapper_path.write_text(wrapper_code)
+
+    venv_dir = attempt_dir / ".venv"
+    system_python = _find_system_python()
+    # One combined install step: create the venv, then run the LLM's own
+    # install command. `extra_env` puts the fresh venv's bin/ first on PATH
+    # so a bare "pip"/"python" in install_command resolves there, not
+    # to Legwork's own environment — the isolation gap found integrating
+    # T5+T6 (see sandbox_runner.py's "Environment isolation" section).
+    # The MCP SDK pin goes LAST so it wins even if the model's command (or
+    # the target repo's own dependencies) pulled in mcp 2.x — the wrapper
+    # is written against the 1.x API the prompt specifies.
+    venv_env = {"PATH": f"{venv_dir / 'bin'}:{sandbox_runner.MINIMAL_PATH}"}
+    combined_install_cmd = (
+        f"{shlex.quote(system_python)} -m venv {shlex.quote(str(venv_dir))}"
+        f" && {install_command}"
+        f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
+    )
+    progress("installing dependencies in a sandboxed venv")
+    sandbox_runner.install(["/bin/sh", "-c", combined_install_cmd], attempt_dir, extra_env=venv_env)
+
+    progress("running the wrapper's self-test (network off)")
+    sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
+
+
 def _run_one_attempt(
     attempt_dir: Path,
     readme_content: str,
@@ -155,33 +188,48 @@ def _run_one_attempt(
     response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
     draft = codegen.parse_response(response_text)
 
-    attempt_dir.mkdir(parents=True, exist_ok=True)
-    wrapper_path = attempt_dir / "wrapper.py"
-    wrapper_path.write_text(draft.wrapper_code)
-
-    venv_dir = attempt_dir / ".venv"
-    system_python = _find_system_python()
-    # One combined install step: create the venv, then run the LLM's own
-    # install command. `extra_env` puts the fresh venv's bin/ first on PATH
-    # so a bare "pip"/"python" in draft.install_command resolves there, not
-    # to Legwork's own environment — the isolation gap found integrating
-    # T5+T6 (see sandbox_runner.py's "Environment isolation" section).
-    # The MCP SDK pin goes LAST so it wins even if the model's command (or
-    # the target repo's own dependencies) pulled in mcp 2.x — the wrapper
-    # is written against the 1.x API the prompt specifies.
-    venv_env = {"PATH": f"{venv_dir / 'bin'}:{sandbox_runner.MINIMAL_PATH}"}
-    combined_install_cmd = (
-        f"{shlex.quote(system_python)} -m venv {shlex.quote(str(venv_dir))}"
-        f" && {draft.install_command}"
-        f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
-    )
-    progress("installing dependencies in a sandboxed venv")
-    sandbox_runner.install(["/bin/sh", "-c", combined_install_cmd], attempt_dir, extra_env=venv_env)
-
-    progress("running the wrapper's self-test (network off)")
-    sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
-
+    _install_and_self_test(attempt_dir, draft.install_command, draft.wrapper_code, progress)
     return draft
+
+
+def _fetch_and_scan(repo_url: str, workdir: Path, progress: Callable[[str], None]) -> repo_fetcher.ClonedRepo:
+    progress(f"cloning {repo_url}")
+    cloned = repo_fetcher.fetch(repo_url, workdir / "repo")
+    progress("scanning the source for obfuscated code")
+    obfuscation_scanner.scan(cloned.path)
+    return cloned
+
+
+def run_cached(
+    repo_url: str,
+    workdir: Path,
+    install_command: str,
+    wrapper_code: str,
+    progress: Callable[[str], None] = _no_progress,
+) -> RunResult:
+    """Build from a public-cache wrapper instead of asking a model: the same
+    fetch and scan, a scan of the cached wrapper itself, then the same
+    sandboxed install and self-test. One attempt; the caller falls back to
+    `run` if it fails. Raises the precondition errors `run` raises."""
+    _fetch_and_scan(repo_url, workdir, progress)
+    attempt_dir = workdir / "attempt-1"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / "wrapper.py").write_text(wrapper_code)
+    progress("scanning the cached wrapper")
+    obfuscation_scanner.scan(attempt_dir)
+    try:
+        _install_and_self_test(attempt_dir, install_command, wrapper_code, progress)
+    except RETRYABLE_EXCEPTIONS as exc:
+        detail = f"{type(exc).__name__}: {exc}"
+        attempts = [AttemptLog(1, "cached wrapper", type(exc).__name__, detail)]
+        return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail)
+    return RunResult(
+        success=True,
+        wrapper_code=wrapper_code,
+        install_command=install_command,
+        attempts=[AttemptLog(1, "cached wrapper", "success", "")],
+        attempt_dir=attempt_dir,
+    )
 
 
 def run(
@@ -204,11 +252,7 @@ def run(
     # failure here aborts before attempt 1 is even logged — these aren't
     # wrapper-repair attempts at all.
     _check_deadline()
-    progress(f"cloning {repo_url}")
-    cloned = repo_fetcher.fetch(repo_url, workdir / "repo")
-    _check_deadline()
-    progress("scanning the source for obfuscated code")
-    obfuscation_scanner.scan(cloned.path)
+    cloned = _fetch_and_scan(repo_url, workdir, progress)
     _check_deadline()
     progress("reading the README")
     readme = readme_parser.parse_readme(cloned.path)
