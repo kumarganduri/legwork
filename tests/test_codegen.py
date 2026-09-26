@@ -6,10 +6,13 @@ from legwork.codegen import (
     CredentialRequiredError,
     ExternalHardwareRequiredError,
     InsufficientReadmeError,
+    MissingToolchainError,
     NoProgrammaticEntrypointError,
     NotAWrappableCapabilityError,
     WrapperDraft,
     build_messages,
+    describe_sandbox,
+    failure_summary,
     parse_response,
 )
 from legwork.llm_client import LLMMalformedOutputError
@@ -119,6 +122,7 @@ def test_parse_response_handles_extra_prose_around_the_shape():
         ("NOT_A_WRAPPABLE_CAPABILITY", NotAWrappableCapabilityError),
         ("EXTERNAL_HARDWARE_REQUIRED", ExternalHardwareRequiredError),
         ("CREDENTIAL_REQUIRED", CredentialRequiredError),
+        ("MISSING_TOOLCHAIN", MissingToolchainError),
     ],
 )
 def test_parse_response_refusal_categories_map_to_exceptions(category, exc_class):
@@ -161,3 +165,47 @@ def test_parse_response_freeform_text_is_malformed():
 def test_parse_response_empty_string_is_malformed():
     with pytest.raises(LLMMalformedOutputError):
         parse_response("")
+
+
+# --- failure summaries (trending trial: the error was cut off) ------------------
+
+LONG_INSTALL = "'/bin/sh -c /opt/homebrew/bin/python3.14 -m venv /very/long/path/" + "x" * 300 + " && go install github.com/o/r@latest'"
+
+
+def test_summary_of_a_multiline_install_failure_keeps_the_error_line():
+    failure = f"DependencyInstallError: {LONG_INSTALL} failed (exit 1): downloading\nresolving\nERROR: No matching distribution found for foo\ndone"
+    summary = failure_summary(failure)
+    assert summary.startswith("DependencyInstallError:")
+    assert summary.endswith("ERROR: No matching distribution found for foo")
+    assert len(summary) <= 200 + 3
+
+
+def test_summary_of_one_long_line_keeps_both_ends():
+    summary = failure_summary(f"DependencyInstallError: {LONG_INSTALL} failed (exit 127): sh: go: command not found")
+    assert summary.startswith("DependencyInstallError:")
+    assert summary.endswith("sh: go: command not found")
+    assert " … " in summary
+    assert len(summary) <= 200
+
+
+def test_short_failures_are_unchanged():
+    assert failure_summary("NotAWrappableCapabilityError: a GUI app") == "NotAWrappableCapabilityError: a GUI app"
+
+
+# --- the sandbox's toolchains go in the prompt ----------------------------------------
+
+
+def test_sandbox_description_names_available_and_missing_toolchains():
+    text = describe_sandbox({"node": True, "npm": True, "go": False, "cargo": False})
+    assert "Also on PATH: node, npm." in text
+    assert "NOT available: go, cargo." in text
+    assert "MISSING_TOOLCHAIN" in text
+
+
+def test_build_messages_includes_the_sandbox_description():
+    content = build_messages("# Repo", sandbox="SANDBOX: no go")[1].content
+    assert content.index("# Repo") < content.index("SANDBOX: no go")
+
+
+def test_system_prompt_lists_the_missing_toolchain_refusal():
+    assert "MISSING_TOOLCHAIN" in build_messages("# Repo")[0].content

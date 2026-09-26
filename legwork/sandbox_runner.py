@@ -86,6 +86,15 @@ INVOKE_TIMEOUT_SECONDS = 60
 # dependencies on some setups) live on Apple Silicon Macs.
 MINIMAL_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin"
 
+# Toolchains a README's install steps commonly need. Checked on
+# MINIMAL_PATH, the only PATH the sandbox sees — so ~/.cargo/bin, ~/go/bin
+# and the like don't count even when installed.
+_TOOLCHAINS = ("node", "npm", "npx", "bun", "deno", "go", "cargo", "java", "ruby", "gem", "make", "cc", "git", "curl")
+
+
+def available_toolchains() -> dict[str, bool]:
+    return {name: shutil.which(name, path=MINIMAL_PATH) is not None for name in _TOOLCHAINS}
+
 
 class SandboxUnavailableError(Exception):
     """No working sandbox backend on this platform. Never fall back to
@@ -172,12 +181,42 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     return "\n".join(lines)
 
 
+# Temp files belong in the workdir (TMPDIR). Python and most tools honour
+# TMPDIR, but macOS's mktemp ignores it and writes to the per-user folder
+# under /var/folders, which the profile doesn't let sandboxed code write —
+# so installers doing `mktemp -d` failed (magpie, trending trial
+# 2026-09-26). This shim adds `-p "$TMPDIR"` unless the caller named its
+# own template (a path, or a bare XXX template meant for the current dir).
+_MKTEMP_SHIM = """#!/bin/sh
+skip=
+for a in "$@"; do
+  if [ -n "$skip" ]; then skip=; continue; fi
+  case "$a" in
+    -t|-p) skip=1 ;;
+    -*) ;;
+    */*|*XXX*) exec /usr/bin/mktemp "$@" ;;
+  esac
+done
+exec /usr/bin/mktemp -p "$TMPDIR" "$@"
+"""
+
+
 def _build_env(workdir: Path, extra_env: dict[str, str] | None) -> dict[str, str]:
     """A minimal environment, NOT inherited from the parent process — see
     the module docstring's "Environment isolation" section for why."""
-    env = {"PATH": MINIMAL_PATH, "HOME": str(workdir.resolve())}
+    real_workdir = workdir.resolve()
+    tmp = real_workdir / ".tmp"
+    tmp.mkdir(parents=True, exist_ok=True)
+    shim_dir = real_workdir / ".legwork-bin"
+    shim_dir.mkdir(exist_ok=True)
+    shim = shim_dir / "mktemp"
+    shim.write_text(_MKTEMP_SHIM)
+    shim.chmod(0o755)
+
+    env = {"PATH": MINIMAL_PATH, "HOME": str(real_workdir), "TMPDIR": str(tmp)}
     if extra_env:
         env.update(extra_env)
+    env["PATH"] = f"{shim_dir}:{env['PATH']}"
     return env
 
 

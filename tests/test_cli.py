@@ -82,6 +82,24 @@ def test_build_failure_reports_each_attempt_and_exits_1(capsys):
     assert "NoProgrammaticEntrypointError" in capsys.readouterr().err
 
 
+def test_build_failure_shows_the_error_and_saves_the_full_output(tmp_path, capsys):
+    detail = "DependencyInstallError: '/bin/sh -c " + "x" * 400 + "' failed (exit 127): sh: go: command not found"
+    failed = RunResult(
+        success=False,
+        wrapper_code=None,
+        install_command=None,
+        attempts=[AttemptLog(1, "initial attempt", "DependencyInstallError", detail)],
+        final_error=detail,
+    )
+    with patch("legwork.cli.retry_loop.run", return_value=failed):
+        assert cli.cmd_build("owner/repo") == 1
+    err = capsys.readouterr().err
+    assert "sh: go: command not found" in err
+    log = next((tmp_path / "wrappers" / "owner__repo" / "builds").glob("*/attempts.log"))
+    assert detail in log.read_text()
+    assert str(log) in err
+
+
 def test_build_blocked_by_scanner_exits_1_with_reason(capsys):
     with patch("legwork.cli.retry_loop.run", side_effect=ObfuscatedPayloadDetectedError("evil.py")):
         assert cli.cmd_build("owner/repo") == 1

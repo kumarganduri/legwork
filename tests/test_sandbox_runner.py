@@ -21,6 +21,7 @@ from legwork.sandbox_runner import (
     SandboxUnavailableError,
     TimeoutExceeded,
     WrapperRuntimeError,
+    available_toolchains,
     install,
     invoke,
 )
@@ -161,11 +162,12 @@ def test_path_defaults_to_minimal_not_inherited(tmp_path):
     """Don't monkeypatch THIS process's real PATH — that would also break
     the backend check (shutil.which('sandbox-exec')), which runs in-process,
     not in the sandbox. Instead confirm the child sees exactly the module's
-    declared minimal PATH, not whatever the parent happens to have."""
+    declared minimal PATH (behind Legwork's own shim folder), not whatever
+    the parent happens to have."""
     from legwork.sandbox_runner import MINIMAL_PATH
 
     result = invoke([SYSTEM_PYTHON, "-c", "import os; print(os.environ['PATH'])"], tmp_path)
-    assert result.stdout.strip() == MINIMAL_PATH
+    assert result.stdout.strip() == f"{tmp_path.resolve() / '.legwork-bin'}:{MINIMAL_PATH}"
 
 
 # --- exit codes --------------------------------------------------------------
@@ -234,3 +236,34 @@ def test_exec_serve_uses_no_network_profile_and_minimal_env(tmp_path, monkeypatc
     assert captured["args"][3:] == ["/bin/echo", "hi"]
     assert "LEGWORK_LLM_API_KEY" not in captured["env"]
     assert captured["env"]["EXTRA"] == "1"
+
+
+def test_available_toolchains_only_counts_the_sandbox_path(tmp_path, monkeypatch):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    (fake_bin / "node").write_text("#!/bin/sh\n")
+    (fake_bin / "node").chmod(0o755)
+    monkeypatch.setattr("legwork.sandbox_runner.MINIMAL_PATH", str(fake_bin))
+    found = available_toolchains()
+    assert found["node"] is True
+    assert found["go"] is False
+
+
+def test_temp_files_work_inside_the_sandbox(tmp_path):
+    """mktemp with no TMPDIR goes to /var/folders, which the sandbox blocks;
+    installers that unpack into a temp dir failed (trending trial)."""
+    result = install(["/bin/sh", "-c", "d=$(mktemp -d) && echo ok > $d/f && cat $d/f && echo $d"], tmp_path)
+    out = result.stdout.split()
+    assert out[0] == "ok"
+    assert out[1].startswith(str(tmp_path.resolve()))
+
+
+@pytest.mark.parametrize(
+    ("args", "where"),
+    [("-d", "tmp"), ("", "tmp"), ("-d -t prefix", "tmp"), ("-d mine.XXXXXX", "workdir"), ("-d $PWD/sub.XXXXXX", "workdir")],
+)
+def test_mktemp_shim_keeps_explicit_templates(tmp_path, args, where):
+    result = install(["/bin/sh", "-c", f"mktemp {args}"], tmp_path)
+    created = tmp_path.resolve() / result.stdout.strip()  # a bare template gives a relative path
+    parent = tmp_path.resolve() / ".tmp" if where == "tmp" else tmp_path.resolve()
+    assert created.parent == parent

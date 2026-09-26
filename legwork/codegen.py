@@ -77,6 +77,7 @@ CATEGORY must be exactly one of:
 - NOT_A_WRAPPABLE_CAPABILITY (this is a full application or project scaffolder, not a callable tool)
 - EXTERNAL_HARDWARE_REQUIRED (this requires paired physical or cloud hardware to do anything)
 - CREDENTIAL_REQUIRED (this tool needs its own third-party credentials/API key to run, distinct from Legwork's own LLM key)
+- MISSING_TOOLCHAIN (every documented install path needs a toolchain the sandbox doesn't have -- see SANDBOX in the user message)
 """
 
 _REFUSAL_RE = re.compile(r"^REFUSAL:\s*(\w+)\s*-\s*(.+)$", re.MULTILINE)
@@ -112,12 +113,20 @@ class CredentialRequiredError(Exception):
     distinct from Legwork's own LLM key."""
 
 
+class MissingToolchainError(Exception):
+    """Every documented install path needs a toolchain the sandbox lacks
+    (trending trial, 2026-09-26: magpie needed Go, and without knowing Go
+    was missing the model spent all 3 attempts on installs that couldn't
+    work)."""
+
+
 _REFUSAL_EXCEPTIONS: dict[str, type[Exception]] = {
     "INSUFFICIENT_README": InsufficientReadmeError,
     "NO_PROGRAMMATIC_ENTRYPOINT": NoProgrammaticEntrypointError,
     "NOT_A_WRAPPABLE_CAPABILITY": NotAWrappableCapabilityError,
     "EXTERNAL_HARDWARE_REQUIRED": ExternalHardwareRequiredError,
     "CREDENTIAL_REQUIRED": CredentialRequiredError,
+    "MISSING_TOOLCHAIN": MissingToolchainError,
 }
 
 # Non-retryable per the design doc's Error Registry: each of these means
@@ -133,24 +142,60 @@ class WrapperDraft:
 
 
 EARLIER_FAILURE_SUMMARY_CHARS = 200
+_ERROR_LINE_RE = re.compile(r"(?i)\berror\b|not found|no such file|denied|not permitted|exception")
 
 
-def _one_line(failure: str) -> str:
-    first = failure.strip().splitlines()[0] if failure.strip() else ""
-    return first[:EARLIER_FAILURE_SUMMARY_CHARS]
+def _clip(line: str, width: int) -> str:
+    """Keep both ends of an over-long line: a failure line often starts with
+    a long command and ends with the actual error."""
+    if len(line) <= width:
+        return line
+    half = (width - 3) // 2
+    return f"{line[:half]} … {line[len(line) - (width - 3 - half):]}"
 
 
-def build_messages(readme_content: str, prior_failures: list[str] | None = None) -> list[ChatMessage]:
+def failure_summary(failure: str, width: int = EARLIER_FAILURE_SUMMARY_CHARS) -> str:
+    """One line that keeps the cause. A cut from the start alone showed only
+    the install command, never the error (trending trial, 2026-09-26), so
+    this keeps the first line's ends plus the last line that reads like an
+    error, if there is one."""
+    lines = [line.strip() for line in failure.strip().splitlines() if line.strip()]
+    if not lines:
+        return ""
+    error_line = next((line for line in reversed(lines[1:]) if _ERROR_LINE_RE.search(line)), None)
+    if error_line is None:
+        return _clip(lines[0], width)
+    return f"{_clip(lines[0], width // 3)} … {_clip(error_line, width - width // 3 - 3)}"
+
+
+def describe_sandbox(toolchains: dict[str, bool]) -> str:
+    have = ", ".join(name for name, ok in toolchains.items() if ok) or "none"
+    missing = ", ".join(name for name, ok in toolchains.items() if not ok) or "none"
+    return (
+        "SANDBOX: the install command runs in a fresh Python venv (python and pip on PATH), network on. "
+        "HOME is a scratch folder and nothing outside it is writable: no sudo, no system-wide or "
+        "/usr/local installs, no installers that need either.\n"
+        f"Also on PATH: {have}.\n"
+        f"NOT available: {missing}. If every documented install path needs one of these, "
+        "refuse with MISSING_TOOLCHAIN."
+    )
+
+
+def build_messages(
+    readme_content: str, prior_failures: list[str] | None = None, sandbox: str | None = None
+) -> list[ChatMessage]:
     """Compose the chat messages for one codegen attempt. On retry, the most
     recent failure goes in full and each earlier one as a one-line summary.
     Latest-only (the eng review's original cost choice) failed in the live
     run: attempt 3 repeated attempt 1's exact mistake because it never saw
     it. One-liners keep the extra cost to a few lines per retry."""
     user_parts = [f"README:\n\n{readme_content}"]
+    if sandbox:
+        user_parts.append(f"\n{sandbox}")
     if prior_failures:
         *earlier, latest = prior_failures
         if earlier:
-            summary = "\n".join(f"- attempt {i}: {_one_line(f)}" for i, f in enumerate(earlier, 1))
+            summary = "\n".join(f"- attempt {i}: {failure_summary(f)}" for i, f in enumerate(earlier, 1))
             user_parts.append(f"\nEarlier attempts also failed (do not repeat these):\n{summary}")
         user_parts.append(
             f"\nYour most recent attempt failed:\n{latest}\n"

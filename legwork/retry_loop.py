@@ -150,7 +150,8 @@ def _run_one_attempt(
     isolated from Legwork's own environment, invoke the self-test. Raises
     on any failure — caller decides retryable vs fail-fast."""
     progress("asking the model for a wrapper")
-    messages = codegen.build_messages(readme_content, prior_failures)
+    sandbox = codegen.describe_sandbox(sandbox_runner.available_toolchains())
+    messages = codegen.build_messages(readme_content, prior_failures, sandbox)
     response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
     draft = codegen.parse_response(response_text)
 

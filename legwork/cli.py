@@ -28,7 +28,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from legwork import cache_writer, local_store, retry_loop, sandbox_runner
+from legwork import cache_writer, codegen, local_store, retry_loop, sandbox_runner
 from legwork.llm_client import LLMAuthError, LLMConfig
 from legwork.obfuscation_scanner import ObfuscatedPayloadDetectedError
 from legwork.readme_parser import InsufficientReadmeError as NoReadmeError
@@ -152,8 +152,11 @@ def cmd_build(repo: str) -> int:
 
     if not result.success:
         _err(f"no working wrapper for {ref.slug}.")
+        log = build_dir / "attempts.log"
+        log.write_text("".join(f"=== attempt {a.attempt_number}: {a.outcome}\n{a.detail}\n\n" for a in result.attempts))
         for a in result.attempts:
-            print(f"  attempt {a.attempt_number}: {a.outcome} — {a.detail.splitlines()[0][:200]}", file=sys.stderr)
+            print(f"  attempt {a.attempt_number}: {a.outcome} — {codegen.failure_summary(a.detail, 300)}", file=sys.stderr)
+        print(f"  Full error output: {log}", file=sys.stderr)
         return 1
 
     record = local_store.save_current(
