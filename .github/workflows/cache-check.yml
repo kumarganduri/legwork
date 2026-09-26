@@ -2,10 +2,16 @@ name: cache-check
 
 # Every PR that touches cache/ adds code that users' builds will install
 # (network on) and run. This checks each changed entry the way a build
-# would use it. The checker and Legwork itself come from the base branch,
-# never from the PR, so a PR can't change what checks it.
+# would use it.
+#
+# pull_request_target, not pull_request: with pull_request a PR runs its
+# own copy of this file and could simply edit the check. Here the workflow,
+# the checker and Legwork all come from the base branch; the PR's cache/
+# files are only data. The token is read-only and never stored in the
+# checkout, and a PR's install command only ever runs inside Legwork's
+# sandbox, whose minimal environment doesn't include it.
 on:
-  pull_request:
+  pull_request_target:
     paths: ["cache/**"]
 
 permissions:
@@ -19,12 +25,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          persist-credentials: false
       - name: Take only cache/ from the PR
         env:
           PR: ${{ github.event.pull_request.number }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          git fetch -q origin "pull/$PR/head:pr"
+          git fetch -q "https://github.com/${{ github.repository }}.git" "pull/$PR/head:pr"
           changed=$(git diff --name-only "$(git merge-base "$BASE" pr)" pr)
           outside=$(printf '%s\n' "$changed" | grep -v '^cache/' || true)
           if [ -n "$outside" ]; then

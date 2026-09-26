@@ -18,6 +18,11 @@ verbatim, fails its self-test, or contains anything shaped like an API key.
 A license warning in the description doesn't block the PR; it's there for
 the reviewer.
 
+A `cache-check` job then re-checks the entry on a fresh Linux machine the
+way a user's build would use it, and posts its install command in the job
+summary. Reviewers: read that install command. It runs, with network on,
+for everyone who builds that repo.
+
 ## Work on Legwork
 
 ```sh
