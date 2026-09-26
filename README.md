@@ -38,9 +38,40 @@ Full write-up, including what failed along the way and what we fixed:
 
 ## Quick start
 
-You need **macOS**, [uv](https://docs.astral.sh/uv/), and any
+You need **macOS or Linux**, [uv](https://docs.astral.sh/uv/), and any
 OpenAI-compatible chat-completions endpoint. Legwork itself is free; the
 only cost is your own model usage, which is 1–3 calls per build.
+
+<details>
+<summary><b>Linux:</b> install bubblewrap (and one step on Ubuntu 24.04+)</summary>
+
+The Linux sandbox is [bubblewrap](https://github.com/containers/bubblewrap):
+
+```sh
+sudo apt install bubblewrap python3-venv   # Debian/Ubuntu
+sudo dnf install bubblewrap                # Fedora
+```
+
+Ubuntu 24.04 and later block the user namespaces bubblewrap needs, unless a
+program's AppArmor profile allows them. Allow them for `bwrap` only (this
+is what Ubuntu does for Chrome and Flatpak), rather than switching the
+restriction off system-wide:
+
+```sh
+sudo tee /etc/apparmor.d/bwrap <<'EOF'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+EOF
+sudo apparmor_parser -r /etc/apparmor.d/bwrap
+```
+
+If anything's missing, Legwork stops and prints these instructions.
+</details>
 
 ```sh
 export LEGWORK_LLM_ENDPOINT=https://api.openai.com/v1
@@ -127,8 +158,11 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
 - **The scanner is heuristic.** It catches the obfuscation patterns seen in
   real payloads so far, and a determined author can get past it.
 
-The sandbox is macOS `sandbox-exec`. If it isn't available, Legwork refuses
-to run. It never falls back to running unsandboxed.
+The sandbox is `sandbox-exec` on macOS and bubblewrap on Linux, with the
+same rules on both: the system read-only, your home directory hidden,
+writes only in the build's own folder, no local sockets (SSH agent, Docker),
+and network only during install. If the sandbox isn't available, Legwork
+refuses to run. It never falls back to running unsandboxed.
 
 ## Commands
 
@@ -161,7 +195,6 @@ yourself; a bad entry is removed with a plain `git revert`.
 
 Early. What's next:
 
-- **Linux sandbox.** Legwork is macOS-only today.
 - Better multi-tool verification than a single simplest-command self-test.
 
 ## Development
@@ -170,7 +203,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY
 
 ```sh
 uv sync
-uv run pytest        # the sandbox and integration tests need macOS
+uv run pytest        # sandbox tests need macOS, or Linux with bubblewrap
 ```
 
 `tests/fixtures/ai_data_extractor_payload.py` is a real malicious file with

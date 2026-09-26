@@ -26,8 +26,11 @@ uv sync
 uv run pytest
 ```
 
-- The sandbox and integration tests need macOS (`sandbox-exec`) and some
-  need network access to GitHub. CI runs everything on `macos-latest`.
+- The sandbox and integration tests need macOS (`sandbox-exec`) or Linux
+  with bubblewrap (see the README), and some need network access to
+  GitHub. CI runs everything on macOS and Ubuntu; set
+  `LEGWORK_REQUIRE_SANDBOX=1` to make a missing sandbox fail the run
+  instead of skipping those tests.
 - Tests use the real sandbox, not mocks, for anything about isolation.
 - `tests/fixtures/ai_data_extractor_payload.py` is a real malicious file
   with its payload destroyed. Tests only parse it with `ast`; keep it that

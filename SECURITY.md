@@ -18,7 +18,7 @@ Use **[Report a vulnerability](https://github.com/kumarganduri/legwork/security/
   PR description despite the scrub.
 - **Anything that makes Legwork run code outside the sandbox.**
 
-Please include the Legwork version, your macOS version, and a minimal repo
+Please include the Legwork version, your OS and version, and a minimal repo
 or command that reproduces it. You'll get a reply within a week.
 
 ## Open an issue instead
