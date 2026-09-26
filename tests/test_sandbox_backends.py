@@ -67,7 +67,8 @@ def test_linux_with_user_namespaces_disabled_refuses_and_says_why():
         patch("legwork.sandbox_runner.platform.system", return_value="Linux"),
         patch("legwork.sandbox_runner.shutil.which", return_value="/usr/bin/bwrap"),
         patch("legwork.sandbox_runner._bwrap_probe_error", return_value="setting up uid map: Permission denied"),
-        pytest.raises(SandboxUnavailableError, match="apparmor_restrict_unprivileged_userns"),
+        patch("legwork.sandbox_runner._apparmor_restricts_userns", return_value=False),
+        pytest.raises(SandboxUnavailableError, match="user namespaces are probably disabled"),
     ):
         sandbox_runner._check_backend_available()
 
@@ -75,3 +76,16 @@ def test_linux_with_user_namespaces_disabled_refuses_and_says_why():
 def test_available_is_false_rather_than_raising():
     with patch("legwork.sandbox_runner.platform.system", return_value="Windows"):
         assert sandbox_runner.available() is False
+
+
+def test_ubuntu_apparmor_restriction_gets_the_exact_fix():
+    with (
+        patch("legwork.sandbox_runner.platform.system", return_value="Linux"),
+        patch("legwork.sandbox_runner.shutil.which", return_value="/usr/bin/bwrap"),
+        patch("legwork.sandbox_runner._bwrap_probe_error", return_value="loopback: Failed RTM_NEWADDR"),
+        patch("legwork.sandbox_runner._apparmor_restricts_userns", return_value=True),
+        pytest.raises(SandboxUnavailableError) as exc,
+    ):
+        sandbox_runner._check_backend_available()
+    assert "sudo apparmor_parser -r /etc/apparmor.d/bwrap" in str(exc.value)
+    assert "profile bwrap /usr/bin/bwrap flags=(unconfined)" in str(exc.value)

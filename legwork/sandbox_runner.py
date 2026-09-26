@@ -134,6 +134,32 @@ _BWRAP_INSTALL_HINT = (
 )
 
 
+# Ubuntu 24.04+ blocks unprivileged user namespaces through AppArmor unless
+# a program's profile allows them. This lets bwrap alone create sandboxes,
+# the same way Ubuntu handles Chrome and Flatpak, instead of switching the
+# restriction off for the whole system. CI applies exactly these commands.
+BWRAP_APPARMOR_PROFILE = """abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+"""
+_APPARMOR_FIX = (
+    "Ubuntu 24.04+ restricts user namespaces with AppArmor; allow them for bwrap only:\n"
+    "  sudo tee /etc/apparmor.d/bwrap <<'EOF'\n" + BWRAP_APPARMOR_PROFILE + "EOF\n"
+    "  sudo apparmor_parser -r /etc/apparmor.d/bwrap\n"
+)
+
+
+def _apparmor_restricts_userns() -> bool:
+    try:
+        return Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip() == "1"
+    except OSError:
+        return False
+
+
 @functools.lru_cache(maxsize=1)
 def _bwrap_probe_error() -> str | None:
     """Why bwrap can't make a sandbox on this machine, or None if it can.
@@ -170,9 +196,9 @@ def _check_backend_available() -> None:
         error = _bwrap_probe_error()
         if error:
             raise SandboxUnavailableError(
-                f"bubblewrap is installed but can't create a sandbox here ({error}). Unprivileged user "
-                "namespaces are probably disabled; on Ubuntu 24.04+ that's the AppArmor setting "
-                "kernel.apparmor_restrict_unprivileged_userns. Refusing to run unsandboxed."
+                f"bubblewrap is installed but can't create a sandbox here ({error}). "
+                + (_APPARMOR_FIX if _apparmor_restricts_userns() else "Unprivileged user namespaces are probably disabled. ")
+                + "Refusing to run unsandboxed."
             )
         return
     raise SandboxUnavailableError(

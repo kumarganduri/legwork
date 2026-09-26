@@ -21,13 +21,13 @@ jobs:
       - name: Install bubblewrap (Linux sandbox)
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
-      - name: Does bubblewrap work out of the box?
+      - name: Allow user namespaces for bwrap only (the README's Ubuntu 24.04+ step)
         if: runner.os == 'Linux'
         run: |
-          bwrap --unshare-all --ro-bind / / --dev /dev --proc /proc true && echo "bwrap OK" || {
-            echo "bwrap failed; kernel.apparmor_restrict_unprivileged_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)"
-            exit 1
-          }
+          python3 -c "from legwork.sandbox_runner import BWRAP_APPARMOR_PROFILE as p; print(p, end='')" > /tmp/bwrap.aa
+          sudo cp /tmp/bwrap.aa /etc/apparmor.d/bwrap
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap
+          bwrap --unshare-all --ro-bind / / --dev /dev --proc /proc true && echo "bwrap OK"
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
       - run: uv run pytest -q
