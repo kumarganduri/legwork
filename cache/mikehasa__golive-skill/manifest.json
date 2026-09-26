@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/mikehasa/golive-skill",
+  "commit_sha": "b23f5fb436b7816753c3a6195ab6ae2a8fb1a4a2",
+  "synthesis_date": "2026-09-26T07:49:35+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-09-26T12:24:15+00:00"
+  },
+  "entrypoint": "Run the GoLive CLI (npm package \"golive\") to fetch version info and other read-only commands",
+  "install_command": "npm install --no-fund --no-audit golive@alpha",
+  "mcp_sdk": "mcp<2"
+}

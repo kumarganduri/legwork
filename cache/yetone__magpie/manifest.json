@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/yetone/magpie",
+  "commit_sha": "73be42eca8862f1aefee335269eb0ac3821de667",
+  "synthesis_date": "2026-09-26T08:08:55+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-09-26T12:24:18+00:00"
+  },
+  "entrypoint": "Run magpie CLI commands (list presets, models, agents, or arbitrary subcommands)",
+  "install_command": "curl -fsSL https://usemagpie.ai/install.sh | sh",
+  "mcp_sdk": "mcp<2"
+}
