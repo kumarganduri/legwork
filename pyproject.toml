@@ -2,6 +2,7 @@
 name = "legwork-mcp"
 version = "0.1.0"
 description = "Point it at a GitHub repo, get a working MCP tool back."
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
