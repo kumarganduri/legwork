@@ -250,9 +250,16 @@ def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
         # /etc/resolv.conf usually points into /run; put back only DNS.
         for dns_dir in ("/run/systemd/resolve", "/run/NetworkManager", "/run/resolvconf"):
             args += ["--ro-bind-try", dns_dir, dns_dir]
-    for hidden in _hidden_dirs():
-        args += ["--tmpfs", str(hidden)]
-    args += ["--bind", real_workdir, real_workdir, "--chdir", real_workdir]
+    hidden = [str(d) for d in _hidden_dirs()]
+    for d in hidden:
+        args += ["--tmpfs", d]
+    args += ["--bind", real_workdir, real_workdir]
+    # Then make the stand-in homes read-only, so writing there fails as it
+    # does on macOS instead of quietly landing in a throwaway tmpfs. The
+    # workdir is its own mount and stays writable.
+    for d in reversed(hidden):
+        args += ["--remount-ro", d]
+    args += ["--chdir", real_workdir]
     return args
 
 

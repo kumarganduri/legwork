@@ -89,3 +89,9 @@ def test_ubuntu_apparmor_restriction_gets_the_exact_fix():
         sandbox_runner._check_backend_available()
     assert "sudo apparmor_parser -r /etc/apparmor.d/bwrap" in str(exc.value)
     assert "profile bwrap /usr/bin/bwrap flags=(unconfined)" in str(exc.value)
+
+
+def test_stand_in_homes_are_read_only_after_the_workdir_is_mounted():
+    args = _args()
+    assert set(_pairs(args, "--remount-ro")) == {"/home", "/home/me"}
+    assert args.index("--bind") < args.index("--remount-ro")
