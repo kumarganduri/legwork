@@ -321,10 +321,11 @@ def test_install_cannot_reach_local_unix_sockets(tmp_path):
     server.bind(str(sock_path))
     server.listen(1)
     try:
+        # On Linux the socket can't even be created during install (seccomp);
+        # on macOS it can, but connecting is refused. Either is "blocked".
         code = (
             "import socket, sys\n"
-            "s = socket.socket(socket.AF_UNIX)\n"
-            "try:\n    s.connect(sys.argv[1]); print('connected')\n"
+            "try:\n    s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); print('connected')\n"
             "except OSError:\n    print('blocked')\n"
         )
         result = install([SYSTEM_PYTHON, "-c", code, str(sock_path)], tmp_path)
@@ -418,14 +419,14 @@ def test_install_cannot_reach_abstract_unix_sockets(tmp_path):
     filter refuses AF_UNIX sockets during install."""
     import socket
 
-    name = f"\0legwork-test-{os.getpid()}"
+    name = f"legwork-test-{os.getpid()}"
     server = socket.socket(socket.AF_UNIX)
-    server.bind(name)
+    server.bind("\0" + name)  # abstract: a leading NUL, no file anywhere
     server.listen(1)
     code = (
         "import socket, sys\n"
         "try:\n"
-        "    s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); print('connected')\n"
+        "    s = socket.socket(socket.AF_UNIX); s.connect('\\0' + sys.argv[1]); print('connected')\n"
         "except OSError as e:\n"
         "    print('blocked', e.errno)\n"
         "socket.socketpair(); print('socketpair ok')\n"
