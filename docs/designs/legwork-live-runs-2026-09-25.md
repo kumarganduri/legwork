@@ -14,7 +14,7 @@ reply. Three repos from the validation spike.
 
 Every model reply followed the required reply format — no parse failures.
 
-## What the runs broke, and the fixes (commits `0d373eb`, `53d6220`)
+## What the runs broke, and the fixes (commits `d6a5ac8`, `1ed0e28`)
 
 1. **Venv built on Python 3.9.** macOS's `/usr/bin/python3` is 3.9, where
    pip finds no installable version of the MCP SDK. The venv now uses the
@@ -44,7 +44,7 @@ reverify's README example `reverify verify - --claim ...` crashes in its
 released package (`bytes.fromhex("-")`). The model followed the docs
 exactly; on retry it worked around it with a dummy hex input.
 
-## Follow-up: command + serve mode (2026-09-26, commit `c3f9dcb`)
+## Follow-up: command + serve mode (2026-09-26, commit `0943860`)
 
 `legwork <repo>` builds and saves a wrapper under `~/.legwork`, then prints
 the `claude mcp add ...` line and an `mcpServers` config block.
