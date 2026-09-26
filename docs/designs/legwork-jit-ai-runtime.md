@@ -1006,9 +1006,13 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         or git URL (read from the install's PEP 610 `direct_url.json`).
         Verified with a real MCP client: built wheel → `uv tool install`
         (scratch dir) serve + contribute, and `uvx --from <wheel> legwork
-        serve 2akouwu/reverify` → tool call returned `verified: 1`. Not yet
-        published to PyPI: needs the user's PyPI account and a project
-        license.
+        serve 2akouwu/reverify` → tool call returned `verified: 1`.
+        **Published 2026-09-26:** github.com/kumarganduri/legwork (MIT;
+        the `AwesomeAI` GitHub name belongs to an unrelated user, so it
+        starts on the personal account and can transfer to an org later)
+        and PyPI `legwork-mcp` 0.1.0 via trusted publishing (`publish.yml`
+        on a `v*` tag, no token). Verified from PyPI with a fresh cache:
+        `uvx legwork-mcp serve 2akouwu/reverify` → `verified: 1`.
 
 - [x] **T10 (P1, human: ~6h / CC: ~1h)** — obfuscation-scanner — Implement
       the static pre-execution scan against the **full cloned repo tree**
