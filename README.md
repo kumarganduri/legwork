@@ -160,6 +160,11 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
   writing a wrapper that does something other than what you asked for. The
   wrapper still runs sandboxed with network off, which bounds the damage;
   it doesn't prevent a wrong or misleading tool.
+- **Desktop Linux, during install only:** bubblewrap can't hide
+  "abstract" Unix sockets while the network is shared, so install code
+  could reach services that listen on them, such as an X11 display. The
+  run phase has no network and isn't affected; nor are macOS, servers, or
+  Wayland sessions without Xwayland.
 - **The scanner is heuristic.** It catches the obfuscation patterns seen in
   real payloads so far, and a determined author can get past it.
 

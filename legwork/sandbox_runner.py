@@ -282,6 +282,23 @@ def _sandboxed_argv(command: list[str], workdir: Path, allow_network: bool, prof
     return [*_bwrap_args(workdir, allow_network), "--", *command]
 
 
+_MACH_SERVICES = (
+    "com.apple.system.opendirectoryd.libinfo",
+    "com.apple.system.opendirectoryd.membership",
+    "com.apple.system.notification_center",
+    "com.apple.system.logger",
+    "com.apple.logd",
+    "com.apple.diagnosticd",
+    "com.apple.SystemConfiguration.configd",
+    "com.apple.SystemConfiguration.DNSConfiguration",
+    "com.apple.dnssd.service",
+    "com.apple.trustd",
+    "com.apple.trustd.agent",
+    "com.apple.cfprefsd.daemon",
+    "com.apple.cfprefsd.agent",
+)
+
+
 def interpreter_home() -> Path | None:
     """The Python installation running Legwork, when it lives under $HOME
     (uv's managed Pythons, pyenv). Builds may create their venv from it, so
@@ -311,7 +328,12 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
         "(allow process-fork)",
         "(allow process-exec)",
         "(allow sysctl-read)",
-        "(allow mach-lookup)",
+        # System services: only what Python, pip, npm, git and curl were
+        # measured to need (user lookups, DNS and network config, TLS
+        # certificate checks, logging, preferences). A bare (allow
+        # mach-lookup) also reached services that open apps, read the
+        # clipboard or script other apps (tightened 2026-09-26).
+        "(allow mach-lookup " + " ".join(f'(global-name "{name}")' for name in _MACH_SERVICES) + ")",
         "(allow iokit-open)",
         "(allow signal (target self))",
         # Reads: allowed everywhere EXCEPT under the user's home directory

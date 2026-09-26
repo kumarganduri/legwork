@@ -370,3 +370,21 @@ def test_python_running_legwork_is_readable_but_only_that_install(tmp_path):
             invoke([str(python), "-c", f"open({str(sibling)!r}).read()"], tmp_path)
     finally:
         sibling.unlink()
+
+
+@macos_only
+def test_only_allowlisted_system_services_are_reachable(tmp_path):
+    """A bare (allow mach-lookup) let sandboxed code reach every macOS
+    service, including ones that open apps, read the clipboard or script
+    other apps. Only the measured allowlist remains."""
+    profile = sandbox_runner._generate_profile(tmp_path, allow_network=True)
+    assert "(allow mach-lookup)" not in profile
+    assert "com.apple.pasteboard" not in profile
+    result = sandbox_runner._run_sandboxed(
+        ["/bin/sh", "-c", "/usr/bin/pbpaste >/dev/null 2>&1; echo $?"],
+        tmp_path,
+        allow_network=True,
+        timeout=30,
+        timeout_error=sandbox_runner.InstallTimeoutExceeded,
+    )
+    assert result.stdout.strip() != "0"
