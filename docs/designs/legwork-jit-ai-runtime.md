@@ -387,8 +387,9 @@ they make it correctly built):
 ## Distribution Plan
 
 - GitHub repo `AwesomeAI/legwork` is the primary distribution channel.
-- Ship as an installable CLI via **uv/uvx** — `uvx legwork <repo-url>` needs
-  zero install step, or `uv tool install legwork` for a persistent command.
+- Ship as an installable CLI via **uv/uvx** — `uvx legwork-mcp <repo-url>` (PyPI
+  name; `legwork` is taken, see T9) needs
+  zero install step, or `uv tool install legwork-mcp` for a persistent `legwork` command.
   Chosen over pip at eng review: matches "lightweight, zero friction" from
   the original pitch, isolated per-tool environment avoids Legwork's own
   install inheriting the dependency-conflict problem it exists to solve for
@@ -976,11 +977,27 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
       - Surfaced by: Outside Voice (eng-review pass 2)
       - Files: `legwork/cache_writer.py` (planned)
       - Verify: unit test for SHA mismatch flagging
-- [ ] **T9 (P2, human: ~1h / CC: ~10min)** — packaging — Set up `uv`/`uvx`
+- [x] **T9 (P2, human: ~1h / CC: ~10min)** — packaging — Set up `uv`/`uvx`
       packaging (`uvx legwork <repo-url>`, `uv tool install legwork`).
       - Surfaced by: Architecture review (eng review)
       - Files: `pyproject.toml` (planned)
       - Verify: `uvx` install + run smoke test
+      - **DONE, 2026-09-26.** The PyPI name `legwork` belongs to an unrelated
+        astrophysics package, so the distribution is **`legwork-mcp`**
+        (chosen 2026-09-26): `uvx legwork-mcp <repo>`, or
+        `uv tool install legwork-mcp` for a plain `legwork` command (both
+        `legwork` and `legwork-mcp` scripts ship). No runtime dependencies,
+        so the wheel is just the `legwork/` package. The printed MCP launch
+        command no longer points into uvx's throwaway cache environment
+        (`uv cache clean` deletes it): under uvx it prints `uvx legwork-mcp`,
+        or `uvx --from <source> legwork` when installed from a wheel, folder
+        or git URL (read from the install's PEP 610 `direct_url.json`).
+        Verified with a real MCP client: built wheel → `uv tool install`
+        (scratch dir) serve + contribute, and `uvx --from <wheel> legwork
+        serve 2akouwu/reverify` → tool call returned `verified: 1`. Not yet
+        published to PyPI: needs the user's PyPI account and a project
+        license.
+
 - [x] **T10 (P1, human: ~6h / CC: ~1h)** — obfuscation-scanner — Implement
       the static pre-execution scan against the **full cloned repo tree**
       (corrected at eng review pass 2, 2026-09-22 — T2 now clones before

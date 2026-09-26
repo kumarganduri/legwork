@@ -18,11 +18,13 @@ stray line would corrupt the client's stream. Errors go to stderr.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import re
 import shlex
 import shutil
 import sys
+import urllib.parse
 from pathlib import Path
 
 from legwork import cache_writer, local_store, retry_loop, sandbox_runner
@@ -70,8 +72,41 @@ def _err(message: str) -> None:
     print(f"legwork: {message}", file=sys.stderr)
 
 
+# The PyPI name. `legwork` there is an unrelated astrophysics package.
+DIST_NAME = "legwork-mcp"
+
+
+def _in_uvx_env() -> bool:
+    # uvx runs tools from a throwaway environment in uv's cache, which
+    # `uv cache clean` deletes: never hand that path to an MCP client.
+    return "archive-v0" in Path(sys.prefix).parts
+
+
+def _install_source() -> str | None:
+    """Where this install came from (PEP 610 direct_url.json) in a form
+    `uvx --from` accepts, or None when it came from PyPI."""
+    try:
+        raw = importlib.metadata.distribution(DIST_NAME).read_text("direct_url.json")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+    if not raw:
+        return None
+    info = json.loads(raw)
+    url = info["url"]
+    if "vcs_info" in info:
+        revision = info["vcs_info"].get("requested_revision")
+        return f"{info['vcs_info']['vcs']}+{url}" + (f"@{revision}" if revision else "")
+    if url.startswith("file://"):
+        return urllib.parse.unquote(urllib.parse.urlparse(url).path)
+    return url
+
+
 def _self_command() -> list[str]:
     """How an MCP client should launch this same legwork install."""
+    if _in_uvx_env():
+        uvx = shutil.which("uvx") or "uvx"
+        source = _install_source()
+        return [uvx, "--from", source, "legwork"] if source else [uvx, DIST_NAME]
     argv0 = sys.argv[0]
     if argv0.endswith(".py"):  # python -m legwork.cli, or the file directly
         return [sys.executable, "-m", "legwork.cli"]

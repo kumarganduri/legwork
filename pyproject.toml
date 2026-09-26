@@ -1,12 +1,22 @@
 [project]
-name = "legwork"
+name = "legwork-mcp"
 version = "0.1.0"
 description = "Point it at a GitHub repo, get a working MCP tool back."
 requires-python = ">=3.10"
 dependencies = []
+keywords = ["mcp", "model-context-protocol", "llm", "agents", "sandbox", "codegen"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",  # the sandbox is macOS sandbox-exec for now
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Code Generators",
+]
 
 [project.scripts]
 legwork = "legwork.cli:main"
+legwork-mcp = "legwork.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8.0"]

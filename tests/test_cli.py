@@ -114,3 +114,42 @@ def test_serve_launches_the_saved_wrapper_in_the_sandbox():
     assert command[-1] == record.wrapper_path
     assert workdir == Path(record.attempt_dir)
     assert env["PATH"].startswith(str(Path(record.python_path).parent))
+
+
+# --- how MCP clients should launch legwork ------------------------------------
+
+
+class _FakeDist:
+    def __init__(self, direct_url):
+        self.direct_url = direct_url
+
+    def read_text(self, name):
+        return None if self.direct_url is None else json.dumps(self.direct_url)
+
+
+@pytest.mark.parametrize(
+    ("direct_url", "expected"),
+    [
+        (None, ["/bin/uvx", "legwork-mcp"]),  # from PyPI
+        ({"url": "file:///src/legwork", "dir_info": {}}, ["/bin/uvx", "--from", "/src/legwork", "legwork"]),
+        (
+            {"url": "file:///d/legwork_mcp-0.1.0-py3-none-any.whl", "archive_info": {}},
+            ["/bin/uvx", "--from", "/d/legwork_mcp-0.1.0-py3-none-any.whl", "legwork"],
+        ),
+        (
+            {"url": "https://github.com/o/legwork", "vcs_info": {"vcs": "git", "commit_id": "abc", "requested_revision": "v0.1"}},
+            ["/bin/uvx", "--from", "git+https://github.com/o/legwork@v0.1", "legwork"],
+        ),
+    ],
+)
+def test_under_uvx_the_launch_command_is_uvx_not_the_throwaway_env(monkeypatch, direct_url, expected):
+    monkeypatch.setattr("sys.prefix", "/Users/me/.cache/uv/archive-v0/AbC123")
+    monkeypatch.setattr("legwork.cli.shutil.which", lambda name: f"/bin/{name}")
+    with patch("legwork.cli.importlib.metadata.distribution", return_value=_FakeDist(direct_url)):
+        assert cli._self_command() == expected
+
+
+def test_outside_uvx_the_launch_command_is_the_installed_script(monkeypatch):
+    monkeypatch.setattr("sys.prefix", "/Users/me/.local/share/uv/tools/legwork-mcp")
+    monkeypatch.setattr("sys.argv", ["/Users/me/.local/bin/legwork", "owner/repo"])
+    assert cli._self_command() == ["/Users/me/.local/bin/legwork"]

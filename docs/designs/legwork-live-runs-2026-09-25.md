@@ -63,9 +63,9 @@ now allows metadata, not contents, on exactly those ancestor folders.
 
 ## Open follow-ups
 
-- **The printed launch path is this checkout's venv**
-  (`~/AwesomeAI/.venv/bin/legwork`) until packaging (T9) gives a stable
-  installed command.
+- ~~**The printed launch path is this checkout's venv**~~ — fixed by T9:
+  installed as `legwork-mcp`, it prints the installed command or a `uvx`
+  line.
 - **README-only input.** phone-harness shows repos that put install steps
   in linked files (`install.md`) get refused. The full repo is already
   cloned, so linked docs could be included.
