@@ -74,9 +74,10 @@ key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
    if the self-test fails, it writes a fresh wrapper. `--no-cache` skips
    the cache.
 1. **Fetch.** Checks the repo is public and reachable, then shallow-clones it.
-2. **Scan.** Statically scans every Python file for obfuscated payloads
-   (XOR-decoded byte arrays, computed imports and attribute lookups,
-   unreadable identifiers). A hit stops everything before install.
+2. **Scan.** Statically scans every Python and JavaScript/TypeScript file
+   for obfuscated payloads: XOR-decoded byte arrays, computed imports,
+   javascript-obfuscator output, `eval` of decoded strings, code hidden
+   off-screen behind whitespace. A hit stops everything before install.
 3. **Read.** The README, plus setup docs it links to (`install.md`,
    `docs/getting-started.md`, …), capped at 50KB with install and usage
    sections kept first.

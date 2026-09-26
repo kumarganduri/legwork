@@ -71,13 +71,27 @@ def test_404_raises_repo_not_found_not_access_error():
             check_repo("owner/repo")
 
 
-def test_403_raises_repo_access_error():
-    http_error = urllib.error.HTTPError(
-        url="", code=403, msg="Forbidden", hdrs=None, fp=None
-    )
-    with patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=http_error):
-        with pytest.raises(RepoAccessError, match="rate-limited or blocked"):
-            check_repo("owner/repo")
+def test_403_with_git_also_unreachable_raises_repo_access_error():
+    http_error = urllib.error.HTTPError(url="", code=403, msg="Forbidden", hdrs=None, fp=None)
+    with (
+        patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=http_error),
+        patch("legwork.repo_fetcher.remote_head_sha", side_effect=RepoAccessError("no")),
+        pytest.raises(RepoAccessError, match="rate-limited or blocked"),
+    ):
+        check_repo("owner/repo")
+
+
+@pytest.mark.parametrize("code", [403, 429])
+def test_rate_limited_api_falls_back_to_git(code):
+    """The anonymous API's 60/hour limit ran out on a CI runner; a public
+    repo is still confirmed with `git ls-remote`, which has no quota."""
+    http_error = urllib.error.HTTPError(url="", code=code, msg="rate limit exceeded", hdrs=None, fp=None)
+    with (
+        patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=http_error),
+        patch("legwork.repo_fetcher.remote_head_sha", return_value="a" * 40) as ls_remote,
+    ):
+        assert check_repo("owner/repo") == RepoRef("owner", "repo")
+    ls_remote.assert_called_once_with("https://github.com/owner/repo.git")
 
 
 def test_network_failure_raises_repo_access_error():

@@ -971,6 +971,22 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
+- [x] **JavaScript/TypeScript scanning (added 2026-09-26, pre-launch
+      review):** the T10 scan only read `.py` files, but one of the trial's
+      three builds was an npm package. `obfuscation_scanner.scan_js_file`
+      adds text-pattern rules (no JS parser in the stdlib, and no
+      dependencies): strong — javascript-obfuscator `_0x…` identifiers,
+      its string-array rotation loop, `eval`/`Function` of a decoded
+      string; weak — long base64/`\x` blobs, long `fromCharCode` lists,
+      code pushed 300+ columns right by whitespace, plain `eval`. Same
+      blocking rule as Python (any strong, or 2+ distinct weak). Against
+      11 real repos (4,269 JS/TS files) it blocked nothing but the two
+      known malware files; the true-positive fixtures are synthetic
+      shapes around a harmless `console.log`.
+- [x] **Rate-limit fallback (added 2026-09-26):** the repo check used
+      GitHub's anonymous API (60/hour per IP), which a CI runner
+      exhausted. On 403/429 it now confirms the repo with `git ls-remote`,
+      which has no quota.
 - [x] **Cache read path (added 2026-09-26, found missing in the pre-launch
       review):** T7 only *wrote* entries; nothing read them, so the v1
       success criterion (a wrapper reused from the public cache) couldn't

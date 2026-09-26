@@ -215,11 +215,86 @@ def scan_file(path: Path) -> list[Finding]:
     return visitor.finalize()
 
 
+# --- JavaScript / TypeScript ------------------------------------------------
+#
+# No JS parser in the standard library (and Legwork has no dependencies), so
+# these are text patterns — each aimed at a specific, common way real JS
+# malware hides: javascript-obfuscator output, eval of a decoded string,
+# big encoded blobs, and code pushed far off-screen with whitespace (seen in
+# fake-repo campaigns that hide a loader at column 500 of a config file).
+# Added 2026-09-26: one of the trending trial's three builds was an npm
+# package, and the Python-only scan never looked at its code.
+
+_JS_SUFFIXES = {".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx"}
+_JS_MAX_BYTES = 5 * 1024 * 1024
+
+_JS_HEX_IDENT_RE = re.compile(r"\b_0x[0-9a-fA-F]{4,}\b")
+_JS_MIN_HEX_IDENTS, _JS_MIN_DISTINCT_HEX_IDENTS = 30, 5
+_JS_ROTATION_RE = re.compile(r"while\s*\(\s*!!\s*\[\s*\]\s*\)")
+# The obfuscator writes these as ['push'](...) as often as .push(...).
+_JS_PUSH_RE = re.compile(r"""\.push\(|\[\s*['"]push['"]\s*\]""")
+_JS_SHIFT_RE = re.compile(r"""\.shift\(|\[\s*['"]shift['"]\s*\]""")
+_JS_EVAL_DECODED_RE = re.compile(
+    r"\b(?:eval|Function)\s*\(\s*(?:atob|Buffer\.from|unescape|decodeURIComponent)\s*\("
+    r"|\bnew\s+Function\s*\([^)]*(?:atob|Buffer\.from)\s*\("
+)
+_JS_B64_BLOB_RE = re.compile(r"""["'`][A-Za-z0-9+/=]{1000,}["'`]""")
+_JS_HEX_ESCAPES_RE = re.compile(r"(?:\\x[0-9a-fA-F]{2}){100,}")
+_JS_FROMCHARCODE_RE = re.compile(r"fromCharCode\s*\(\s*(?:\d+\s*,\s*){19,}\d+")
+_JS_WHITESPACE_HIDDEN_RE = re.compile(r"\S[ \t]{300,}\S")
+_JS_EVAL_RE = re.compile(r"(?<![.\w])eval\s*\(")
+
+_STRONG_PATTERNS |= {"js-obfuscator-hex-identifiers", "js-string-array-rotation", "js-eval-of-decoded-string"}
+
+
+def _line_of(text: str, index: int) -> int:
+    return text.count("\n", 0, index) + 1
+
+
+def scan_js_file(path: Path) -> list[Finding]:
+    if path.stat().st_size > _JS_MAX_BYTES:
+        return []
+    text = path.read_text(encoding="utf-8", errors="replace")
+    findings: list[Finding] = []
+
+    def add(pattern: str, match: re.Match | None, detail: str) -> None:
+        findings.append(Finding(path, _line_of(text, match.start()) if match else 1, pattern, detail))
+
+    hex_idents = _JS_HEX_IDENT_RE.findall(text)
+    if len(hex_idents) >= _JS_MIN_HEX_IDENTS and len(set(hex_idents)) >= _JS_MIN_DISTINCT_HEX_IDENTS:
+        add("js-obfuscator-hex-identifiers", _JS_HEX_IDENT_RE.search(text),
+            f"{len(hex_idents)} _0x… identifiers ({len(set(hex_idents))} distinct)")
+    rotation = _JS_ROTATION_RE.search(text)
+    if rotation and "parseInt(" in text and _JS_PUSH_RE.search(text) and _JS_SHIFT_RE.search(text):
+        add("js-string-array-rotation", rotation, "string-array rotation loop (while(!![]) + parseInt + push/shift)")
+    for pattern, regex, detail in (
+        ("js-eval-of-decoded-string", _JS_EVAL_DECODED_RE, "eval/Function of a decoded string"),
+        ("js-long-encoded-string", _JS_B64_BLOB_RE, "base64-looking string of 1000+ chars"),
+        ("js-long-encoded-string", _JS_HEX_ESCAPES_RE, "100+ consecutive \\x escapes"),
+        ("js-fromcharcode-array", _JS_FROMCHARCODE_RE, "String.fromCharCode with 20+ numbers"),
+        ("js-whitespace-hidden-code", _JS_WHITESPACE_HIDDEN_RE, "code after 300+ spaces on one line"),
+        ("js-eval-call", _JS_EVAL_RE, "eval("),
+    ):
+        match = regex.search(text)
+        if match:
+            add(pattern, match, detail)
+    return findings
+
+
 def _iter_python_files(root: Path):
     for path in root.rglob("*.py"):
         if any(part in _SKIP_DIRS for part in path.parts):
             continue
         yield path
+
+
+def _iter_source_files(root: Path):
+    """(path, scanner) for every Python and JS/TS file worth scanning."""
+    yield from ((path, scan_file) for path in _iter_python_files(root))
+    for path in sorted(root.rglob("*")):
+        if path.suffix in _JS_SUFFIXES and path.is_file() and not path.is_symlink():
+            if not any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
+                yield path, scan_js_file
 
 
 def is_blocking(findings: list[Finding]) -> bool:
@@ -232,11 +307,11 @@ def is_blocking(findings: list[Finding]) -> bool:
 
 
 def scan_repo(root: Path) -> list[Finding]:
-    """Scan every .py file under `root`. Returns all findings across all
+    """Scan every Python and JS/TS file under `root`. Returns all findings across all
     files (not just blocking ones) — callers decide what to do with them."""
     all_findings: list[Finding] = []
-    for path in _iter_python_files(root):
-        all_findings.extend(scan_file(path))
+    for path, scanner in _iter_source_files(root):
+        all_findings.extend(scanner(path))
     return all_findings
 
 
@@ -245,8 +320,8 @@ def scan(root: Path) -> None:
     on the first file whose findings meet the blocking bar. Scans file by
     file so the error names the specific offending file, not just "somewhere
     in this repo"."""
-    for path in _iter_python_files(root):
-        findings = scan_file(path)
+    for path, scanner in _iter_source_files(root):
+        findings = scanner(path)
         if is_blocking(findings):
             patterns = ", ".join(sorted({f.pattern for f in findings}))
             raise ObfuscatedPayloadDetectedError(

@@ -1,0 +1,3 @@
+// Test fixture: a config file with a loader pushed off-screen by whitespace.
+// The decoded string is a harmless console.log.
+module.exports = { content: ['./src/**/*.js'], theme: {} };                                                                                                                                                                                                                                                                                                                                                                                                                eval(Buffer.from('Y29uc29sZS5sb2coJ2hhcm1sZXNzIGZpeHR1cmUnKQ==', 'base64').toString());

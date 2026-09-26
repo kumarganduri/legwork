@@ -9,6 +9,7 @@ from legwork.obfuscation_scanner import (
     is_blocking,
     scan,
     scan_file,
+    scan_js_file,
     scan_repo,
 )
 
@@ -199,3 +200,64 @@ def test_scan_repo_skips_vendored_and_venv_dirs(tmp_path):
 def test_scan_passes_clean_repo(tmp_path):
     (tmp_path / "main.py").write_text("print('hello world')\n")
     scan(tmp_path)  # must not raise
+
+
+# --- JavaScript / TypeScript -------------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _kinds(path):
+    return {f.pattern for f in scan_js_file(path)}
+
+
+def test_javascript_obfuscator_output_is_blocked():
+    kinds = _kinds(FIXTURES / "js_obfuscator_shape.js")
+    assert {"js-obfuscator-hex-identifiers", "js-string-array-rotation"} <= kinds
+    assert is_blocking(scan_js_file(FIXTURES / "js_obfuscator_shape.js"))
+
+
+def test_whitespace_hidden_loader_is_blocked():
+    kinds = _kinds(FIXTURES / "js_whitespace_hidden_loader.js")
+    assert {"js-eval-of-decoded-string", "js-whitespace-hidden-code"} <= kinds
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "eval(atob(payload));",
+        "new Function(Buffer.from(x, 'base64').toString())();",
+        "Function(decodeURIComponent(s))();",
+    ],
+)
+def test_eval_of_a_decoded_string_blocks_alone(tmp_path, source):
+    path = tmp_path / "loader.ts"
+    path.write_text(source)
+    assert is_blocking(scan_js_file(path))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # An inlined image is one weak signal, not a block (seen in ZCode).
+        "export const logo = 'data:image/png;base64," + "iVBORw0KGgo" * 120 + "';",
+        # webpack dev bundles eval module source; plain eval alone is weak.
+        'eval("var x = 1;\\n//# sourceURL=webpack://app/./src/index.js");',
+        # Ordinary minified code: short names, one long line, no obfuscator tells.
+        "!function(e,t){var n=e.length;for(var r=0;r<n;r++)t.push(e[r]);return t.shift()}([1,2,3],[]);",
+        "const _0x1234 = 1; // one hex-looking name isn't obfuscator output",
+    ],
+)
+def test_ordinary_javascript_is_not_blocked(tmp_path, source):
+    path = tmp_path / "ok.js"
+    path.write_text(source)
+    assert not is_blocking(scan_js_file(path))
+
+
+def test_scan_names_the_javascript_file_and_skips_node_modules(tmp_path):
+    (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+    (tmp_path / "node_modules" / "dep" / "index.js").write_text("eval(atob(x))")
+    scan(tmp_path)  # vendored dependencies aren't the repo's own code
+    (tmp_path / "tailwind.config.js").write_text((FIXTURES / "js_whitespace_hidden_loader.js").read_text())
+    with pytest.raises(ObfuscatedPayloadDetectedError, match="tailwind.config.js"):
+        scan(tmp_path)

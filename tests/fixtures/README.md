@@ -23,3 +23,11 @@ rewritten before the first push.
 It's still a test corpus only: `legwork/obfuscation_scanner.py` and
 `tests/test_obfuscation_scanner.py` read it as text and parse it with
 `ast.parse`. There is no reason to import or run it.
+
+## JavaScript fixtures
+
+`js_obfuscator_shape.js` and `js_whitespace_hidden_loader.js` are
+synthetic: they reproduce the *shape* of javascript-obfuscator output and
+of a whitespace-hidden `eval(Buffer.from(…))` loader (both seen in
+malicious repos), wrapped around a harmless `console.log`. No real JS
+payload is kept in this repo.

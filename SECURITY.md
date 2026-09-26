@@ -35,4 +35,5 @@ or command that reproduces it. You'll get a reply within a week.
 These are documented in the [README](README.md#risks-stated-plainly) and
 aren't vulnerabilities by themselves: installs run with network on,
 prompt injection from a README isn't mitigated, and the scan covers the
-repo's own Python source, not what installers download.
+repo's own Python and JavaScript/TypeScript source, not what installers
+download.

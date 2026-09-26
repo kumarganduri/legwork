@@ -113,10 +113,19 @@ def check_repo(url: str) -> RepoRef:
             raise RepoNotFoundError(
                 f"Repo not found or private: {ref.slug}"
             ) from exc
-        if exc.code == 403:
-            raise RepoAccessError(
-                f"GitHub API rate-limited or blocked access to {ref.slug}"
-            ) from exc
+        if exc.code in (403, 429):
+            # The anonymous API allows 60 requests an hour per IP, which
+            # shared networks and CI runners exhaust (first 0.2.0 release
+            # run). `git ls-remote` answers "is this a reachable public
+            # repo?" with no API quota at all.
+            try:
+                remote_head_sha(ref.clone_url)
+            except RepoAccessError:
+                raise RepoAccessError(
+                    f"GitHub API rate-limited or blocked access to {ref.slug}, "
+                    "and the repo isn't reachable with git either"
+                ) from exc
+            return ref
         raise RepoAccessError(
             f"Unexpected GitHub API response ({exc.code}) for {ref.slug}"
         ) from exc
