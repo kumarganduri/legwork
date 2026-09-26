@@ -971,6 +971,22 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
+- [x] **Pre-launch QA round (2026-09-27, released in 0.4.0):** prompted by
+      bugs that only appeared on fresh machines. (1) A Mac without Homebrew
+      Python couldn't build (system python3 is 3.9, uv's Python is under
+      $HOME): Legwork now builds from the interpreter running it, with
+      read-only sandbox access to exactly that install. (2) macOS profile
+      allowed every system service (clipboard access confirmed); now 13
+      services measured against real workloads, with a regression test.
+      Linux abstract sockets during install are documented as a remaining
+      gap. (3) PyTorch on Linux is 5.3 GB (66s on a GitHub runner): install
+      limit 15 min, build 30 min, a per-build shared download cache, and
+      failed attempts' venvs removed. (4) cache PRs are checked by
+      `cache-check.yml` (pull_request_target: main's workflow and checker,
+      PR's cache/ as data only, read-only token), verified on a throwaway
+      PR that it rejected; CODEOWNERS on cache/ and .github/. (7) `legwork
+      clean`. Still open: other model providers, other MCP clients and
+      OSes, a larger trial.
 - [x] **Linux sandbox (added 2026-09-26, pre-launch review):** bubblewrap
       backend with the macOS policy (see sandbox_runner's docstring).
       Proven on GitHub's ubuntu-latest: 242 tests including real pip
