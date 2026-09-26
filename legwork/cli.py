@@ -3,6 +3,9 @@
     legwork <repo>          build an MCP wrapper for a GitHub repo
     legwork build <repo>    same, spelled out
     legwork serve <repo>    run the built wrapper as an MCP server over stdio
+    legwork contribute <repo> [--out DIR]
+                            write the built wrapper + manifest as a public-cache
+                            entry (default DIR: ./cache), ready for a PR
 
 `build` needs LEGWORK_LLM_ENDPOINT / LEGWORK_LLM_API_KEY / LEGWORK_LLM_MODEL
 set (an OpenAI-compatible endpoint). `serve` needs no model at all — it's
@@ -22,7 +25,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from legwork import local_store, retry_loop, sandbox_runner
+from legwork import cache_writer, local_store, retry_loop, sandbox_runner
 from legwork.llm_client import LLMAuthError, LLMConfig
 from legwork.obfuscation_scanner import ObfuscatedPayloadDetectedError
 from legwork.readme_parser import InsufficientReadmeError as NoReadmeError
@@ -145,9 +148,39 @@ def cmd_serve(repo: str) -> int:
     return 0  # pragma: no cover — exec_serve replaces this process
 
 
+_CONTRIBUTE_ERRORS = (
+    InvalidRepoURLError,
+    RepoAccessError,
+    local_store.NoBuildError,
+    cache_writer.VerbatimCopyDetectedError,
+    cache_writer.SmokeTestFailedError,
+    cache_writer.SecretScrubTriggeredError,
+    sandbox_runner.SandboxUnavailableError,
+)
+
+
+def cmd_contribute(repo: str, out: Path) -> int:
+    try:
+        ref = parse_repo_url(repo)
+        record = local_store.load_current(ref)
+        print(f"Checking the {ref.slug} wrapper and re-running its self-test", file=sys.stderr)
+        entry = cache_writer.write_entry(ref, record, out)
+    except _CONTRIBUTE_ERRORS as exc:
+        _err(f"{type(exc).__name__}: {exc}")
+        return 1
+
+    print(f"\nWrote a cache entry for {ref.slug} to {entry.path}/")
+    print("  wrapper.py, manifest.json")
+    if entry.manifest["license_flag"]:
+        print(f"  License flag: {entry.manifest['license_flag']}")
+    print("\nOpen a PR to the Legwork repo with that folder under cache/. PR description:\n")
+    print(entry.pr_description, end="")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "-h", "--help"):
+    if argv and argv[0] not in ("build", "serve", "contribute", "-h", "--help"):
         argv.insert(0, "build")  # `legwork <repo>` shorthand
 
     parser = argparse.ArgumentParser(prog="legwork", description="Point it at a GitHub repo, get a working MCP tool back.")
@@ -156,10 +189,17 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("repo", help="github.com URL or owner/repo")
     serve = sub.add_parser("serve", help="run a built wrapper as an MCP server over stdio")
     serve.add_argument("repo", help="github.com URL or owner/repo")
+    contribute = sub.add_parser("contribute", help="write a built wrapper + manifest as a public-cache entry")
+    contribute.add_argument("repo", help="github.com URL or owner/repo")
+    contribute.add_argument(
+        "--out", type=Path, default=cache_writer.DEFAULT_CACHE_DIR, help="cache folder to write into (default: ./cache)"
+    )
     args = parser.parse_args(argv)
 
     if args.command == "build":
         return cmd_build(args.repo)
+    if args.command == "contribute":
+        return cmd_contribute(args.repo, args.out)
     return cmd_serve(args.repo)
 
 

@@ -405,7 +405,10 @@ they make it correctly built):
   commit SHA at synthesis time, synthesis date, wrapper language, source
   repo's license (redistribution-risk disclosure, per Constraints), the
   LLM model/version used for synthesis (provenance, per Outside Voice
-  eng-review pass 2), and the smoke-test result. This is the minimum needed to know when a cached
+  eng-review pass 2), and the smoke-test result. (T7 adds what's needed to
+  *run* the entry, not provenance: `license_flag`, the wrapper's
+  `entrypoint` description, the model's `install_command`, and the
+  `mcp_sdk` pin.) This is the minimum needed to know when a cached
   wrapper is stale and should be resynthesized against a new commit — the
   actual mechanism for "cache per repo-version" from the Cross-Model
   Perspective section. **Staleness trigger (Outside Voice, eng-review pass
@@ -943,13 +946,30 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         working FastMCP wrapper on attempt 2; JobFlow and phone-harness
         refused) and drove six fixes — see
         [legwork-live-runs-2026-09-25.md](legwork-live-runs-2026-09-25.md).
-- [ ] **T7 (P1, human: ~3h / CC: ~30min)** — cache-writer — Implement
+- [x] **T7 (P1, human: ~3h / CC: ~30min)** — cache-writer — Implement
       manifest (repo URL, SHA, date, language, license, model/version,
       smoke-test result), key-scrub before any write, verbatim-copy check,
       license flag.
       - Surfaced by: CEO Review Findings #4, #6; Outside Voice (both passes)
-      - Files: `legwork/cache_writer.py` (planned)
+      - Files: `legwork/cache_writer.py`, `legwork contribute <repo> [--out DIR]`
       - Verify: unit tests for scrub-blocks-write, verbatim-copy-blocks-write
+      - **DONE, 2026-09-26.** `legwork contribute <repo>` turns the saved
+        build into `cache/<owner>__<repo>/{wrapper.py, manifest.json}` and
+        prints the PR description. Checks, all before anything is written:
+        (1) verbatim copy — 50+ consecutive words shared with any file of
+        the clone, compared case- and whitespace-insensitively, blocks;
+        (2) smoke test — the wrapper's self-test re-runs in the sandbox,
+        network off, so the recorded result is measured at write time;
+        (3) key scrub over wrapper, manifest and PR text — common key
+        formats plus the configured `LEGWORK_LLM_API_KEY` value in any
+        format; the error names the pattern, never the match. The write
+        itself is staged in a temp folder and renamed into place, so a
+        failure never leaves a partial entry. License is read offline from
+        the clone's LICENSE/COPYING files; GPL/AGPL, none, or unrecognized
+        set `license_flag` and a warning line in the PR text, without
+        blocking. Commit SHA comes from the kept clone. 22 new tests
+        (166 total); live-checked on the real reverify build (MIT, self-test
+        passed, no copy, scrub clean with the real key loaded).
 - [ ] **T8 (P2, human: ~2h / CC: ~20min)** — cache-writer — Implement
       staleness check on next contribution attempt (compare cached SHA to
       current repo SHA, flag mismatch).

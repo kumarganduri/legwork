@@ -151,3 +151,17 @@ def fetch(url: str, dest: Path) -> ClonedRepo:
     ref = check_repo(url)
     path = clone_repo(ref, dest)
     return ClonedRepo(ref=ref, path=path)
+
+
+def head_sha(clone: Path) -> str:
+    """The commit a clone is at — what a wrapper was synthesized against."""
+    result = subprocess.run(
+        ["git", "-C", str(clone), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RepoAccessError(f"Couldn't read the commit of {clone}: {result.stderr.strip()}")
+    return result.stdout.strip()

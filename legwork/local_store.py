@@ -1,5 +1,6 @@
 """Where built wrappers live on this machine, so `legwork serve` can find
-them again. Local only — the shared, versioned public cache is T7.
+them again. Local only — cache_writer turns a build into a public-cache
+entry (`legwork contribute`).
 
 Layout under LEGWORK_HOME (default ~/.legwork):
 
