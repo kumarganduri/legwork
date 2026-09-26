@@ -5,8 +5,8 @@ description = "Point it at a GitHub repo, get a working MCP tool back."
 requires-python = ">=3.10"
 dependencies = []
 
-# project.scripts (the `legwork` CLI entrypoint) is added once the CLI
-# itself exists — not yet, T2 is just the repo-fetcher module.
+[project.scripts]
+legwork = "legwork.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8.0"]

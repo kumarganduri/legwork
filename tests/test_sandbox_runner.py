@@ -6,6 +6,7 @@ non-macOS since sandbox-exec is macOS-only (see module docstring for why)."""
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import socket
@@ -185,3 +186,51 @@ def test_successful_invoke_returns_execution_result(tmp_path):
     assert result.exit_code == 0
     assert result.stdout.strip() == "hello"
     assert result.duration_seconds >= 0
+
+
+# --- workdir under $HOME (saved wrappers live in ~/.legwork) ---------------
+
+
+def test_venv_in_a_workdir_under_home_runs():
+    """Python resolves its own binary's real path at startup, which stats
+    every parent folder; those are under $HOME, which the sandbox otherwise
+    denies. Failed with 'realpath: Operation not permitted' before the
+    ancestor-metadata allowance."""
+    root = Path.home() / f".legwork-test-{os.getpid()}"
+    workdir = root / "build" / "attempt-1"
+    workdir.mkdir(parents=True)
+    sibling = root / "sibling-secret.txt"
+    sibling.write_text("still off limits")
+    try:
+        install([SYSTEM_PYTHON, "-m", "venv", str(workdir / ".venv")], workdir)
+        venv_python = str(workdir / ".venv" / "bin" / "python")
+        result = invoke([venv_python, "-c", "import os; print(os.getcwd())"], workdir)
+        assert result.stdout.strip() == str(workdir.resolve())
+        with pytest.raises(WrapperRuntimeError, match="PermissionError|Operation not permitted"):
+            invoke([venv_python, "-c", f"open({str(sibling)!r}).read()"], workdir)
+    finally:
+        shutil.rmtree(root)
+
+
+# --- exec_serve: what `legwork serve` hands to sandbox-exec -----------------
+
+
+def test_exec_serve_uses_no_network_profile_and_minimal_env(tmp_path, monkeypatch):
+    from legwork import sandbox_runner
+
+    monkeypatch.setenv("LEGWORK_LLM_API_KEY", "sk-should-not-leak")
+    captured = {}
+
+    def fake_execve(path, args, env):
+        captured.update(path=path, args=args, env=env)
+        raise SystemExit(0)
+
+    monkeypatch.chdir(tmp_path)
+    with patch("legwork.sandbox_runner.os.execve", side_effect=fake_execve), pytest.raises(SystemExit):
+        sandbox_runner.exec_serve(["/bin/echo", "hi"], tmp_path, {"EXTRA": "1"})
+
+    profile = Path(captured["args"][2]).read_text()
+    assert "(allow network*)" not in profile
+    assert captured["args"][3:] == ["/bin/echo", "hi"]
+    assert "LEGWORK_LLM_API_KEY" not in captured["env"]
+    assert captured["env"]["EXTRA"] == "1"

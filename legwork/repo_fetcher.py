@@ -77,7 +77,7 @@ class ClonedRepo:
     path: Path
 
 
-def _parse_repo_url(url: str) -> RepoRef:
+def parse_repo_url(url: str) -> RepoRef:
     url = url.strip()
     match = _FULL_URL_RE.match(url) or _SHORTHAND_RE.match(url)
     if not match:
@@ -95,7 +95,7 @@ def check_repo(url: str) -> RepoRef:
     Does not clone — this is the cheap precondition check that runs before
     paying for a git clone.
     """
-    ref = _parse_repo_url(url)
+    ref = parse_repo_url(url)
     api_url = GITHUB_API.format(owner=ref.owner, repo=ref.repo)
     request = urllib.request.Request(
         api_url, headers={"Accept": "application/vnd.github+json"}

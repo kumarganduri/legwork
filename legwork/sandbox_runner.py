@@ -68,6 +68,7 @@ to PATH so `pip`/`python` resolve there, not to Legwork's own environment).
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -75,6 +76,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
 INSTALL_TIMEOUT_SECONDS = 120
 INVOKE_TIMEOUT_SECONDS = 60
@@ -154,6 +156,17 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
         f'(allow file-read* (subpath "{real_workdir}"))',
         f'(allow file-write* (subpath "{real_workdir}"))',
     ]
+    # A workdir under $HOME (e.g. saved wrappers in ~/.legwork): Python
+    # resolves its own binary's real path at startup, which stats every
+    # parent directory, and fails with "realpath: Operation not permitted"
+    # when those are denied. Allow metadata (not contents, not siblings) on
+    # exactly the ancestor directories between $HOME and the workdir.
+    home_path, workdir_path = Path(home), Path(real_workdir)
+    if workdir_path.is_relative_to(home_path):
+        for ancestor in [workdir_path, *workdir_path.parents]:
+            if not ancestor.is_relative_to(home_path):
+                break
+            lines.append(f'(allow file-read-metadata (literal "{ancestor}"))')
     if allow_network:
         lines.append("(allow network*)")
     return "\n".join(lines)
@@ -264,3 +277,22 @@ def invoke(
             f"{' '.join(command)!r} failed (exit {result.exit_code}): {result.stderr.strip()}"
         )
     return result
+
+
+def exec_serve(command: list[str], workdir: Path, extra_env: dict[str, str] | None = None) -> NoReturn:
+    """Replace this process with `command` running under the invoke-phase
+    policy (network off, reads/writes confined to `workdir`, minimal env),
+    with no timeout: an MCP server lives as long as the client that launched
+    it, and stdio is inherited directly because stdio IS the MCP transport.
+    Never returns. The profile is written into `workdir` rather than a temp
+    file, since nothing is left running to delete a temp file afterwards."""
+    _check_backend_available()
+    profile_path = workdir / ".legwork-serve.sb"
+    profile_path.write_text(_generate_profile(workdir, allow_network=False))
+    os.chdir(workdir)
+    sandbox_exec = shutil.which("sandbox-exec")
+    os.execve(
+        sandbox_exec,
+        ["sandbox-exec", "-f", str(profile_path), *command],
+        _build_env(workdir, extra_env),
+    )

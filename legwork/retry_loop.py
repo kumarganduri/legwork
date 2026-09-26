@@ -28,6 +28,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,6 +99,12 @@ class RunResult:
     install_command: str | None
     attempts: list[AttemptLog] = field(default_factory=list)
     final_error: str | None = None
+    # The successful attempt's folder (wrapper.py + its .venv), for serving.
+    attempt_dir: Path | None = None
+
+
+def _no_progress(_message: str) -> None:
+    pass
 
 
 def _python_version(path: str) -> tuple[int, int] | None:
@@ -137,10 +144,12 @@ def _run_one_attempt(
     readme_content: str,
     prior_failures: list[str],
     llm_config: LLMConfig,
+    progress: Callable[[str], None] = _no_progress,
 ) -> codegen.WrapperDraft:
     """One wrapper-repair attempt: ask the LLM, install into a fresh venv
     isolated from Legwork's own environment, invoke the self-test. Raises
     on any failure — caller decides retryable vs fail-fast."""
+    progress("asking the model for a wrapper")
     messages = codegen.build_messages(readme_content, prior_failures)
     response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
     draft = codegen.parse_response(response_text)
@@ -165,16 +174,25 @@ def _run_one_attempt(
         f" && {draft.install_command}"
         f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
     )
+    progress("installing dependencies in a sandboxed venv")
     sandbox_runner.install(["/bin/sh", "-c", combined_install_cmd], attempt_dir, extra_env=venv_env)
 
+    progress("running the wrapper's self-test (network off)")
     sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
 
     return draft
 
 
-def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
+def run(
+    repo_url: str,
+    workdir: Path,
+    llm_config: LLMConfig,
+    progress: Callable[[str], None] = _no_progress,
+) -> RunResult:
     """The T6 entrypoint. Fetches, scans, parses, then runs up to
-    MAX_WRAPPER_ATTEMPTS codegen+install+invoke attempts, each logged."""
+    MAX_WRAPPER_ATTEMPTS codegen+install+invoke attempts, each logged.
+    `progress` gets one short status line per stage (a build takes
+    minutes; the CLI shows these so it doesn't look hung)."""
     deadline = time.monotonic() + TOTAL_RUN_TIMEOUT_SECONDS
 
     def _check_deadline() -> None:
@@ -185,10 +203,13 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
     # failure here aborts before attempt 1 is even logged — these aren't
     # wrapper-repair attempts at all.
     _check_deadline()
+    progress(f"cloning {repo_url}")
     cloned = repo_fetcher.fetch(repo_url, workdir / "repo")
     _check_deadline()
+    progress("scanning the source for obfuscated code")
     obfuscation_scanner.scan(cloned.path)
     _check_deadline()
+    progress("reading the README")
     readme = readme_parser.parse_readme(cloned.path)
 
     attempts: list[AttemptLog] = []
@@ -199,8 +220,11 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
         what_changed = "initial attempt" if attempt_number == 1 else f"retry after: {prior_failures[-1]}"
         attempt_dir = workdir / f"attempt-{attempt_number}"
 
+        def attempt_progress(message: str, n: int = attempt_number) -> None:
+            progress(f"attempt {n}/{MAX_WRAPPER_ATTEMPTS}: {message}")
+
         try:
-            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config)
+            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config, attempt_progress)
         except FAIL_FAST_EXCEPTIONS as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
@@ -209,6 +233,7 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
             prior_failures.append(detail)
+            attempt_progress(f"failed ({type(exc).__name__})")
             if attempt_number == MAX_WRAPPER_ATTEMPTS:
                 summary = "; ".join(f"attempt {a.attempt_number}: {a.detail}" for a in attempts)
                 return RunResult(
@@ -227,6 +252,7 @@ def run(repo_url: str, workdir: Path, llm_config: LLMConfig) -> RunResult:
                 install_command=draft.install_command,
                 attempts=attempts,
                 final_error=None,
+                attempt_dir=attempt_dir,
             )
 
     raise AssertionError("unreachable: loop always returns")  # pragma: no cover
