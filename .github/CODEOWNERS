@@ -1,0 +1,5 @@
+# Cache entries run on users' machines: every change needs the maintainer's review.
+/cache/ @kumarganduri
+# So do the checks and release workflows that guard them.
+/.github/ @kumarganduri
+/scripts/check_cache_entry.py @kumarganduri

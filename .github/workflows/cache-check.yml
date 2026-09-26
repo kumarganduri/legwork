@@ -1,0 +1,49 @@
+name: cache-check
+
+# Every PR that touches cache/ adds code that users' builds will install
+# (network on) and run. This checks each changed entry the way a build
+# would use it. The checker and Legwork itself come from the base branch,
+# never from the PR, so a PR can't change what checks it.
+on:
+  pull_request:
+    paths: ["cache/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+      - name: Take only cache/ from the PR
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch -q origin "pull/$PR/head:pr"
+          changed=$(git diff --name-only "$(git merge-base "$BASE" pr)" pr)
+          outside=$(printf '%s\n' "$changed" | grep -v '^cache/' || true)
+          if [ -n "$outside" ]; then
+            echo "::error::A cache PR may only change files under cache/. Also changed: $outside"
+            exit 1
+          fi
+          git checkout pr -- cache/
+          printf '%s\n' "$changed" | grep -E '^cache/[^/]+/' | cut -d/ -f2 | sort -u > "$RUNNER_TEMP/entries"
+          echo "Entries to check:"; cat "$RUNNER_TEMP/entries"
+      - name: Install bubblewrap (Legwork's Linux sandbox)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
+          python3 -c "from legwork.sandbox_runner import BWRAP_APPARMOR_PROFILE as p; print(p, end='')" > /tmp/bwrap.aa
+          sudo cp /tmp/bwrap.aa /etc/apparmor.d/bwrap && sudo apparmor_parser -r /etc/apparmor.d/bwrap
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: Check each entry
+        run: |
+          entries=""
+          while read -r e; do [ -d "cache/$e" ] && entries="$entries cache/$e"; done < "$RUNNER_TEMP/entries"
+          if [ -z "$entries" ]; then echo "No entries added or changed (removals need no check)."; exit 0; fi
+          uv run python scripts/check_cache_entry.py $entries
