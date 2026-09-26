@@ -15,7 +15,7 @@ from legwork.obfuscation_scanner import (
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-# --- the real payload (primary fixture, per design doc T10) ----------------
+# --- the real payload's code, defanged (primary fixture, per design doc T10) --
 
 
 def test_real_payload_file_scans_without_importing_or_executing():

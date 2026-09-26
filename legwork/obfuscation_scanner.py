@@ -10,8 +10,9 @@ literals resolved into an exec() call via
 `getattr(__import__(xor_decoded), xor_decoded)`, with zero literal
 `exec(` or `eval(` token anywhere in the source — built specifically to
 evade a naive grep for those two names. See
-tests/fixtures/ai_data_extractor_payload.py for the real file (captured
-from the public repo; used here purely as a static-analysis test corpus).
+tests/fixtures/ai_data_extractor_payload.py for the real file's code
+(captured from the public repo, payload bytes randomized so it's inert;
+used purely as a static-analysis test corpus).
 
 Scope, stated plainly: this is a Python-AST scanner. It covers `.py` files
 in the clone; it does not (in v1) analyze other languages (compiled

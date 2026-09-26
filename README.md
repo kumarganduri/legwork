@@ -160,9 +160,10 @@ uv sync
 uv run pytest        # the sandbox and integration tests need macOS
 ```
 
-`tests/fixtures/ai_data_extractor_payload.py` is a **real malicious file**,
-kept as a scanner test case. Tests only ever parse it with `ast`. Never
-import or run it.
+`tests/fixtures/ai_data_extractor_payload.py` is a real malicious file with
+its payload destroyed (every encoded byte randomized, code shape kept), so
+the scanner is tested against a real technique. Tests only parse it with
+`ast`; see `tests/fixtures/README.md`.
 
 ## License
 
