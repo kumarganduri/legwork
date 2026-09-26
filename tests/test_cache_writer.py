@@ -17,7 +17,7 @@ from legwork.cache_writer import (
     SmokeTestFailedError,
     VerbatimCopyDetectedError,
 )
-from legwork.repo_fetcher import RepoRef
+from legwork.repo_fetcher import RepoAccessError, RepoRef, remote_head_sha
 from legwork.sandbox_runner import WrapperRuntimeError
 
 REF = RepoRef("owner", "repo")
@@ -54,6 +54,18 @@ def _env(tmp_path, monkeypatch):
 def smoke_test():
     with patch("legwork.cache_writer.sandbox_runner.invoke") as invoke:
         yield invoke
+
+
+@pytest.fixture(autouse=True)
+def upstream():
+    """The repo's current commit on GitHub. Defaults to whatever the saved
+    build was cloned at (up to date); tests set `return_value` to move it."""
+
+    def build_sha(url):
+        return _git(Path(local_store.load_current(REF).attempt_dir).parent / "repo", "rev-parse", "HEAD")
+
+    with patch("legwork.cache_writer.repo_fetcher.remote_head_sha", side_effect=build_sha) as remote:
+        yield remote
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -224,6 +236,89 @@ def test_copyleft_is_flagged_in_manifest_and_pr_but_still_written(tmp_path):
     assert (entry.path / "manifest.json").exists()
 
 
+# --- staleness (T8: flagged, never blocks) -------------------------------------------
+
+NEWER = "f" * 40
+
+
+def _existing_entry(cache_dir: Path, sha: str) -> None:
+    (cache_dir / "owner__repo").mkdir(parents=True)
+    (cache_dir / "owner__repo" / "manifest.json").write_text(json.dumps({"commit_sha": sha}))
+
+
+def test_up_to_date_build_has_no_staleness_warning(tmp_path, upstream):
+    entry = cache_writer.write_entry(REF, make_build(), tmp_path / "cache")
+    assert entry.warnings == []
+    upstream.assert_called_once_with("https://github.com/owner/repo.git")
+
+
+def test_stale_existing_entry_is_flagged_and_replaced(tmp_path):
+    _existing_entry(tmp_path / "cache", "a" * 40)
+    record = make_build()
+    entry = cache_writer.write_entry(REF, record, tmp_path / "cache")
+    expected = (
+        f"Cache entry may be stale — repo has new commits. The existing entry is from {'a' * 12}; "
+        f"owner/repo is now at {entry.manifest['commit_sha'][:12]}."
+    )
+    assert [str(w) for w in entry.warnings] == [expected]
+    assert all(isinstance(w, cache_writer.StaleCacheEntryWarning) for w in entry.warnings)
+    assert "stale" not in entry.pr_description  # the new entry is current
+    assert json.loads((entry.path / "manifest.json").read_text())["commit_sha"] != "a" * 40
+
+
+def test_existing_entry_at_the_current_commit_is_not_flagged(tmp_path, upstream):
+    record = make_build()
+    _existing_entry(tmp_path / "cache", _git(Path(record.attempt_dir).parent / "repo", "rev-parse", "HEAD"))
+    assert cache_writer.write_entry(REF, record, tmp_path / "cache").warnings == []
+
+
+def test_a_build_behind_the_repo_is_flagged_in_the_pr_but_still_written(tmp_path, upstream):
+    upstream.side_effect = None
+    upstream.return_value = NEWER
+    entry = cache_writer.write_entry(REF, make_build(), tmp_path / "cache")
+    assert len(entry.warnings) == 1
+    assert "This build may be stale" in str(entry.warnings[0])
+    assert "legwork owner/repo" in str(entry.warnings[0])
+    assert f"⚠️ This build may be stale — repo has new commits. It's from {entry.manifest['commit_sha'][:12]}" in entry.pr_description
+    assert (entry.path / "manifest.json").exists()
+
+
+def test_both_stale_gives_both_warnings(tmp_path, upstream):
+    upstream.side_effect = None
+    upstream.return_value = NEWER
+    _existing_entry(tmp_path / "cache", "a" * 40)
+    entry = cache_writer.write_entry(REF, make_build(), tmp_path / "cache")
+    assert [str(w).split(" — ")[0] for w in entry.warnings] == ["Cache entry may be stale", "This build may be stale"]
+
+
+def test_offline_staleness_check_warns_and_still_writes(tmp_path, upstream):
+    upstream.side_effect = RepoAccessError("Could not resolve host: github.com")
+    entry = cache_writer.write_entry(REF, make_build(), tmp_path / "cache")
+    assert "Couldn't check owner/repo for new commits" in str(entry.warnings[0])
+    assert (entry.path / "manifest.json").exists()
+
+
+def test_unreadable_existing_manifest_is_not_a_crash(tmp_path):
+    (tmp_path / "cache" / "owner__repo").mkdir(parents=True)
+    (tmp_path / "cache" / "owner__repo" / "manifest.json").write_text("{not json")
+    assert cache_writer.write_entry(REF, make_build(), tmp_path / "cache").warnings == []
+
+
+def test_remote_head_sha_reads_a_real_remote(tmp_path):
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    _git(origin, "init", "-q")
+    (origin / "f").write_text("1")
+    _git(origin, "add", ".")
+    _git(origin, "commit", "-qm", "one")
+    assert remote_head_sha(str(origin)) == _git(origin, "rev-parse", "HEAD")
+
+
+def test_remote_head_sha_on_a_missing_repo_raises(tmp_path):
+    with pytest.raises(RepoAccessError, match="Couldn't read the current commit"):
+        remote_head_sha(str(tmp_path / "nope"))
+
+
 # --- CLI ----------------------------------------------------------------------------
 
 
@@ -233,6 +328,14 @@ def test_contribute_command_writes_the_entry_and_prints_the_pr_description(tmp_p
     out = capsys.readouterr().out
     assert "Add Legwork wrapper for owner/repo" in out
     assert (tmp_path / "cache" / "owner__repo" / "manifest.json").exists()
+
+
+def test_contribute_command_prints_staleness_warnings(tmp_path, capsys, upstream):
+    make_build()
+    upstream.side_effect = None
+    upstream.return_value = NEWER
+    assert cli.main(["contribute", "owner/repo", "--out", str(tmp_path / "cache")]) == 0
+    assert "Warning: This build may be stale" in capsys.readouterr().out
 
 
 def test_contribute_command_reports_a_block_and_exits_1(tmp_path, capsys, smoke_test):

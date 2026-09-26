@@ -12,6 +12,7 @@ pass 2, 2026-09-22 — see design doc "Clone timing").
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import urllib.error
@@ -151,6 +152,26 @@ def fetch(url: str, dest: Path) -> ClonedRepo:
     ref = check_repo(url)
     path = clone_repo(ref, dest)
     return ClonedRepo(ref=ref, path=path)
+
+
+def remote_head_sha(url: str) -> str:
+    """The commit the repo's default branch is at right now, without cloning."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", url, "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            # A missing repo must fail, not stop and ask for a username.
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RepoAccessError(f"Checking {url} for new commits timed out") from exc
+    fields = result.stdout.split()
+    if result.returncode != 0 or not fields:
+        raise RepoAccessError(f"Couldn't read the current commit of {url}: {result.stderr.strip() or 'no HEAD'}")
+    return fields[0]
 
 
 def head_sha(clone: Path) -> str:

@@ -208,6 +208,8 @@ def cmd_contribute(repo: str, out: Path) -> int:
     print("  wrapper.py, manifest.json")
     if entry.manifest["license_flag"]:
         print(f"  License flag: {entry.manifest['license_flag']}")
+    for warning in entry.warnings:
+        print(f"  Warning: {warning}")
     print("\nOpen a PR to the Legwork repo with that folder under cache/. PR description:\n")
     print(entry.pr_description, end="")
     return 0

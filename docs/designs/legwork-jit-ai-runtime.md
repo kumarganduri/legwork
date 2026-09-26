@@ -971,12 +971,24 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
-- [ ] **T8 (P2, human: ~2h / CC: ~20min)** — cache-writer — Implement
+- [x] **T8 (P2, human: ~2h / CC: ~20min)** — cache-writer — Implement
       staleness check on next contribution attempt (compare cached SHA to
       current repo SHA, flag mismatch).
       - Surfaced by: Outside Voice (eng-review pass 2)
-      - Files: `legwork/cache_writer.py` (planned)
+      - Files: `legwork/cache_writer.py`, `legwork/repo_fetcher.py`
       - Verify: unit test for SHA mismatch flagging
+      - **DONE, 2026-09-26.** `legwork contribute` reads the repo's current
+        commit with `git ls-remote` (no clone, no GitHub API quota) and
+        compares it with two SHAs: the existing entry's `commit_sha` in the
+        cache folder ("Cache entry may be stale — repo has new commits"),
+        and the build being contributed (same warning plus "rebuild with
+        `legwork <repo>`", and a ⚠️ line in the PR description). Both
+        are `StaleCacheEntryWarning`s returned and printed, never raised —
+        the write goes ahead. Offline or an unreachable repo gives a
+        "couldn't check" warning, not a failure. 10 new tests (181 total),
+        including real `git ls-remote` against a local repo; live-checked
+        against 2akouwu/reverify (current → no warning; entry with an older
+        SHA → flagged and replaced).
 - [x] **T9 (P2, human: ~1h / CC: ~10min)** — packaging — Set up `uv`/`uvx`
       packaging (`uvx legwork <repo-url>`, `uv tool install legwork`).
       - Surfaced by: Architecture review (eng review)

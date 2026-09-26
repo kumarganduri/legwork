@@ -22,6 +22,11 @@ Checks run in this order, and every one runs before anything is written:
    checked for key-shaped strings and for the configured LLM key itself.
    Blocks the whole write: SecretScrubTriggeredError.
 
+Staleness is a warning, not a block (T8): on each contribution the repo's
+current commit is compared with the entry already in the cache and with
+the build being contributed. There's no polling — an entry nobody
+contributes again stays silently stale.
+
 The license is a flag, not a block: GPL/AGPL, no license file, or one we
 can't recognize gets `license_flag` in the manifest and a warning line in
 the PR description, for the human who merges it to decide.
@@ -93,6 +98,10 @@ class SecretScrubTriggeredError(Exception):
     """A key-shaped string is in something about to be written."""
 
 
+class StaleCacheEntryWarning(UserWarning):
+    """Returned, never raised: the repo has commits newer than an entry."""
+
+
 @dataclass(frozen=True)
 class LicenseInfo:
     id: str
@@ -104,6 +113,7 @@ class CacheEntry:
     path: Path
     manifest: dict
     pr_description: str
+    warnings: list[StaleCacheEntryWarning]
 
 
 # --- license ----------------------------------------------------------------
@@ -213,6 +223,44 @@ def _known_secrets() -> list[str]:
     return [key] if len(key) >= 8 else []
 
 
+# --- staleness -------------------------------------------------------------------
+
+
+def _entry_sha(entry_dir: Path) -> str | None:
+    try:
+        return json.loads((entry_dir / "manifest.json").read_text())["commit_sha"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def check_staleness(ref: RepoRef, build_sha: str, entry_dir: Path) -> tuple[list[StaleCacheEntryWarning], bool]:
+    """Compare the repo's current commit with the existing cache entry and
+    with this build. Returns the warnings and whether this build is behind."""
+    try:
+        current = repo_fetcher.remote_head_sha(ref.clone_url)
+    except repo_fetcher.RepoAccessError as exc:
+        return [StaleCacheEntryWarning(f"Couldn't check {ref.slug} for new commits, so staleness is unknown. {exc}")], False
+
+    warnings = []
+    cached = _entry_sha(entry_dir)
+    if cached and cached != current:
+        warnings.append(
+            StaleCacheEntryWarning(
+                f"Cache entry may be stale — repo has new commits. The existing entry is from "
+                f"{cached[:12]}; {ref.slug} is now at {current[:12]}."
+            )
+        )
+    build_behind = build_sha != current
+    if build_behind:
+        warnings.append(
+            StaleCacheEntryWarning(
+                f"This build may be stale — repo has new commits. It's from {build_sha[:12]}; "
+                f"{ref.slug} is now at {current[:12]}. Rebuild with `legwork {ref.slug}` to contribute a current wrapper."
+            )
+        )
+    return warnings, build_behind
+
+
 # --- manifest + PR --------------------------------------------------------------
 
 
@@ -235,7 +283,7 @@ def build_manifest(
     }
 
 
-def pr_description(ref: RepoRef, manifest: dict) -> str:
+def pr_description(ref: RepoRef, manifest: dict, stale_warning: str | None = None) -> str:
     lines = [
         f"Add Legwork wrapper for {ref.slug}",
         "",
@@ -247,6 +295,8 @@ def pr_description(ref: RepoRef, manifest: dict) -> str:
     ]
     if manifest["license_flag"]:
         lines += ["", f"⚠️ License warning — {manifest['license_flag']}. Please check before merging."]
+    if stale_warning:
+        lines += ["", f"⚠️ {stale_warning}"]
     return "\n".join(lines) + "\n"
 
 
@@ -276,7 +326,8 @@ def _write_atomically(entry_dir: Path, files: dict[str, str]) -> None:
 def write_entry(ref: RepoRef, record: BuildRecord, cache_dir: Path = DEFAULT_CACHE_DIR) -> CacheEntry:
     """The T7 entrypoint. Runs every check, then writes the entry to
     `cache_dir/<owner>__<repo>/`. Raises VerbatimCopyDetectedError,
-    SmokeTestFailedError or SecretScrubTriggeredError with nothing written."""
+    SmokeTestFailedError or SecretScrubTriggeredError with nothing written.
+    Staleness comes back as warnings on the entry."""
     clone = Path(record.attempt_dir).parent / "repo"
     if not clone.is_dir():
         raise NoBuildError(f"The source clone for {ref.slug} is gone ({clone}) — rebuild with `legwork {ref.slug}`.")
@@ -284,8 +335,11 @@ def write_entry(ref: RepoRef, record: BuildRecord, cache_dir: Path = DEFAULT_CAC
 
     check_verbatim_copy(wrapper_code, clone)
     smoke_test = run_smoke_test(record)
-    manifest = build_manifest(ref, record, repo_fetcher.head_sha(clone), detect_license(clone), smoke_test)
-    pr_text = pr_description(ref, manifest)
+    build_sha = repo_fetcher.head_sha(clone)
+    entry_dir = cache_dir / f"{ref.owner}__{ref.repo}"
+    warnings, build_behind = check_staleness(ref, build_sha, entry_dir)
+    manifest = build_manifest(ref, record, build_sha, detect_license(clone), smoke_test)
+    pr_text = pr_description(ref, manifest, str(warnings[-1]) if build_behind else None)
 
     outputs = {
         "wrapper.py": wrapper_code,
@@ -299,6 +353,5 @@ def write_entry(ref: RepoRef, record: BuildRecord, cache_dir: Path = DEFAULT_CAC
                 f"Possible API key detected in output — write blocked. Found a {' and a '.join(hits)} in {name}."
             )
 
-    entry_dir = cache_dir / f"{ref.owner}__{ref.repo}"
     _write_atomically(entry_dir, outputs)
-    return CacheEntry(path=entry_dir, manifest=manifest, pr_description=pr_text)
+    return CacheEntry(path=entry_dir, manifest=manifest, pr_description=pr_text, warnings=warnings)
