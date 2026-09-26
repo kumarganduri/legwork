@@ -68,6 +68,7 @@ to PATH so `pip`/`python` resolve there, not to Legwork's own environment).
 
 from __future__ import annotations
 
+import functools
 import os
 import platform
 import shutil
@@ -84,7 +85,7 @@ INVOKE_TIMEOUT_SECONDS = 60
 # Deliberately narrow — no inherited secrets. /opt/homebrew is included
 # since that's where Homebrew-installed tools (including sandbox-exec's own
 # dependencies on some setups) live on Apple Silicon Macs.
-MINIMAL_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin"
+MINIMAL_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin"
 
 # Toolchains a README's install steps commonly need. Checked on
 # MINIMAL_PATH, the only PATH the sandbox sees — so ~/.cargo/bin, ~/go/bin
@@ -127,18 +128,112 @@ class ExecutionResult:
     duration_seconds: float
 
 
+_BWRAP_INSTALL_HINT = (
+    "Install bubblewrap: `sudo apt install bubblewrap` (Debian/Ubuntu), "
+    "`sudo dnf install bubblewrap` (Fedora), `sudo pacman -S bubblewrap` (Arch)."
+)
+
+
+@functools.lru_cache(maxsize=1)
+def _bwrap_probe_error() -> str | None:
+    """Why bwrap can't make a sandbox on this machine, or None if it can.
+    Checked once: installed isn't enough when unprivileged user namespaces
+    are turned off (e.g. Ubuntu 24.04's AppArmor restriction)."""
+    try:
+        result = subprocess.run(
+            ["bwrap", "--unshare-all", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "true"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return str(exc)
+    return None if result.returncode == 0 else (result.stderr.strip() or f"exit {result.returncode}")
+
+
 def _check_backend_available() -> None:
-    if platform.system() != "Darwin":
-        raise SandboxUnavailableError(
-            f"No sandbox backend for platform {platform.system()!r} — v1 only "
-            "implements macOS (sandbox-exec). Docker-based orchestration for "
-            "Linux/Windows is real follow-up work, not solved here."
-        )
-    if shutil.which("sandbox-exec") is None:
-        raise SandboxUnavailableError(
-            "sandbox-exec not found on PATH — expected to be present on macOS "
-            "by default. Refusing to run unsandboxed."
-        )
+    system = platform.system()
+    if system == "Darwin":
+        if shutil.which("sandbox-exec") is None:
+            raise SandboxUnavailableError(
+                "sandbox-exec not found on PATH — expected to be present on macOS "
+                "by default. Refusing to run unsandboxed."
+            )
+        return
+    if system == "Linux":
+        if shutil.which("bwrap") is None:
+            raise SandboxUnavailableError(
+                f"Legwork's Linux sandbox needs bubblewrap, which isn't installed. {_BWRAP_INSTALL_HINT} "
+                "Refusing to run unsandboxed."
+            )
+        error = _bwrap_probe_error()
+        if error:
+            raise SandboxUnavailableError(
+                f"bubblewrap is installed but can't create a sandbox here ({error}). Unprivileged user "
+                "namespaces are probably disabled; on Ubuntu 24.04+ that's the AppArmor setting "
+                "kernel.apparmor_restrict_unprivileged_userns. Refusing to run unsandboxed."
+            )
+        return
+    raise SandboxUnavailableError(
+        f"No sandbox backend for platform {system!r}: Legwork supports macOS (sandbox-exec) and "
+        "Linux (bubblewrap). Refusing to run unsandboxed."
+    )
+
+
+def available() -> bool:
+    """Whether this machine can run Legwork's sandbox at all."""
+    try:
+        _check_backend_available()
+    except SandboxUnavailableError:
+        return False
+    return True
+
+
+def _hidden_dirs() -> list[Path]:
+    """Home directories to replace with an empty tmpfs, parents first."""
+    home = Path.home().resolve()
+    candidates = {Path("/home"), Path("/root"), home}
+    keep = [p for p in candidates if p != Path("/") and p.is_dir()]
+    return sorted(keep, key=lambda p: len(p.parts))
+
+
+def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
+    """The Linux equivalent of _generate_profile: everything read-only, home
+    directories and every place local sockets live (/tmp, /run) replaced by
+    empty private tmpfs, only the workdir writable, and no network unless
+    `allow_network`. Local sockets — SSH agent, Docker, dbus — sit in
+    exactly those hidden places, so they're unreachable in both phases."""
+    real_workdir = str(workdir.resolve())
+    args = [
+        "bwrap",
+        "--unshare-all",
+        "--die-with-parent",
+        "--new-session",
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--tmpfs", "/tmp",
+        "--tmpfs", "/var/tmp",
+        "--tmpfs", "/run",
+    ]
+    if os.path.isdir("/var/run") and not os.path.islink("/var/run"):
+        args += ["--tmpfs", "/var/run"]
+    if allow_network:
+        args.append("--share-net")
+        # /etc/resolv.conf usually points into /run; put back only DNS.
+        for dns_dir in ("/run/systemd/resolve", "/run/NetworkManager", "/run/resolvconf"):
+            args += ["--ro-bind-try", dns_dir, dns_dir]
+    for hidden in _hidden_dirs():
+        args += ["--tmpfs", str(hidden)]
+    args += ["--bind", real_workdir, real_workdir, "--chdir", real_workdir]
+    return args
+
+
+def _sandboxed_argv(command: list[str], workdir: Path, allow_network: bool, profile_path: Path | None) -> list[str]:
+    if platform.system() == "Darwin":
+        return ["sandbox-exec", "-f", str(profile_path), *command]
+    return [*_bwrap_args(workdir, allow_network), "--", *command]
 
 
 def _generate_profile(workdir: Path, allow_network: bool) -> str:
@@ -230,16 +325,16 @@ def _build_env(workdir: Path, extra_env: dict[str, str] | None) -> dict[str, str
     real_workdir = workdir.resolve()
     tmp = real_workdir / ".tmp"
     tmp.mkdir(parents=True, exist_ok=True)
-    shim_dir = real_workdir / ".legwork-bin"
-    shim_dir.mkdir(exist_ok=True)
-    shim = shim_dir / "mktemp"
-    shim.write_text(_MKTEMP_SHIM)
-    shim.chmod(0o755)
-
     env = {"PATH": MINIMAL_PATH, "HOME": str(real_workdir), "TMPDIR": str(tmp)}
     if extra_env:
         env.update(extra_env)
-    env["PATH"] = f"{shim_dir}:{env['PATH']}"
+    if platform.system() == "Darwin":  # GNU mktemp honours TMPDIR itself
+        shim_dir = real_workdir / ".legwork-bin"
+        shim_dir.mkdir(exist_ok=True)
+        shim = shim_dir / "mktemp"
+        shim.write_text(_MKTEMP_SHIM)
+        shim.chmod(0o755)
+        env["PATH"] = f"{shim_dir}:{env['PATH']}"
     return env
 
 
@@ -253,13 +348,13 @@ def _run_sandboxed(
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
-    profile = _generate_profile(workdir, allow_network=allow_network)
+    profile_path = None
+    if platform.system() == "Darwin":
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sb", delete=False) as f:
+            f.write(_generate_profile(workdir, allow_network=allow_network))
+            profile_path = Path(f.name)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".sb", delete=False) as f:
-        f.write(profile)
-        profile_path = f.name
-
-    full_command = ["sandbox-exec", "-f", profile_path] + command
+    full_command = _sandboxed_argv(command, workdir, allow_network, profile_path)
     started = time.monotonic()
     try:
         result = subprocess.run(
@@ -276,7 +371,8 @@ def _run_sandboxed(
             f"{' '.join(command)!r} exceeded {timeout}s inside the sandbox"
         ) from exc
     finally:
-        Path(profile_path).unlink(missing_ok=True)
+        if profile_path is not None:
+            profile_path.unlink(missing_ok=True)
     duration = time.monotonic() - started
 
     return ExecutionResult(
@@ -349,12 +445,10 @@ def exec_serve(command: list[str], workdir: Path, extra_env: dict[str, str] | No
     Never returns. The profile is written into `workdir` rather than a temp
     file, since nothing is left running to delete a temp file afterwards."""
     _check_backend_available()
-    profile_path = workdir / ".legwork-serve.sb"
-    profile_path.write_text(_generate_profile(workdir, allow_network=False))
+    profile_path = None
+    if platform.system() == "Darwin":
+        profile_path = workdir / ".legwork-serve.sb"
+        profile_path.write_text(_generate_profile(workdir, allow_network=False))
+    argv = _sandboxed_argv(command, workdir, allow_network=False, profile_path=profile_path)
     os.chdir(workdir)
-    sandbox_exec = shutil.which("sandbox-exec")
-    os.execve(
-        sandbox_exec,
-        ["sandbox-exec", "-f", str(profile_path), *command],
-        _build_env(workdir, extra_env),
-    )
+    os.execve(shutil.which(argv[0]), argv, _build_env(workdir, extra_env))

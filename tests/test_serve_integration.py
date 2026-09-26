@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
 from unittest.mock import patch
 
 import pytest
 
-from legwork import cli, local_store
+from legwork import cli, local_store, sandbox_runner
 from legwork.repo_fetcher import RepoRef
 from tests.mcp_stdio_client import StdioMCPClient
 
@@ -56,7 +55,7 @@ if __name__ == "__main__":
 '''
 
 
-@pytest.mark.skipif(shutil.which("sandbox-exec") is None, reason="sandbox-exec is macOS-only")
+@pytest.mark.skipif(not sandbox_runner.available(), reason="no sandbox backend on this machine")
 def test_build_then_serve_over_stdio_with_a_real_mcp_client(tmp_path, monkeypatch):
     monkeypatch.setenv("LEGWORK_HOME", str(tmp_path))
     monkeypatch.setenv("LEGWORK_LLM_ENDPOINT", "https://unused.example.com/v1")

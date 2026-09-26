@@ -4,13 +4,30 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
-    # The sandbox is macOS sandbox-exec, so the real tests need macOS.
-    runs-on: macos-latest
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      LEGWORK_REQUIRE_SANDBOX: "1"  # fail, don't skip, if the sandbox can't start
     steps:
       - uses: actions/checkout@v4
+      - name: Install bubblewrap (Linux sandbox)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
+      - name: Does bubblewrap work out of the box?
+        if: runner.os == 'Linux'
+        run: |
+          bwrap --unshare-all --ro-bind / / --dev /dev --proc /proc true && echo "bwrap OK" || {
+            echo "bwrap failed; kernel.apparmor_restrict_unprivileged_userns=$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)"
+            exit 1
+          }
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
       - run: uv run pytest -q

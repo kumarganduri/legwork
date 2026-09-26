@@ -292,9 +292,13 @@ def _iter_source_files(root: Path):
     """(path, scanner) for every Python and JS/TS file worth scanning."""
     yield from ((path, scan_file) for path in _iter_python_files(root))
     for path in sorted(root.rglob("*")):
-        if path.suffix in _JS_SUFFIXES and path.is_file() and not path.is_symlink():
-            if not any(part in _SKIP_DIRS for part in path.relative_to(root).parts):
-                yield path, scan_js_file
+        if (
+            path.suffix in _JS_SUFFIXES
+            and path.is_file()
+            and not path.is_symlink()
+            and not any(part in _SKIP_DIRS for part in path.relative_to(root).parts)
+        ):
+            yield path, scan_js_file
 
 
 def is_blocking(findings: list[Finding]) -> bool:

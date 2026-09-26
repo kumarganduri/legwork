@@ -13,13 +13,13 @@ correctly inside this exact sandbox."""
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from legwork import sandbox_runner
 from legwork.llm_client import LLMConfig
 from legwork.repo_fetcher import RepoAccessError, fetch
 from legwork.retry_loop import run
@@ -66,7 +66,7 @@ def _network_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(shutil.which("sandbox-exec") is None, reason="sandbox-exec not available")
+@pytest.mark.skipif(not sandbox_runner.available(), reason="no sandbox backend on this machine")
 @pytest.mark.skipif(not _network_available(), reason="GitHub unreachable")
 def test_full_pipeline_real_fetch_real_sandbox_mocked_llm(tmp_path):
     config = LLMConfig(endpoint="https://unused.example.com", api_key="unused", model="unused")

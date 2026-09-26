@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
+from legwork import sandbox_runner
 from legwork.sandbox_runner import (
     DependencyInstallError,
     InstallTimeoutExceeded,
@@ -26,9 +27,12 @@ from legwork.sandbox_runner import (
     invoke,
 )
 
-pytestmark = pytest.mark.skipif(
-    platform.system() != "Darwin", reason="sandbox-exec is macOS-only (v1 scope, see module docstring)"
-)
+pytestmark = pytest.mark.skipif(not sandbox_runner.available(), reason="no sandbox backend on this machine")
+macos_only = pytest.mark.skipif(platform.system() != "Darwin", reason="tests a sandbox-exec mechanism")
+linux_only = pytest.mark.skipif(platform.system() != "Linux", reason="tests the bubblewrap backend")
+# Outside the sandbox, a hidden file reads as "not permitted" on macOS and
+# "doesn't exist" on Linux (home is an empty tmpfs there).
+_HIDDEN = "PermissionError|Operation not permitted|FileNotFoundError|No such file"
 
 # Deliberately NOT sys.executable: in this dev checkout that resolves to
 # .venv/bin/python, which lives under $HOME — and the sandbox correctly
@@ -51,10 +55,12 @@ def _network_reachable() -> bool:
 # --- backend detection -------------------------------------------------
 
 
-def test_unavailable_on_non_darwin_platform(tmp_path):
-    with patch("legwork.sandbox_runner.platform.system", return_value="Linux"):
-        with pytest.raises(SandboxUnavailableError, match="Linux"):
-            install([SYSTEM_PYTHON, "-c", "print(1)"], tmp_path)
+def test_unavailable_on_an_unsupported_platform(tmp_path):
+    with (
+        patch("legwork.sandbox_runner.platform.system", return_value="Windows"),
+        pytest.raises(SandboxUnavailableError, match="Windows"),
+    ):
+        install([SYSTEM_PYTHON, "-c", "print(1)"], tmp_path)
 
 
 # --- filesystem confinement ----------------------------------------------
@@ -89,7 +95,7 @@ def test_invoke_read_elsewhere_in_home_fails(tmp_path):
     marker = Path.home() / f"legwork-read-test-{id(tmp_path)}.txt"
     marker.write_text("should not be readable from inside the sandbox")
     try:
-        with pytest.raises(WrapperRuntimeError, match="PermissionError|Operation not permitted"):
+        with pytest.raises(WrapperRuntimeError, match=_HIDDEN):
             invoke([SYSTEM_PYTHON, "-c", f"open({str(marker)!r}).read()"], tmp_path)
     finally:
         marker.unlink(missing_ok=True)
@@ -167,7 +173,8 @@ def test_path_defaults_to_minimal_not_inherited(tmp_path):
     from legwork.sandbox_runner import MINIMAL_PATH
 
     result = invoke([SYSTEM_PYTHON, "-c", "import os; print(os.environ['PATH'])"], tmp_path)
-    assert result.stdout.strip() == f"{tmp_path.resolve() / '.legwork-bin'}:{MINIMAL_PATH}"
+    shim = f"{tmp_path.resolve() / '.legwork-bin'}:" if platform.system() == "Darwin" else ""
+    assert result.stdout.strip() == f"{shim}{MINIMAL_PATH}"
 
 
 # --- exit codes --------------------------------------------------------------
@@ -208,7 +215,7 @@ def test_venv_in_a_workdir_under_home_runs():
         venv_python = str(workdir / ".venv" / "bin" / "python")
         result = invoke([venv_python, "-c", "import os; print(os.getcwd())"], workdir)
         assert result.stdout.strip() == str(workdir.resolve())
-        with pytest.raises(WrapperRuntimeError, match="PermissionError|Operation not permitted"):
+        with pytest.raises(WrapperRuntimeError, match=_HIDDEN):
             invoke([venv_python, "-c", f"open({str(sibling)!r}).read()"], workdir)
     finally:
         shutil.rmtree(root)
@@ -217,6 +224,7 @@ def test_venv_in_a_workdir_under_home_runs():
 # --- exec_serve: what `legwork serve` hands to sandbox-exec -----------------
 
 
+@macos_only
 def test_exec_serve_uses_no_network_profile_and_minimal_env(tmp_path, monkeypatch):
     from legwork import sandbox_runner
 
@@ -258,6 +266,7 @@ def test_temp_files_work_inside_the_sandbox(tmp_path):
     assert out[1].startswith(str(tmp_path.resolve()))
 
 
+@macos_only
 @pytest.mark.parametrize(
     ("args", "where"),
     [("-d", "tmp"), ("", "tmp"), ("-d -t prefix", "tmp"), ("-d mine.XXXXXX", "workdir"), ("-d $PWD/sub.XXXXXX", "workdir")],
@@ -269,6 +278,7 @@ def test_mktemp_shim_keeps_explicit_templates(tmp_path, args, where):
     assert created.parent == parent
 
 
+@macos_only
 def test_only_the_xcrun_cache_is_writable_in_the_user_temp_folder(tmp_path):
     """xcrun stubs (/usr/bin/python3, git) need to write xcrun_db in the
     per-user temp folder on machines with full Xcode; nothing else there."""
@@ -292,6 +302,7 @@ def test_output_can_be_discarded_to_dev_null(tmp_path):
     assert result.stdout.strip() == "shown"
 
 
+@macos_only  # bwrap gives the sandbox its own private /dev
 def test_other_devices_stay_unwritable(tmp_path):
     with pytest.raises(DependencyInstallError, match="not permitted"):
         install(["/bin/sh", "-c", "echo x > /dev/tty.legwork-test"], tmp_path)
@@ -322,3 +333,21 @@ def test_install_cannot_reach_local_unix_sockets(tmp_path):
         server.close()
         sock_path.unlink(missing_ok=True)
         sock_dir.rmdir()
+
+
+@linux_only
+def test_exec_serve_runs_bwrap_without_network(tmp_path, monkeypatch):
+    monkeypatch.setenv("LEGWORK_LLM_API_KEY", "sk-should-not-leak")
+    captured = {}
+
+    def fake_execve(path, args, env):
+        captured.update(path=path, args=args, env=env)
+        raise SystemExit(0)
+
+    monkeypatch.chdir(tmp_path)
+    with patch("legwork.sandbox_runner.os.execve", side_effect=fake_execve), pytest.raises(SystemExit):
+        sandbox_runner.exec_serve(["/bin/echo", "hi"], tmp_path)
+    assert captured["args"][0] == "bwrap"
+    assert "--unshare-all" in captured["args"] and "--share-net" not in captured["args"]
+    assert captured["args"][-3:] == ["--", "/bin/echo", "hi"]
+    assert "LEGWORK_LLM_API_KEY" not in captured["env"]

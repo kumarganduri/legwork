@@ -135,7 +135,8 @@ def _find_system_python() -> str:
     raise sandbox_runner.SandboxUnavailableError(
         f"No Python {MIN_VENV_PYTHON[0]}.{MIN_VENV_PYTHON[1]}+ found outside your home "
         "directory — can't create an isolated venv the MCP SDK installs into. "
-        "Install one with Homebrew (e.g. `brew install python@3.12`)."
+        "Install one outside your home directory, e.g. `brew install python@3.12` on macOS or "
+        "`sudo apt install python3 python3-venv` on Debian/Ubuntu."
     )
 
 
