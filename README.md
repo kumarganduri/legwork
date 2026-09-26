@@ -1,5 +1,9 @@
 # Legwork
 
+[![PyPI](https://img.shields.io/pypi/v/legwork-mcp)](https://pypi.org/project/legwork-mcp/)
+[![CI](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml/badge.svg)](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **Point it at a GitHub repo, get a working MCP tool back.**
 
 Legwork reads a repo's README, has your LLM write an
@@ -154,6 +158,8 @@ Early. What's next:
 - Better multi-tool verification than a single simplest-command self-test.
 
 ## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md).
 
 ```sh
 uv sync
