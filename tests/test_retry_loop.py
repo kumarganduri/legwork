@@ -17,8 +17,17 @@ from legwork.codegen import InsufficientReadmeError, WrapperDraft
 from legwork.llm_client import LLMAuthError, LLMConfig, LLMMalformedOutputError
 from legwork.readme_parser import ParsedReadme
 from legwork.repo_fetcher import ClonedRepo, RepoRef
-from legwork.retry_loop import MAX_WRAPPER_ATTEMPTS, TotalRunTimeoutExceeded, run
-from legwork.sandbox_runner import DependencyInstallError, WrapperRuntimeError
+from legwork.retry_loop import (
+    MAX_WRAPPER_ATTEMPTS,
+    TotalRunTimeoutExceeded,
+    _find_system_python,
+    run,
+)
+from legwork.sandbox_runner import (
+    DependencyInstallError,
+    SandboxUnavailableError,
+    WrapperRuntimeError,
+)
 
 CONFIG = LLMConfig(endpoint="https://api.example.com/v1", api_key="sk-test", model="gpt-test")
 
@@ -237,6 +246,7 @@ def test_find_system_python_skips_versions_below_310():
     with (
         patch("legwork.retry_loop.shutil.which", side_effect=lambda name, path=None: locations.get(name)),
         patch("legwork.retry_loop._python_version", side_effect=versions.get),
+        patch("legwork.retry_loop._has_venv", return_value=True),
     ):
         assert retry_loop._find_system_python() == "/opt/homebrew/bin/python3.14"
 
@@ -251,6 +261,7 @@ def test_find_system_python_raises_when_only_old_python_exists():
             side_effect=lambda name, path=None: "/usr/bin/python3" if name == "python3" else None,
         ),
         patch("legwork.retry_loop._python_version", return_value=(3, 9)),
+        patch("legwork.retry_loop.sandbox_runner.interpreter_home", return_value=None),
         pytest.raises(SandboxUnavailableError, match="3.10"),
     ):
         retry_loop._find_system_python()
@@ -296,3 +307,31 @@ def test_third_attempt_prompt_includes_first_attempts_failure(tmp_path):
     user_content = third_call_messages[1].content
     assert "bad hex input" in user_content
     assert "no .tool attribute" in user_content
+
+
+# --- which Python builds the venv -------------------------------------------------
+
+
+def test_falls_back_to_the_python_running_legwork(tmp_path, monkeypatch):
+    """A Mac with only /usr/bin/python3 (3.9) and uv: use uv's Python."""
+    fake = tmp_path / "uvpython"
+    (fake / "bin").mkdir(parents=True)
+    import sys as _sys
+
+    exe = fake / "bin" / f"python{_sys.version_info[0]}.{_sys.version_info[1]}"
+    exe.write_text("")
+    monkeypatch.setattr("legwork.retry_loop._VENV_PYTHON_CANDIDATES", ())
+    monkeypatch.setattr("legwork.retry_loop.sandbox_runner.interpreter_home", lambda: fake)
+    monkeypatch.setattr("legwork.retry_loop._python_version", lambda path: (3, 12))
+    monkeypatch.setattr("legwork.retry_loop._has_venv", lambda path: True)
+    assert _find_system_python() == str(exe)
+
+
+def test_skips_a_python_that_cannot_make_venvs(monkeypatch):
+    """Debian's python3 without python3-venv fails every build; skip it."""
+    monkeypatch.setattr("legwork.retry_loop._VENV_PYTHON_CANDIDATES", ("python3",))
+    monkeypatch.setattr("legwork.retry_loop.sandbox_runner.interpreter_home", lambda: None)
+    monkeypatch.setattr("legwork.retry_loop._python_version", lambda path: (3, 12))
+    monkeypatch.setattr("legwork.retry_loop._has_venv", lambda path: False)
+    with pytest.raises(SandboxUnavailableError, match="uvx legwork-mcp"):
+        _find_system_python()

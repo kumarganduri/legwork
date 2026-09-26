@@ -95,3 +95,16 @@ def test_stand_in_homes_are_read_only_after_the_workdir_is_mounted():
     args = _args()
     assert set(_pairs(args, "--remount-ro")) == {"/home", "/home/me"}
     assert args.index("--bind") < args.index("--remount-ro")
+
+
+def test_python_under_home_is_mounted_read_only_after_home_is_hidden():
+    with patch("legwork.sandbox_runner.interpreter_home", return_value=Path("/home/me/.local/share/uv/python/cpython-3.12")):
+        args = _args()
+    assert "/home/me/.local/share/uv/python/cpython-3.12" in _pairs(args, "--ro-bind")
+    ro = args.index("--ro-bind", args.index("--bind"))
+    assert max(i for i, a in enumerate(args) if a == "--tmpfs") < ro
+
+
+def test_interpreter_home_ignores_pythons_outside_home(monkeypatch):
+    monkeypatch.setattr("sys.base_prefix", "/opt/homebrew/Cellar/python@3.12/3.12.7")
+    assert sandbox_runner.interpreter_home() is None

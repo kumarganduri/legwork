@@ -82,6 +82,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -263,6 +264,9 @@ def _bwrap_args(workdir: Path, allow_network: bool) -> list[str]:
     for d in hidden:
         args += ["--tmpfs", d]
     args += ["--bind", real_workdir, real_workdir]
+    interpreter = interpreter_home()
+    if interpreter is not None:
+        args += ["--ro-bind", str(interpreter), str(interpreter)]
     # Then make the stand-in homes read-only, so writing there fails as it
     # does on macOS instead of quietly landing in a throwaway tmpfs. The
     # workdir is its own mount and stays writable.
@@ -276,6 +280,26 @@ def _sandboxed_argv(command: list[str], workdir: Path, allow_network: bool, prof
     if platform.system() == "Darwin":
         return ["sandbox-exec", "-f", str(profile_path), *command]
     return [*_bwrap_args(workdir, allow_network), "--", *command]
+
+
+def interpreter_home() -> Path | None:
+    """The Python installation running Legwork, when it lives under $HOME
+    (uv's managed Pythons, pyenv). Builds may create their venv from it, so
+    the sandbox gets read-only access to exactly this folder — it holds an
+    interpreter and its standard library, nothing personal. Without it, a
+    Mac with only uv's Python (no Homebrew) couldn't build at all (found in
+    pre-launch testing, 2026-09-26)."""
+    base = Path(sys.base_prefix).resolve()
+    home = Path.home().resolve()
+    if base.is_relative_to(home) and base != home and (base / "bin").is_dir():
+        return base
+    return None
+
+
+def _ancestors_under_home(path: Path, home: Path) -> list[Path]:
+    if not path.is_relative_to(home):
+        return []
+    return [a for a in [path, *path.parents] if a.is_relative_to(home)]
 
 
 def _generate_profile(workdir: Path, allow_network: bool) -> str:
@@ -308,11 +332,14 @@ def _generate_profile(workdir: Path, allow_network: bool) -> str:
     # when those are denied. Allow metadata (not contents, not siblings) on
     # exactly the ancestor directories between $HOME and the workdir.
     home_path, workdir_path = Path(home), Path(real_workdir)
-    if workdir_path.is_relative_to(home_path):
-        for ancestor in [workdir_path, *workdir_path.parents]:
-            if not ancestor.is_relative_to(home_path):
-                break
-            lines.append(f'(allow file-read-metadata (literal "{ancestor}"))')
+    interpreter = interpreter_home()
+    if interpreter is not None:
+        lines.append(f'(allow file-read* (subpath "{interpreter}"))')
+    metadata = set(_ancestors_under_home(workdir_path, home_path))
+    if interpreter is not None:
+        metadata |= set(_ancestors_under_home(interpreter, home_path))
+    for ancestor in sorted(metadata):
+        lines.append(f'(allow file-read-metadata (literal "{ancestor}"))')
     # /usr/bin/python3, git, make, cc are xcrun stubs. With full Xcode
     # selected, their first run caches the tool lookup in xcrun_db in the
     # per-user temp folder; without that write every call fails ("couldn't

@@ -351,3 +351,22 @@ def test_exec_serve_runs_bwrap_without_network(tmp_path, monkeypatch):
     assert "--unshare-all" in captured["args"] and "--share-net" not in captured["args"]
     assert captured["args"][-3:] == ["--", "/bin/echo", "hi"]
     assert "LEGWORK_LLM_API_KEY" not in captured["env"]
+
+
+def test_python_running_legwork_is_readable_but_only_that_install(tmp_path):
+    """Under uvx, Legwork runs on uv's Python in ~/.local/share/uv; a Mac
+    with no Homebrew Python builds venvs from it. The sandbox may read that
+    one install, nothing beside it."""
+    interpreter = sandbox_runner.interpreter_home()
+    if interpreter is None:
+        pytest.skip("Legwork isn't running on a Python under $HOME here")
+    python = interpreter / "bin" / "python3"
+    result = invoke([str(python), "-c", "import sys; print(sys.version_info >= (3, 10))"], tmp_path)
+    assert result.stdout.strip() == "True"
+    sibling = interpreter.parent / f"legwork-sibling-{os.getpid()}.txt"
+    sibling.write_text("not part of the interpreter")
+    try:
+        with pytest.raises(WrapperRuntimeError, match=_HIDDEN):
+            invoke([str(python), "-c", f"open({str(sibling)!r}).read()"], tmp_path)
+    finally:
+        sibling.unlink()

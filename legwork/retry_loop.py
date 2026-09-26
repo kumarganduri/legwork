@@ -27,6 +27,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -121,21 +122,37 @@ def _python_version(path: str) -> tuple[int, int] | None:
         return None
 
 
+def _has_venv(path: str) -> bool:
+    """Debian/Ubuntu ship python3 without venv's ensurepip unless
+    python3-venv is installed; skip such an interpreter rather than fail
+    every build on it."""
+    try:
+        return subprocess.run([path, "-c", "import ensurepip, venv"], capture_output=True, timeout=10, check=False).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _find_system_python() -> str:
     # Must live on the minimal sandbox PATH (outside $HOME): the venv's
     # interpreter points back at this base install, and the sandbox blocks
     # reads under $HOME.
-    for name in _VENV_PYTHON_CANDIDATES:
-        found = shutil.which(name, path=sandbox_runner.MINIMAL_PATH)
+    candidates = [shutil.which(name, path=sandbox_runner.MINIMAL_PATH) for name in _VENV_PYTHON_CANDIDATES]
+    # Then the Python running Legwork itself (uv's under uvx, which is
+    # always new enough); the sandbox can read its install read-only.
+    interpreter = sandbox_runner.interpreter_home()
+    if interpreter is not None:
+        own = interpreter / "bin" / f"python{sys.version_info[0]}.{sys.version_info[1]}"
+        candidates.append(str(own) if own.exists() else None)
+    for found in candidates:
         if found is None:
             continue
         version = _python_version(found)
-        if version is not None and version >= MIN_VENV_PYTHON:
+        if version is not None and version >= MIN_VENV_PYTHON and _has_venv(found):
             return found
     raise sandbox_runner.SandboxUnavailableError(
-        f"No Python {MIN_VENV_PYTHON[0]}.{MIN_VENV_PYTHON[1]}+ found outside your home "
-        "directory — can't create an isolated venv the MCP SDK installs into. "
-        "Install one outside your home directory, e.g. `brew install python@3.12` on macOS or "
+        f"No Python {MIN_VENV_PYTHON[0]}.{MIN_VENV_PYTHON[1]}+ that can create a venv — needed for "
+        "the isolated environment the MCP SDK installs into. Run Legwork with `uvx legwork-mcp` "
+        "(uv supplies one), or install one: `brew install python@3.12` on macOS, "
         "`sudo apt install python3 python3-venv` on Debian/Ubuntu."
     )
 
