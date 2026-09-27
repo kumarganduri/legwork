@@ -103,7 +103,7 @@ Connect it to Claude Code:
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
 clients. For Claude Desktop, add it to `claude_desktop_config.json` **while
 the app is quit**: the running app writes its settings back on exit and
-drops edits it didn't make. Tested with Claude Code and Claude Desktop.
+drops edits it didn't make. Tested with Claude Code, Claude Desktop and Cursor.
 For a permanent `legwork` command: `uv tool install legwork-mcp`.
 
 **Repos already in the [public cache](cache/) need no model call and no API
