@@ -102,6 +102,42 @@ clients. For a permanent `legwork` command: `uv tool install legwork-mcp`.
 **Repos already in the [public cache](cache/) need no model call and no API
 key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
 
+## Model providers
+
+Any OpenAI-compatible chat-completions endpoint works. Put three lines in a
+private file (`chmod 600`) and `source` it before building:
+
+| Provider | `LEGWORK_LLM_ENDPOINT` | `LEGWORK_LLM_MODEL` (tested) | Cost |
+|---|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-5` | Your API credits |
+| Anthropic | `https://api.anthropic.com/v1` | `claude-sonnet-5` | Your API credits |
+| OpenRouter | `https://openrouter.ai/api/v1` | `nvidia/nemotron-3-super-120b-a12b:free` | Free models, rate-limited |
+| Ollama (local) | `http://127.0.0.1:11434/v1` | `gpt-oss:20b` | Free; 14 GB download, ~16 GB RAM |
+
+`LEGWORK_LLM_API_KEY` is your key (for Ollama, any non-empty value).
+
+**Ollama:** start it with a larger context window, or it silently cuts
+Legwork's prompt to ~2,000 tokens and the model never sees the
+instructions: `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`. Legwork prints
+this tip when it detects Ollama.
+
+**OpenRouter free models** come and go and are often busy (HTTP 429). If
+one keeps failing, pick another from
+[their list](https://openrouter.ai/models?max_price=0).
+
+**Measured 2026-09-27**, same four repos on each (reverify, golive-skill,
+AnyJev, phone-harness), counting wrappers built:
+
+| Model | Built | Notes |
+|---|---|---|
+| gpt-5 | 4 / 4 | all on the first attempt |
+| Nemotron 3 Super (OpenRouter, free) | 3 / 4 | |
+| gpt-oss:20b (Ollama, local) | 3 / 4 | slowest: 1–3 min per reply on an M5 |
+| Claude Sonnet 5 | 1 / 4 | the most cautious: refused three, citing third-party accounts, a paired iPhone, and "a research pipeline" |
+
+A refusal isn't a crash: Legwork reports the model's reason and stops
+without installing anything.
+
 ## How it works
 
 0. **Cache.** If the repo is in the [public cache](cache/), Legwork uses
