@@ -127,6 +127,19 @@ def _post_chat_completion(config: LLMConfig, messages: list[ChatMessage], timeou
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise LLMMalformedOutputError(f"LLM endpoint response wasn't valid JSON: {raw[:200]!r}") from exc
 
+    # Routers like OpenRouter report an upstream failure as HTTP 200 with an
+    # "error" body (seen: 503 "provider overloaded"). That's the network's
+    # problem, not the model's reply, so it gets the infra retry instead of
+    # costing a wrapper-repair attempt.
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if error and not payload.get("choices"):
+        code = error.get("code") if isinstance(error, dict) else None
+        message = error.get("message") if isinstance(error, dict) else error
+        if code in (401, 403):
+            raise LLMAuthError(f"LLM endpoint auth failed ({code}): {message}")
+        if code == 429:
+            raise LLMRateLimitError(f"LLM endpoint rate-limited: {message}")
+        raise LLMTimeoutError(f"LLM endpoint reported an upstream error ({code}): {message}")
     try:
         return payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:

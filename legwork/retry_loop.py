@@ -213,6 +213,9 @@ def _run_one_attempt(
     sandbox = codegen.describe_sandbox(sandbox_runner.available_toolchains())
     messages = codegen.build_messages(readme_content, prior_failures, sandbox)
     response_text = complete(llm_config, messages, timeout=CODEGEN_TIMEOUT_SECONDS)
+    # Kept for debugging a failed build: the model's exact reply.
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    (attempt_dir / "model-reply.md").write_text(response_text)
     draft = codegen.parse_response(response_text)
 
     _install_and_self_test(attempt_dir, draft.install_command, draft.wrapper_code, progress)

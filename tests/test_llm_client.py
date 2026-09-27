@@ -175,3 +175,30 @@ def test_unexpected_4xx_raises_auth_error():
     with patch("legwork.llm_client.urllib.request.urlopen", side_effect=http_error):
         with pytest.raises(LLMAuthError, match="Unexpected LLM endpoint response"):
             complete(CONFIG, MESSAGES)
+
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        ({"message": "Upstream error from Nvidia: Service temporarily overloaded", "code": 503}, LLMTimeoutError),
+        ({"message": "slow down", "code": 429}, LLMRateLimitError),
+    ],
+)
+def test_router_errors_inside_a_200_are_retried_as_infrastructure(error, expected):
+    """OpenRouter reports upstream failures as HTTP 200 with an error body;
+    that cost a wrapper-repair attempt before (provider tests, 2026-09-27)."""
+    body = {"id": "gen-1", "error": error}
+    with (
+        patch("legwork.llm_client.urllib.request.urlopen", return_value=_fake_response(body)) as mock_urlopen,
+        patch("legwork.llm_client.time.sleep"),
+        pytest.raises(expected),
+    ):
+        complete(CONFIG, MESSAGES)
+    assert mock_urlopen.call_count == INFRA_RETRY_ATTEMPTS + 1
+
+
+def test_router_auth_error_inside_a_200_fails_fast():
+    body = {"error": {"message": "No auth credentials found", "code": 401}}
+    with patch("legwork.llm_client.urllib.request.urlopen", return_value=_fake_response(body)), pytest.raises(LLMAuthError):
+        complete(CONFIG, MESSAGES)

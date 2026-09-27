@@ -179,3 +179,15 @@ def test_a_relative_launch_path_is_made_absolute(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("sys.argv", [".venv/bin/legwork", "owner/repo"])
     assert cli._self_command() == [str(tmp_path / ".venv" / "bin" / "legwork")]
+
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "tip"),
+    [("http://127.0.0.1:11434/v1", True), ("http://ollama.lan:8080/v1", True), ("https://api.openai.com/v1", False)],
+)
+def test_ollama_users_get_the_context_window_tip(monkeypatch, capsys, endpoint, tip):
+    monkeypatch.setenv("LEGWORK_LLM_ENDPOINT", endpoint)
+    with patch("legwork.cli.retry_loop.run", side_effect=_successful_run):
+        cli.cmd_build("owner/repo", use_cache=False)
+    assert ("OLLAMA_CONTEXT_LENGTH" in capsys.readouterr().err) is tip

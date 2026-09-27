@@ -48,8 +48,12 @@ ENTRYPOINT: <one-line description of what you identified as the callable capabil
 ```install
 <shell command(s) to install the target repo's own dependencies -- prefer \
 the most complete install variant the README describes (e.g. an extras \
-group like "package[full]") over a bare minimal install. Do NOT install, \
-upgrade, or pin the `mcp` package: Legwork installs `{MCP_SDK_PIN}` itself.>
+group like "package[full]") over a bare minimal install. A Python venv is \
+already active: use plain `pip install`. Install npm packages LOCALLY in \
+the current directory (`npm install <pkg>`, never `-g`) and call them as \
+`./node_modules/.bin/<cmd>`. No sudo, no global or system-wide installs: \
+they fail in the sandbox. Do NOT install, upgrade, or pin the `mcp` \
+package: Legwork installs `{MCP_SDK_PIN}` itself.>
 ```
 
 ```python
@@ -58,12 +62,15 @@ capability as one or more typed MCP tools. Use the MCP Python SDK 1.x API \
 exactly like this: `from mcp.server.fastmcp import FastMCP`, \
 `mcp = FastMCP("<name>")`, and decorate each tool function with \
 `@mcp.tool()`. The decorated function stays directly callable. MUST include \
-an `if __name__ == "__main__":` self-test. The self-test calls the SIMPLEST, \
-most basic documented command or function with a trivial input (not an \
-advanced or showcase feature), and checks only that it ran and returned \
-the expected shape -- the right type and expected keys or fields -- and \
-raises if not. Do NOT assert on domain-specific verdicts or the tool's own \
-pass/fail semantics. Running this file standalone (`python wrapper.py`) is \
+an `if __name__ == "__main__":` self-test. The self-test runs with the \
+NETWORK OFF and must finish within 60 seconds. It calls the SIMPLEST \
+documented command or function that works offline (a --version or --help \
+call, or a small local computation -- never a showcase feature and never \
+anything that downloads or calls a service), and checks only that the \
+call succeeded and returned something non-empty; raise if not. Do NOT \
+assert a specific type, keys, fields or values unless the README shows \
+that exact output, and never assert on the tool's own verdicts or \
+pass/fail results. Running this file standalone (`python wrapper.py`) is \
 the only signal Legwork has that the wrapper actually works.>
 ```
 
@@ -226,9 +233,20 @@ def parse_response(text: str) -> WrapperDraft:
     entrypoint_match = _ENTRYPOINT_LINE_RE.search(text)
 
     if not (install_match and python_match and entrypoint_match):
+        # Say exactly what's missing: the retry prompt carries this message,
+        # and "missing the ```install block" is something a model can fix.
+        missing = [
+            name
+            for name, match in (
+                ("the `ENTRYPOINT:` line", entrypoint_match),
+                ("the ```install fenced block", install_match),
+                ("the ```python fenced block", python_match),
+            )
+            if not match
+        ]
         raise LLMMalformedOutputError(
-            "Codegen response matched neither the wrapper-draft shape nor "
-            f"the REFUSAL shape: {text[:300]!r}"
+            f"Reply didn't follow SHAPE 1 or SHAPE 2: missing {', '.join(missing)}. "
+            f"Reply began: {text[:200]!r}"
         )
 
     return WrapperDraft(

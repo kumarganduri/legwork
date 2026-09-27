@@ -351,3 +351,11 @@ def test_a_finished_build_drops_downloads_and_failed_environments(tmp_path):
     assert not (tmp_path / "attempt-1" / ".venv").exists()
     assert (tmp_path / "attempt-1" / "wrapper.py").exists()  # kept for debugging
     assert (tmp_path / "attempt-3" / ".venv").exists()  # the one that works
+
+
+
+def test_every_model_reply_is_kept_in_its_attempt_folder(tmp_path):
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="the raw reply"))
+    with _MultiPatch(patches), patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
+        run("owner/repo", tmp_path, CONFIG)
+    assert (tmp_path / "attempt-1" / "model-reply.md").read_text() == "the raw reply"

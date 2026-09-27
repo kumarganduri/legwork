@@ -85,10 +85,26 @@ def test_system_prompt_pins_mcp_1x_api():
     assert "mcp<2" in prompt
 
 
-def test_system_prompt_asks_for_simple_shape_only_self_test():
+def test_system_prompt_asks_for_an_offline_non_guessing_self_test():
+    """Provider tests (2026-09-27): Claude and Nemotron self-tests guessed the
+    output type or asserted the tool's verdict and failed working wrappers;
+    Claude's and Ollama's reached for the network, which is off."""
     prompt = build_messages("# Repo")[0].content
     assert "SIMPLEST" in prompt
-    assert "Do NOT assert on domain-specific verdicts" in prompt
+    assert "NETWORK OFF" in prompt and "60 seconds" in prompt
+    assert "assert a specific type" in prompt
+    assert "never assert on the tool's own verdicts" in prompt
+
+
+def test_system_prompt_forbids_global_npm_installs():
+    """Claude and Ollama both used `npm install -g`, which the sandbox blocks."""
+    prompt = build_messages("# Repo")[0].content
+    assert "never `-g`" in prompt and "./node_modules/.bin/" in prompt
+
+
+def test_malformed_reply_names_what_is_missing():
+    with pytest.raises(LLMMalformedOutputError, match="missing the ```install fenced block"):
+        parse_response("ENTRYPOINT: x\n\n```python\nprint(1)\n```\n")
 
 
 # --- parse_response: success shape ----------------------------------------

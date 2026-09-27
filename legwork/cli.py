@@ -142,6 +142,13 @@ def _print_connect_instructions(ref: RepoRef) -> None:
     print(json.dumps(config, indent=2))
 
 
+def _looks_like_ollama(endpoint: str) -> bool:
+    # Provider test, 2026-09-27: Ollama cut every Legwork prompt to 2,050
+    # tokens and the model answered nonsense. Ollama's default port is 11434.
+    parsed = urllib.parse.urlparse(endpoint)
+    return parsed.port == 11434 or "ollama" in (parsed.hostname or "")
+
+
 def _progress(message: str) -> None:
     print(f"  {message}", file=sys.stderr)
 
@@ -220,6 +227,12 @@ def cmd_build(repo: str, use_cache: bool = True) -> int:
         _err(f"{exc}\n  If you keep them in a file: source ~/.legwork.env")
         return 1
 
+    if _looks_like_ollama(config.endpoint):
+        print(
+            "  Using Ollama: start it with OLLAMA_CONTEXT_LENGTH=32768 (or more). Its default window is a few\n"
+            "  thousand tokens and it silently cuts longer prompts, so the model never sees the instructions.",
+            file=sys.stderr,
+        )
     build_dir = local_store.new_build_dir(ref)
     print(f"Building an MCP wrapper for {ref.slug} (usually 1-3 minutes)", file=sys.stderr)
     try:
