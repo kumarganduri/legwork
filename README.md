@@ -23,9 +23,9 @@ uvx legwork-mcp owner/repo
 
 ## Proof, not a pitch
 
-On 2026-09-26 we ran Legwork against **this week's 10 most-starred new AI
-repos on GitHub**, taken exactly as search ranked them, with nothing skipped
-for being hard:
+On 2026-09-26 we ran Legwork against **the 10 most-starred AI repos created
+on GitHub in the previous week**, taken exactly as search ranked them, with
+nothing skipped for being hard:
 
 | Outcome | Repos |
 |---|---|
@@ -33,8 +33,8 @@ for being hard:
 | ↩️ Refused, with the right reason | **5** — two Android/macOS apps, a desktop app, a repo with no usage docs, a tool that needs its own API keys |
 | 🛑 Blocked as malware | **2** |
 
-Two of the week's top-10 "AI tools", about 700 stars each and three days
-old, carried the same byte-identical obfuscated dropper under different
+Two of those top-10 "AI tools", about 700 stars each and three days old
+at the time, carried the same byte-identical obfuscated dropper under different
 file names. Legwork's pre-install scan refused both in about a second.
 Nothing from them was installed or run. Stars are not a trust signal.
 
