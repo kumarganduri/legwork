@@ -398,8 +398,8 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
     granted = []
     for raw in paths:
         path = Path(raw).expanduser().resolve()
-        if not path.exists():
-            raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
+        # Refusals come before the existence check: a secret folder is refused
+        # as such whether or not it exists here.
         if path == Path("/") or home.is_relative_to(path):
             raise SandboxGrantError(
                 f"--allow-read {raw}: that's your whole home folder (or above it). "
@@ -408,6 +408,8 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
         for secret in _SECRET_DIRS:
             if path.is_relative_to(home / secret):
                 raise SandboxGrantError(f"--allow-read {raw}: ~/{secret} holds credentials or private data; refusing.")
+        if not path.exists():
+            raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
         granted.append(path)
     return tuple(granted)
 

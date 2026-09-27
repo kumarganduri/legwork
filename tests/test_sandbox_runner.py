@@ -484,11 +484,8 @@ def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
 
 
 @pytest.mark.parametrize("target", ["~", "/", "~/.ssh", "~/.aws/credentials", "~/.config", "~/Library/Keychains"])
-def test_grants_refuse_home_and_secret_folders(target):
-    path = Path(target).expanduser()
-    if not path.exists():
-        pytest.skip(f"{target} doesn't exist on this machine")
-    with pytest.raises(sandbox_runner.SandboxGrantError):
+def test_grants_refuse_home_and_secret_folders_whether_or_not_they_exist(target):
+    with pytest.raises(sandbox_runner.SandboxGrantError, match="whole home folder|credentials"):
         sandbox_runner.check_read_grants([target])
 
 
