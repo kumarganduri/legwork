@@ -269,3 +269,45 @@ def test_scan_error_names_the_file_relative_to_the_repo(tmp_path):
     with pytest.raises(ObfuscatedPayloadDetectedError) as exc:
         scan(tmp_path)
     assert str(exc.value).startswith("src/loader.js: obfuscation patterns detected")
+
+
+
+# --- false positives from the 22-repo trial (2026-09-27) ------------------------
+
+
+def test_xor_in_ordinary_code_next_to_number_data_is_not_a_payload(tmp_path):
+    """A chiptune synthesizer: note tables (int lists) plus an LFSR noise
+    generator (XOR). Blocked before; XOR there never builds bytes or text."""
+    path = tmp_path / "score.py"
+    path.write_text(
+        "NOTES = [" + ", ".join(str(n) for n in range(60, 90)) + "]\n"
+        "def noise(n, reg=0x7FFF):\n"
+        "    out = []\n"
+        "    for _ in range(n):\n"
+        "        b = (reg ^ (reg >> 1)) & 1; reg = (reg >> 1) | (b << 14); out.append(reg & 1)\n"
+        "    return out\n"
+    )
+    assert "byte-array-xor-deobfuscation" not in {f.pattern for f in scan_file(path)}
+
+
+def test_xor_that_builds_text_from_a_byte_list_still_blocks(tmp_path):
+    path = tmp_path / "loader.py"
+    path.write_text("k = 7\nname = ''.join(chr(c ^ k) for c in [" + ", ".join(["97"] * 20) + "])\n")
+    assert is_blocking(scan_file(path))
+
+
+def test_bundled_javascript_needs_a_strong_signal(tmp_path):
+    """A 3.8 MB vendored Vite chunk with a base64 blob and an eval( was
+    blocked before. In bundles only strong signals count; the same two weak
+    signals in a hand-written file still block."""
+    weak = "const font = '" + "QUJD" * 400 + "';\neval('1+1');\n"
+    bundled = tmp_path / "frontend" / "vendor" / "lib" / "chunks" / "index-Bzyye6Dv.js"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text(weak)
+    assert not is_blocking(scan_js_file(bundled))
+    handwritten = tmp_path / "src" / "config.js"
+    handwritten.parent.mkdir(parents=True)
+    handwritten.write_text(weak)
+    assert is_blocking(scan_js_file(handwritten))
+    bundled.write_text("eval(atob(payload));")  # a strong signal blocks anywhere
+    assert is_blocking(scan_js_file(bundled))

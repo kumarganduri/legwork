@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import ast
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -96,11 +97,14 @@ def _is_int_list_literal(node: ast.expr, min_len: int = _BYTE_ARRAY_MIN_LEN) -> 
     return all(isinstance(e, ast.Constant) and isinstance(e.value, int) for e in node.elts)
 
 
+_BYTE_BUILDERS = {"bytes", "bytearray", "chr"}
+
+
 class _Visitor(ast.NodeVisitor):
     def __init__(self, file: Path):
         self.file = file
         self.findings: list[Finding] = []
-        self._has_xor_op = False
+        self._xor_builds_bytes = False
         self._has_byte_array_literal = False
         self._all_names: set[str] = set()
 
@@ -112,11 +116,6 @@ class _Visitor(ast.NodeVisitor):
         self._all_names.add(node.name)
         self.generic_visit(node)
 
-    def visit_BinOp(self, node: ast.BinOp) -> None:
-        if isinstance(node.op, ast.BitXor):
-            self._has_xor_op = True
-        self.generic_visit(node)
-
     def visit_List(self, node: ast.List) -> None:
         if _is_int_list_literal(node):
             self._has_byte_array_literal = True
@@ -124,6 +123,14 @@ class _Visitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
+        # XOR feeding bytes()/bytearray()/chr() is how both real payloads
+        # decode hidden strings: bytes(v ^ k for v in data). XOR elsewhere
+        # (a chiptune noise generator, hashing, bit tricks) isn't — a file
+        # with music data and an LFSR was blocked before (2026-09-27 trial).
+        if isinstance(func, ast.Name) and func.id in _BYTE_BUILDERS and any(
+            isinstance(n, ast.BinOp) and isinstance(n.op, ast.BitXor) for arg in node.args for n in ast.walk(arg)
+        ):
+            self._xor_builds_bytes = True
         is_dynamic_import = (
             isinstance(func, ast.Name)
             and func.id == "__import__"
@@ -174,14 +181,14 @@ class _Visitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def finalize(self) -> list[Finding]:
-        if self._has_xor_op and self._has_byte_array_literal:
+        if self._xor_builds_bytes and self._has_byte_array_literal:
             self.findings.append(
                 Finding(
                     self.file,
                     0,
                     "byte-array-xor-deobfuscation",
-                    "a large integer/byte-array literal combined with XOR (^) — the "
-                    "shape of a string/bytes deobfuscation routine",
+                    "a large integer/byte-array literal and XOR used to build bytes or "
+                    "text — the shape of a string/bytes deobfuscation routine",
                 )
             )
 
@@ -207,7 +214,9 @@ def scan_file(path: Path) -> list[Finding]:
     Python-AST scanner — noted as a scope limit, not silently ignored)."""
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
-        tree = ast.parse(source, filename=str(path))
+        with warnings.catch_warnings():  # the repo's own SyntaxWarnings are noise here
+            warnings.simplefilter("ignore")
+            tree = ast.parse(source, filename=str(path))
     except (SyntaxError, ValueError, UnicodeDecodeError):
         return []
     visitor = _Visitor(path)
@@ -251,6 +260,25 @@ def _line_of(text: str, index: int) -> int:
     return text.count("\n", 0, index) + 1
 
 
+_JS_BUNDLE_DIRS = {"vendor", "vendors", "chunks", "assets", "static", "public", "lib"}
+_JS_HASHED_NAME_RE = re.compile(r"[-.][A-Za-z0-9_]{8,}\.(?:m?js|cjs)$")
+_JS_MINIFIED_LINE = 5000
+
+
+def _looks_bundled(path: Path, text: str) -> bool:
+    """Built or vendored JavaScript (a Vite chunk, a .min.js, a vendor copy)
+    routinely carries base64 blobs (fonts, wasm) and eval; in such files
+    only the strong signals count. A 3.8 MB vendored chunk was blocked on
+    those two weak signals before (2026-09-27 trial)."""
+    return (
+        path.name.endswith((".min.js", ".min.mjs"))
+        or bool(_JS_HASHED_NAME_RE.search(path.name))
+        or bool(_JS_BUNDLE_DIRS & {p.lower() for p in path.parts[:-1]})
+        or len(text) > 500_000
+        or any(len(line) > _JS_MINIFIED_LINE for line in text.splitlines()[:50])
+    )
+
+
 def scan_js_file(path: Path) -> list[Finding]:
     if path.stat().st_size > _JS_MAX_BYTES:
         return []
@@ -278,6 +306,8 @@ def scan_js_file(path: Path) -> list[Finding]:
         match = regex.search(text)
         if match:
             add(pattern, match, detail)
+    if _looks_bundled(path, text):
+        findings = [f for f in findings if f.pattern in _STRONG_PATTERNS]
     return findings
 
 
