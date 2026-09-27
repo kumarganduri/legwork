@@ -169,3 +169,20 @@ def test_bwrap_gets_the_filter_only_when_one_is_given(monkeypatch):
     args = sandbox_runner._sandboxed_argv(["true"], Path("/w"), True, None, (), seccomp_fd=7)
     assert args[args.index("--seccomp") + 1] == "7" and args[-2:] == ["--", "true"]
     assert "--seccomp" not in sandbox_runner._sandboxed_argv(["true"], Path("/w"), True, None)
+
+
+def test_linux_grants_are_read_only_binds_and_network_is_opt_in():
+    with (
+        patch("legwork.sandbox_runner.Path.home", return_value=Path("/home/me")),
+        patch("legwork.sandbox_runner._hidden_dirs", return_value=[Path("/home"), Path("/home/me")]),
+    ):
+        args = _bwrap_args(Path("/home/me/b/attempt-1"), allow_network=False, read_only=(Path("/home/me/Downloads"),))
+    assert str(Path("/home/me/Downloads").resolve()) in _pairs(args, "--ro-bind")
+    assert "--share-net" not in args
+    assert args.index("--ro-bind", args.index("--bind")) < args.index("--remount-ro")
+
+
+def test_macos_grants_are_read_only_in_the_profile(tmp_path):
+    profile = sandbox_runner._generate_profile(tmp_path, allow_network=False, read_only=(tmp_path / "Downloads",))
+    assert f'(allow file-read* (subpath "{(tmp_path / "Downloads").resolve()}"))' in profile
+    assert f'(allow file-write* (subpath "{(tmp_path / "Downloads").resolve()}"))' not in profile

@@ -244,7 +244,9 @@ def _hidden_dirs() -> list[Path]:
     return sorted(keep, key=lambda p: len(p.parts))
 
 
-def _bwrap_args(workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = ()) -> list[str]:
+def _bwrap_args(
+    workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = (), read_only: tuple[Path, ...] = ()
+) -> list[str]:
     """The Linux equivalent of _generate_profile: everything read-only, home
     directories and every place local sockets live (/tmp, /run) replaced by
     empty private tmpfs, only the workdir writable, and no network unless
@@ -276,6 +278,8 @@ def _bwrap_args(workdir: Path, allow_network: bool, extra_writable: tuple[Path, 
     args += ["--bind", real_workdir, real_workdir]
     for d in extra_writable:
         args += ["--bind", str(Path(d).resolve()), str(Path(d).resolve())]
+    for d in read_only:  # `legwork serve --allow-read`
+        args += ["--ro-bind", str(Path(d).resolve()), str(Path(d).resolve())]
     interpreter = interpreter_home()
     if interpreter is not None:
         args += ["--ro-bind", str(interpreter), str(interpreter)]
@@ -348,11 +352,12 @@ def _sandboxed_argv(
     profile_path: Path | None,
     extra_writable: tuple[Path, ...] = (),
     seccomp_fd: int | None = None,
+    read_only: tuple[Path, ...] = (),
 ) -> list[str]:
     if platform.system() == "Darwin":
         return ["sandbox-exec", "-f", str(profile_path), *command]
     seccomp = ["--seccomp", str(seccomp_fd)] if seccomp_fd is not None else []
-    return [*_bwrap_args(workdir, allow_network, extra_writable), *seccomp, "--", *command]
+    return [*_bwrap_args(workdir, allow_network, extra_writable, read_only), *seccomp, "--", *command]
 
 
 _MACH_SERVICES = (
@@ -370,6 +375,41 @@ _MACH_SERVICES = (
     "com.apple.cfprefsd.daemon",
     "com.apple.cfprefsd.agent",
 )
+
+
+class SandboxGrantError(Exception):
+    """A requested --allow-read folder isn't safe or doesn't exist."""
+
+
+# Never grantable, even on request: where credentials and private data live.
+# Relative to $HOME; a grant equal to or inside any of these is refused.
+_SECRET_DIRS = (
+    ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".azure", ".password-store",
+    ".netrc", ".legwork", "Library/Keychains", "Library/Cookies", "Library/Application Support",
+    "Library/Messages", "Library/Mail", "Library/Safari", "Library/Containers",
+)
+
+
+def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
+    """Validate `legwork serve --allow-read` folders: they must exist, and
+    can't be /, your home folder or anything above it, or a place secrets
+    live (~/.ssh, ~/.aws, ~/.config, keychains...). Returns resolved paths."""
+    home = Path.home().resolve()
+    granted = []
+    for raw in paths:
+        path = Path(raw).expanduser().resolve()
+        if not path.exists():
+            raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
+        if path == Path("/") or home.is_relative_to(path):
+            raise SandboxGrantError(
+                f"--allow-read {raw}: that's your whole home folder (or above it). "
+                "Grant the specific folder the tool needs, e.g. ~/Downloads."
+            )
+        for secret in _SECRET_DIRS:
+            if path.is_relative_to(home / secret):
+                raise SandboxGrantError(f"--allow-read {raw}: ~/{secret} holds credentials or private data; refusing.")
+        granted.append(path)
+    return tuple(granted)
 
 
 def interpreter_home() -> Path | None:
@@ -392,7 +432,9 @@ def _ancestors_under_home(path: Path, home: Path) -> list[Path]:
     return [a for a in [path, *path.parents] if a.is_relative_to(home)]
 
 
-def _generate_profile(workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = ()) -> str:
+def _generate_profile(
+    workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = (), read_only: tuple[Path, ...] = ()
+) -> str:
     real_workdir = str(workdir.resolve())
     home = str(Path.home().resolve())
     lines = [
@@ -433,8 +475,11 @@ def _generate_profile(workdir: Path, allow_network: bool, extra_writable: tuple[
     extra = [Path(d).resolve() for d in extra_writable]
     for d in extra:
         lines.append(f'(allow file-read* file-write* (subpath "{d}"))')
+    grants = [Path(d).resolve() for d in read_only]
+    for d in grants:  # `legwork serve --allow-read`: read-only, exactly this folder
+        lines.append(f'(allow file-read* (subpath "{d}"))')
     metadata = set(_ancestors_under_home(workdir_path, home_path))
-    for d in extra:
+    for d in [*extra, *grants]:
         metadata |= set(_ancestors_under_home(d, home_path))
     if interpreter is not None:
         metadata |= set(_ancestors_under_home(interpreter, home_path))
@@ -515,13 +560,14 @@ def _run_sandboxed(
     timeout_error: type[Exception],
     extra_env: dict[str, str] | None = None,
     extra_writable: tuple[Path, ...] = (),
+    read_only: tuple[Path, ...] = (),
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
     profile_path = None
     if platform.system() == "Darwin":
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sb", delete=False) as f:
-            f.write(_generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable))
+            f.write(_generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable, read_only=read_only))
             profile_path = Path(f.name)
 
     started = time.monotonic()
@@ -533,7 +579,7 @@ def _run_sandboxed(
             seccomp_file.write(program)
             seccomp_file.seek(0)
             seccomp_fd = seccomp_file.fileno()
-        full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable, seccomp_fd)
+        full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable, seccomp_fd, read_only)
         try:
             result = subprocess.run(
                 full_command,
@@ -631,18 +677,40 @@ def invoke(
     return result
 
 
-def exec_serve(command: list[str], workdir: Path, extra_env: dict[str, str] | None = None) -> NoReturn:
+def exec_serve(
+    command: list[str],
+    workdir: Path,
+    extra_env: dict[str, str] | None = None,
+    allow_read: tuple[Path, ...] = (),
+    allow_network: bool = False,
+) -> NoReturn:
     """Replace this process with `command` running under the invoke-phase
     policy (network off, reads/writes confined to `workdir`, minimal env),
     with no timeout: an MCP server lives as long as the client that launched
     it, and stdio is inherited directly because stdio IS the MCP transport.
     Never returns. The profile is written into `workdir` rather than a temp
-    file, since nothing is left running to delete a temp file afterwards."""
+    file, since nothing is left running to delete a temp file afterwards.
+
+    `allow_read` (already checked by check_read_grants) and `allow_network`
+    are the user's explicit grants from `legwork serve --allow-read/--allow-net`;
+    without them a served tool sees no files of yours and no network. With
+    network on, Linux gets the same no-Unix-sockets filter as installs."""
     _check_backend_available()
     profile_path = None
     if platform.system() == "Darwin":
         profile_path = workdir / ".legwork-serve.sb"
-        profile_path.write_text(_generate_profile(workdir, allow_network=False))
-    argv = _sandboxed_argv(command, workdir, allow_network=False, profile_path=profile_path)
+        profile_path.write_text(_generate_profile(workdir, allow_network=allow_network, read_only=allow_read))
+    seccomp_fd = None
+    if platform.system() == "Linux" and allow_network:
+        program = no_unix_sockets_filter()
+        if program is not None:
+            seccomp_fd = os.memfd_create("legwork-seccomp")
+            os.write(seccomp_fd, program)
+            os.lseek(seccomp_fd, 0, os.SEEK_SET)
+            os.set_inheritable(seccomp_fd, True)  # must survive the exec into bwrap
+    argv = _sandboxed_argv(
+        command, workdir, allow_network=allow_network, profile_path=profile_path,
+        seccomp_fd=seccomp_fd, read_only=allow_read,
+    )
     os.chdir(workdir)
     os.execve(shutil.which(argv[0]), argv, _build_env(workdir, extra_env))

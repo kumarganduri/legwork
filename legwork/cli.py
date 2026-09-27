@@ -264,17 +264,24 @@ def cmd_build(repo: str, use_cache: bool = True) -> int:
     return 0
 
 
-def cmd_serve(repo: str) -> int:
+def cmd_serve(repo: str, allow_read: list[str] | None = None, allow_net: bool = False) -> int:
     try:
         ref = parse_repo_url(repo)
         record = local_store.load_current(ref)
-    except (InvalidRepoURLError, local_store.NoBuildError) as exc:
+        grants = sandbox_runner.check_read_grants(allow_read or [])
+    except (InvalidRepoURLError, local_store.NoBuildError, sandbox_runner.SandboxGrantError) as exc:
         _err(str(exc))
         return 1
     python = Path(record.python_path)
     env = {"PATH": f"{python.parent}:{sandbox_runner.MINIMAL_PATH}"}
     try:
-        sandbox_runner.exec_serve([str(python), "-c", _SERVE_LAUNCHER, record.wrapper_path], Path(record.attempt_dir), env)
+        sandbox_runner.exec_serve(
+            [str(python), "-c", _SERVE_LAUNCHER, record.wrapper_path],
+            Path(record.attempt_dir),
+            env,
+            allow_read=grants,
+            allow_network=allow_net,
+        )
     except sandbox_runner.SandboxUnavailableError as exc:
         _err(str(exc))
         return 1
@@ -353,6 +360,13 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--no-cache", action="store_true", help="always write a fresh wrapper, even if the repo is in the Legwork cache")
     serve = sub.add_parser("serve", help="run a built wrapper as an MCP server over stdio")
     serve.add_argument("repo", help="github.com URL or owner/repo")
+    serve.add_argument(
+        "--allow-read",
+        action="append",
+        metavar="PATH",
+        help="let the tool read this file or folder (read-only; repeatable). By default it sees none of your files",
+    )
+    serve.add_argument("--allow-net", action="store_true", help="let the tool use the network (off by default)")
     contribute = sub.add_parser("contribute", help="write a built wrapper + manifest as a public-cache entry")
     contribute.add_argument("repo", help="github.com URL or owner/repo")
     contribute.add_argument(
@@ -370,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":
         return cmd_contribute(args.repo, args.out)
-    return cmd_serve(args.repo)
+    return cmd_serve(args.repo, args.allow_read, args.allow_net)
 
 
 if __name__ == "__main__":

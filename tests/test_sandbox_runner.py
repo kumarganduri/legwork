@@ -453,3 +453,45 @@ def test_real_installers_work_inside_the_install_phase(tmp_path, tool, command):
     if shutil.which(tool, path=sandbox_runner.MINIMAL_PATH) is None:
         pytest.skip(f"{tool} isn't on the sandbox PATH here")
     assert install(["/bin/sh", "-c", command], tmp_path).stdout.strip().endswith("ok")
+
+
+# --- `legwork serve --allow-read` grants -------------------------------------------
+
+
+def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
+    base = Path.home() / f".legwork-grant-test-{os.getpid()}"
+    granted, neighbour = base / "Downloads", base / "Private"
+    granted.mkdir(parents=True)
+    neighbour.mkdir()
+    (granted / "report.txt").write_text("quarterly numbers")
+    (neighbour / "diary.txt").write_text("secret")
+    workdir = tmp_path / "attempt"
+    workdir.mkdir()
+    grants = sandbox_runner.check_read_grants([str(granted)])
+    try:
+        def run(code):
+            return sandbox_runner._run_sandboxed(
+                [SYSTEM_PYTHON, "-c", code], workdir, allow_network=False, timeout=30,
+                timeout_error=TimeoutExceeded, read_only=grants,
+            )
+        assert run(f"print(open({str(granted / 'report.txt')!r}).read())").stdout.strip() == "quarterly numbers"
+        denied = run(f"open({str(neighbour / 'diary.txt')!r}).read()")
+        assert denied.exit_code != 0
+        writing = run(f"open({str(granted / 'new.txt')!r}, 'w').write('x')")
+        assert writing.exit_code != 0 and not (granted / "new.txt").exists()  # read-only
+    finally:
+        shutil.rmtree(base)
+
+
+@pytest.mark.parametrize("target", ["~", "/", "~/.ssh", "~/.aws/credentials", "~/.config", "~/Library/Keychains"])
+def test_grants_refuse_home_and_secret_folders(target):
+    path = Path(target).expanduser()
+    if not path.exists():
+        pytest.skip(f"{target} doesn't exist on this machine")
+    with pytest.raises(sandbox_runner.SandboxGrantError):
+        sandbox_runner.check_read_grants([target])
+
+
+def test_grants_refuse_paths_that_do_not_exist(tmp_path):
+    with pytest.raises(sandbox_runner.SandboxGrantError, match="no such"):
+        sandbox_runner.check_read_grants([str(tmp_path / "missing")])

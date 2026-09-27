@@ -53,7 +53,7 @@ def test_bare_repo_argument_means_build():
 def test_serve_subcommand_routes_to_serve():
     with patch("legwork.cli.cmd_serve", return_value=0) as serve:
         cli.main(["serve", "owner/repo"])
-    serve.assert_called_once_with("owner/repo")
+    serve.assert_called_once_with("owner/repo", None, False)
 
 
 # --- build ------------------------------------------------------------------
@@ -191,3 +191,17 @@ def test_ollama_users_get_the_context_window_tip(monkeypatch, capsys, endpoint, 
     with patch("legwork.cli.retry_loop.run", side_effect=_successful_run):
         cli.cmd_build("owner/repo", use_cache=False)
     assert ("OLLAMA_CONTEXT_LENGTH" in capsys.readouterr().err) is tip
+
+
+def test_serve_passes_grants_and_refuses_unsafe_ones(tmp_path, capsys):
+    with patch("legwork.cli.retry_loop.run", side_effect=_successful_run):
+        cli.cmd_build("owner/repo", use_cache=False)
+    folder = tmp_path / "Downloads"
+    folder.mkdir()
+    with patch("legwork.cli.sandbox_runner.exec_serve") as exec_serve:
+        cli.main(["serve", "owner/repo", "--allow-read", str(folder), "--allow-net"])
+    assert exec_serve.call_args.kwargs == {"allow_read": (folder.resolve(),), "allow_network": True}
+    with patch("legwork.cli.sandbox_runner.exec_serve") as exec_serve:
+        assert cli.main(["serve", "owner/repo", "--allow-read", "~"]) == 1
+    exec_serve.assert_not_called()
+    assert "whole home folder" in capsys.readouterr().err
