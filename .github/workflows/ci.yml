@@ -13,7 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        # Apple silicon and Intel Macs; x86-64 and ARM64 Linux (the seccomp
+        # filter has a program per architecture).
+        os: [macos-latest, macos-15-intel, ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     env:
       LEGWORK_REQUIRE_SANDBOX: "1"  # fail, don't skip, if the sandbox can't start
@@ -32,3 +34,38 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync
       - run: uv run pytest -q
+
+  # Other Linux families, as a normal (non-root) user like a real one. The
+  # container is privileged only so bubblewrap can create namespaces inside
+  # it, as it can on a real machine.
+  test-distro:
+    name: test (${{ matrix.distro }})
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ["fedora:latest", "debian:stable"]
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.distro }}
+      options: --privileged
+    steps:
+      - name: Install what a user would (bubblewrap, Python, git, Node)
+        run: |
+          if command -v dnf >/dev/null; then
+            dnf install -y -q bubblewrap python3 git curl nodejs npm which findutils procps-ng shadow-utils
+          else
+            apt-get update -q && apt-get install -y -q bubblewrap python3 python3-venv git curl nodejs npm ca-certificates passwd
+          fi
+          useradd -m tester
+      - uses: actions/checkout@v4
+      - name: Test as a normal user
+        run: |
+          cp -r "$GITHUB_WORKSPACE" /home/tester/legwork && chown -R tester:tester /home/tester/legwork
+          su - tester -c '
+            set -e
+            curl -LsSf https://astral.sh/uv/install.sh | sh -s -- --quiet
+            cd ~/legwork
+            ~/.local/bin/uv sync -q
+            LEGWORK_REQUIRE_SANDBOX=1 ~/.local/bin/uv run pytest -q
+          '
+
