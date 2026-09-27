@@ -57,6 +57,11 @@ jobs:
             apt-get update -q && apt-get install -y -q bubblewrap python3 python3-venv git curl nodejs npm ca-certificates passwd
           fi
           useradd -m tester
+          # These containers run on GitHub's Ubuntu host, whose kernel-wide
+          # AppArmor setting blocks unprivileged user namespaces everywhere,
+          # containers included. Real Fedora and Debian machines don't set
+          # it, so turn it off to test them as they are.
+          sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - uses: actions/checkout@v4
       - name: Test as a normal user
         run: |
