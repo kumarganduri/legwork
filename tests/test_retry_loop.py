@@ -359,3 +359,13 @@ def test_every_model_reply_is_kept_in_its_attempt_folder(tmp_path):
     with _MultiPatch(patches), patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
         run("owner/repo", tmp_path, CONFIG)
     assert (tmp_path / "attempt-1" / "model-reply.md").read_text() == "the raw reply"
+
+
+def test_the_source_is_copied_into_the_attempt_without_git(tmp_path):
+    from legwork.retry_loop import _copy_source
+
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / "repo" / "requirements.txt").write_text("requests\n")
+    _copy_source(tmp_path / "attempt-1")
+    assert (tmp_path / "attempt-1" / "src" / "requirements.txt").read_text() == "requests\n"
+    assert not (tmp_path / "attempt-1" / "src" / ".git").exists()

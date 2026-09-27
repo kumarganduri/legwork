@@ -161,6 +161,22 @@ def _find_system_python() -> str:
     )
 
 
+SOURCE_DIR = "src"
+
+
+def _copy_source(attempt_dir: Path) -> None:
+    """Put the repo's source inside the attempt folder as ./src, so a repo
+    that isn't published anywhere can be installed from it (`pip install
+    ./src`, `npm install` in src/) and a wrapper can use its files. The
+    sandbox only exposes the attempt folder, and the clone sits beside it:
+    without this, only PyPI/npm packages could ever work (22-repo trial,
+    2026-09-27). A copy, not a link, since installs may write into it."""
+    clone = attempt_dir.parent / "repo"
+    target = attempt_dir / SOURCE_DIR
+    if clone.is_dir() and not target.exists():
+        shutil.copytree(clone, target, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+
+
 def _install_and_self_test(
     attempt_dir: Path, install_command: str, wrapper_code: str, progress: Callable[[str], None] = _no_progress
 ) -> None:
@@ -168,6 +184,7 @@ def _install_and_self_test(
     own environment, invoke the self-test. Shared by freshly written and
     cached wrappers; raises on any failure."""
     attempt_dir.mkdir(parents=True, exist_ok=True)
+    _copy_source(attempt_dir)
     wrapper_path = attempt_dir / "wrapper.py"
     wrapper_path.write_text(wrapper_code)
 

@@ -225,3 +225,10 @@ def test_build_messages_includes_the_sandbox_description():
 
 def test_system_prompt_lists_the_missing_toolchain_refusal():
     assert "MISSING_TOOLCHAIN" in build_messages("# Repo")[0].content
+
+
+def test_sandbox_description_names_the_os_the_source_folder_and_uv():
+    text = describe_sandbox({"node": True, "go": False}, system="Linux (aarch64)")
+    assert text.startswith("SANDBOX: Linux (aarch64).")
+    assert "./src" in text and "pip install ./src" in text
+    assert "pip install uv" in text

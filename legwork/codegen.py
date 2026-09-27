@@ -24,6 +24,7 @@ SYSTEM_PROMPT/build_messages came directly out of those runs.
 
 from __future__ import annotations
 
+import platform
 import re
 from dataclasses import dataclass
 
@@ -175,17 +176,26 @@ def failure_summary(failure: str, width: int = EARLIER_FAILURE_SUMMARY_CHARS) ->
     return f"{_clip(lines[0], width // 3)} … {_clip(error_line, width - width // 3 - 3)}"
 
 
-def describe_sandbox(toolchains: dict[str, bool]) -> str:
+def describe_sandbox(toolchains: dict[str, bool], system: str | None = None) -> str:
     have = ", ".join(name for name, ok in toolchains.items() if ok) or "none"
     missing = ", ".join(name for name, ok in toolchains.items() if not ok) or "none"
+    system = system or f"{_platform_name()} ({platform.machine()})"
     return (
-        "SANDBOX: the install command runs in a fresh Python venv (python and pip on PATH), network on. "
-        "HOME is a scratch folder and nothing outside it is writable: no sudo, no system-wide or "
-        "/usr/local installs, no installers that need either.\n"
+        f"SANDBOX: {system}. The install command runs in a fresh Python venv (python and pip on "
+        "PATH), network on. The repo's full source is checked out at ./src: if the tool isn't "
+        "published on PyPI or npm, install it from there (`pip install ./src`, `pip install -r "
+        "src/requirements.txt`, `cd src && npm install`), and the wrapper can use files under src/ "
+        "at run time. HOME is a scratch folder and nothing outside the current folder is writable: "
+        "no sudo, no system-wide or /usr/local installs, no installers that need either.\n"
         f"Also on PATH: {have}.\n"
-        f"NOT available: {missing}. If every documented install path needs one of these, "
-        "refuse with MISSING_TOOLCHAIN."
+        f"NOT available: {missing}. `uv` isn't installed but `pip install uv` gets it; prefer "
+        "`pip install ./src` over `uv sync` when either works. If every documented install path "
+        "needs a missing toolchain, refuse with MISSING_TOOLCHAIN."
     )
+
+
+def _platform_name() -> str:
+    return {"Darwin": "macOS", "Linux": "Linux"}.get(platform.system(), platform.system())
 
 
 def build_messages(

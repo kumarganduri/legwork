@@ -84,3 +84,26 @@ def test_full_pipeline_real_fetch_real_sandbox_mocked_llm(tmp_path):
     attempt_dir = tmp_path / "attempt-1"
     assert (attempt_dir / "wrapper.py").exists()
     assert (attempt_dir / ".venv" / "bin" / "python").exists()
+
+
+@pytest.mark.skipif(not sandbox_runner.available(), reason="no sandbox backend on this machine")
+@pytest.mark.skipif(not _network_available(), reason="needs PyPI for the build backend and mcp")
+def test_an_unpublished_repo_installs_from_its_source(tmp_path):
+    """Most GitHub repos aren't on PyPI. The clone is copied into the attempt
+    as ./src, so `pip install ./src` works and the wrapper can import it."""
+    from legwork.retry_loop import _install_and_self_test
+
+    clone = tmp_path / "repo"
+    (clone / "tinytool").mkdir(parents=True)
+    (clone / "tinytool" / "__init__.py").write_text("def shout(s):\n    return s.upper() + '!'\n")
+    (clone / "pyproject.toml").write_text(
+        '[project]\nname = "tinytool"\nversion = "0.1"\n'
+        '[build-system]\nrequires = ["setuptools"]\nbuild-backend = "setuptools.build_meta"\n'
+    )
+    wrapper = (
+        "from mcp.server.fastmcp import FastMCP\nfrom tinytool import shout\n"
+        "mcp = FastMCP('tiny')\n@mcp.tool()\ndef yell(s: str) -> str:\n    return shout(s)\n"
+        "if __name__ == '__main__':\n    assert yell('hi')\n    print('ok')\n"
+    )
+    _install_and_self_test(tmp_path / "attempt-1", "pip install -q ./src", wrapper)
+    assert (tmp_path / "attempt-1" / "src" / "pyproject.toml").exists()
