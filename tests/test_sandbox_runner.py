@@ -495,3 +495,29 @@ def test_grants_refuse_home_and_secret_folders(target):
 def test_grants_refuse_paths_that_do_not_exist(tmp_path):
     with pytest.raises(sandbox_runner.SandboxGrantError, match="no such"):
         sandbox_runner.check_read_grants([str(tmp_path / "missing")])
+
+
+@pytest.mark.skipif(not _network_reachable(), reason="no network in this environment")
+@pytest.mark.parametrize("allow_net", [False, True])
+def test_served_tools_get_network_only_when_granted(tmp_path, allow_net):
+    """exec_serve replaces the process, so run it in a child. With the grant,
+    internet works; on Linux, Unix sockets stay refused even then."""
+    import subprocess
+    import sys
+
+    probe = (
+        "import socket\n"
+        "try:\n    socket.create_connection(('1.1.1.1', 443), timeout=5).close(); print('net:yes')\n"
+        "except OSError:\n    print('net:no')\n"
+        "try:\n    socket.socket(socket.AF_UNIX); print('unix:yes')\n"
+        "except OSError:\n    print('unix:no')\n"
+    )
+    launcher = (
+        "import sys; from pathlib import Path; from legwork import sandbox_runner\n"
+        f"sandbox_runner.exec_serve([{SYSTEM_PYTHON!r}, '-c', {probe!r}], Path({str(tmp_path)!r}), "
+        f"allow_network={allow_net})\n"
+    )
+    out = subprocess.run([sys.executable, "-c", launcher], capture_output=True, text=True, timeout=60).stdout
+    assert f"net:{'yes' if allow_net else 'no'}" in out
+    if platform.system() == "Linux" and allow_net:
+        assert "unix:no" in out
