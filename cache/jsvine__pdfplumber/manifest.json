@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/jsvine/pdfplumber",
+  "commit_sha": "4c64b92d5caccd71c645e98e0fabb0c4dba7ff45",
+  "synthesis_date": "2026-09-27T14:26:08+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-09-27T14:33:21+00:00"
+  },
+  "entrypoint": "Extract text, tables, and low-level page objects from local PDFs using pdfplumber’s Python API",
+  "install_command": "pip install pdfplumber",
+  "mcp_sdk": "mcp<2"
+}

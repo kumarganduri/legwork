@@ -7,6 +7,7 @@ self-tested on your machine before it's used.
 | Repo | What the wrapper does | Install | License |
 |---|---|---|---|
 | [2akouwu/reverify](https://github.com/2akouwu/reverify) | Verify claims about binaries using Reverify’s deterministic tools (wraps `reverify verify --json`) | `pip install reverify` | MIT |
+| [jsvine/pdfplumber](https://github.com/jsvine/pdfplumber) | Extract text, tables, and low-level page objects from local PDFs using pdfplumber’s Python API | `pip install pdfplumber` | MIT |
 | [microsoft/markitdown](https://github.com/microsoft/markitdown) | Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins | `pip install "markitdown[all]"` | MIT |
 | [mikehasa/golive-skill](https://github.com/mikehasa/golive-skill) | Run the GoLive CLI (npm package "golive") to fetch version info and other read-only commands | `npm install --no-fund --no-audit golive@alpha` | MIT |
 | [nokia-applied-research/AnyJev](https://github.com/nokia-applied-research/AnyJev) | Decide a multiple-choice question via AnyJev against a running vLLM HTTP server and return calibrated choice probabilities (L0 or raw) | `pip install "anyjev[hf]"` | Apache-2.0 |

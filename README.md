@@ -4,22 +4,40 @@
 [![CI](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml/badge.svg)](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Point it at a GitHub repo, get a working MCP tool back.**
+**Your AI finds the open-source tool it needs on GitHub. Legwork installs it safely.**
 
 <p align="center">
   <img src="docs/assets/demo.svg" width="860" alt="Legwork demo: build an MCP wrapper from the public cache with no API key, connect it to Claude Code, and block a malware repo before install.">
 </p>
 <p align="center"><sub>Real runs, real output. The 24-second install is sped up; the malware repo's name is masked.</sub></p>
 
-Legwork reads a repo's README, has your LLM write an
-[MCP](https://modelcontextprotocol.io) wrapper for it, installs it in a
-sandbox, and proves it runs before handing it to Claude Code, Cursor or any
-other MCP client. If a repo can't be wrapped, it says why instead of
-producing something broken.
+Add Legwork to Claude, Cursor or any [MCP](https://modelcontextprotocol.io)
+client once. When you ask for something your AI has no tool for, it
+searches GitHub, picks a repo, and asks you to approve installing it.
+Legwork then checks the code for malware, builds a working tool for it in a
+sandbox, tests it, and hands it over. It can only touch the folders you
+allow.
 
 ```sh
-uvx legwork-mcp owner/repo
+claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 ```
+
+Then just ask: *"Pull the risk table out of ~/Downloads/launch-plan.pdf."*
+Claude finds [pdfplumber](https://github.com/jsvine/pdfplumber), you
+approve the install, and it reads the table. Or build one tool yourself:
+`uvx legwork-mcp owner/repo`.
+
+## Why not just ask your AI to install it?
+
+- **Most repos have no MCP server to install.** Your AI would have to write
+  one on the spot, untested, every time. Legwork writes it once, proves it
+  works with a self-test, and caches it so the next person doesn't pay for it.
+- **Whatever your AI installs runs with full access to your machine:** your
+  SSH keys, your files, your environment variables. That's how the two
+  malware repos below would have got in. Legwork scans the code first, and
+  every tool it installs runs sandboxed, seeing only the folders you grant.
+- **It works across your tools:** the same install works in Claude Code,
+  Claude Desktop and Cursor.
 
 ## Proof, not a pitch
 
@@ -46,6 +64,42 @@ models: **gpt-5 built 12 and refused 10 with reasons, with no crashes**;
 OpenRouter's free Nemotron built 4. That run also caught two false malware
 alarms and a gap where only published packages could be installed, both
 fixed. [Write-up](docs/designs/legwork-trending-trial-2-2026-09-27.md).
+
+## Let your AI find its own tools (hub)
+
+`legwork hub` is one MCP server that gives your AI five tools: `find_tools`,
+`install_tool`, `install_status`, `list_installed_tools` and `use_tool`.
+
+```sh
+claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
+```
+
+For Claude Desktop or Cursor, add this to the MCP config (for Claude
+Desktop, while the app is quit):
+
+```json
+{ "mcpServers": { "legwork": { "command": "uvx",
+  "args": ["legwork-mcp", "hub", "--allow-read", "/Users/you/Downloads"] } } }
+```
+
+- **You approve every install:** your client shows the repo and the
+  folders it asks for.
+- **The hub's flags are the ceiling.** An install can ask for the folders
+  you allowed or less, never more, and no network unless you started the
+  hub with `--allow-net`. Secret folders (`~/.ssh`, `~/.aws`, ...) are
+  refused outright.
+- **Installed tools appear by name** (`pdfplumber__extract_tables`), and
+  `use_tool` works in clients that don't refresh their tool list. Installs
+  are remembered across restarts.
+- **Search results tell your AI what matters:** stars, license, how recently
+  the repo was updated, whether it's in the Legwork cache, whether it
+  already has an MCP server, and a warning on very new repos (the malware
+  we caught was three days old). Descriptions are marked as untrusted text.
+
+Repos in the [public cache](cache/) install in about a minute with no API
+key. Others need a model key (see below), and building takes 1–5 minutes.
+
+`legwork find "extract tables pdf"` runs the same search from your terminal.
 
 ## Quick start
 
@@ -251,6 +305,8 @@ refuses to run. It never falls back to running unsandboxed.
 
 | Command | What it does |
 |---|---|
+| `legwork hub [--allow-read PATH] [--allow-net]` | One MCP server through which your AI finds, installs and uses tools, within the limits you set |
+| `legwork find "keywords"` | Search GitHub for tools that do something, with facts to choose by |
 | `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key. `--allow-read PATH`, `--allow-net` grant access (see Permissions) |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |

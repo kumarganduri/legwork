@@ -971,6 +971,22 @@ finding above. Run with Claude Code or Codex; checkbox as you ship.
         blocking. Commit SHA comes from the kept clone. 22 new tests
         (166 total); live-checked on the real reverify build (MIT, self-test
         passed, no copy, scrub clean with the real key loaded).
+- [x] **Hub: the just-in-time runtime (2026-09-27, 0.7.0).** The original
+      vision, built: `legwork hub` is one MCP server through which the
+      client's model finds (`find_tools`: two merged GitHub searches,
+      annotated with stars, license, freshness, NEW-repo warning, cached,
+      already-has-MCP), installs (`install_tool`: background job, scan,
+      sandboxed build or cache, self-test) and uses tools (exported as
+      `<repo>__<tool>` with tools/list_changed, plus `use_tool` for every
+      client). The user approves each install in their client; the hub's
+      --allow-read/--allow-net are a ceiling installs can't exceed; secret
+      folders are refused; descriptions are labelled untrusted; the model key
+      never reaches served tools. Hand-rolled MCP over stdio (still no
+      dependencies). Verified live: find → install jsvine/pdfplumber (fresh
+      gpt-5 build, 75s) → `pdfplumber__extract_tables` returned the demo
+      PDF's risk table; restart restored it; a byte-identical file outside
+      the grant was unreadable. pdfplumber added to the cache. Also found:
+      markitdown ships its own MCP server, so it stopped being the hero demo.
 - [x] **Pre-launch QA round (2026-09-27, released in 0.4.0):** prompted by
       bugs that only appeared on fresh machines. (1) A Mac without Homebrew
       Python couldn't build (system python3 is 3.9, uv's Python is under

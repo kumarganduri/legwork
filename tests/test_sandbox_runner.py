@@ -514,7 +514,7 @@ def test_served_tools_get_network_only_when_granted(tmp_path, allow_net):
         f"sandbox_runner.exec_serve([{SYSTEM_PYTHON!r}, '-c', {probe!r}], Path({str(tmp_path)!r}), "
         f"allow_network={allow_net})\n"
     )
-    out = subprocess.run([sys.executable, "-c", launcher], capture_output=True, text=True, timeout=60).stdout
+    out = subprocess.run([sys.executable, "-c", launcher], capture_output=True, text=True, timeout=60, check=False).stdout
     assert f"net:{'yes' if allow_net else 'no'}" in out
     if platform.system() == "Linux" and allow_net:
         assert "unix:no" in out

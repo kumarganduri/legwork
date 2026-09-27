@@ -3,6 +3,11 @@
     legwork <repo>          build an MCP wrapper for a GitHub repo
     legwork build <repo>    same, spelled out
     legwork serve <repo>    run the built wrapper as an MCP server over stdio
+    legwork find "<what you need>"
+                            search GitHub for tools that do it, with facts to choose by
+    legwork hub [--allow-read PATH]... [--allow-net]
+                            one MCP server through which your AI finds, installs
+                            and uses tools on demand, within the limits you set
     legwork clean [<repo>] [--all] [--dry-run]
                             free disk space: old and failed builds (a build
                             with PyTorch is several GB)
@@ -31,22 +36,18 @@ import sys
 import urllib.parse
 from pathlib import Path
 
-from legwork import (
+from legwork import (  # noqa: F401 — cache_reader/repo_fetcher kept as patch points for tests
+    builder,
     cache_reader,
     cache_writer,
-    codegen,
     local_store,
     repo_fetcher,
     retry_loop,
     sandbox_runner,
 )
-from legwork.llm_client import LLMAuthError, LLMConfig
-from legwork.obfuscation_scanner import ObfuscatedPayloadDetectedError
-from legwork.readme_parser import InsufficientReadmeError as NoReadmeError
 from legwork.repo_fetcher import (
     InvalidRepoURLError,
     RepoAccessError,
-    RepoNotFoundError,
     RepoRef,
     parse_repo_url,
 )
@@ -67,18 +68,6 @@ if len(servers) != 1:
     sys.exit(f"legwork serve: expected one FastMCP server in {path}, found {len(servers)}")
 servers[0].run()
 """
-
-_BUILD_ERRORS = (
-    InvalidRepoURLError,
-    RepoNotFoundError,
-    RepoAccessError,
-    ObfuscatedPayloadDetectedError,
-    NoReadmeError,
-    retry_loop.TotalRunTimeoutExceeded,
-    sandbox_runner.SandboxUnavailableError,
-    LLMAuthError,
-)
-
 
 def _err(message: str) -> None:
     print(f"legwork: {message}", file=sys.stderr)
@@ -142,55 +131,8 @@ def _print_connect_instructions(ref: RepoRef) -> None:
     print(json.dumps(config, indent=2))
 
 
-def _looks_like_ollama(endpoint: str) -> bool:
-    # Provider test, 2026-09-27: Ollama cut every Legwork prompt to 2,050
-    # tokens and the model answered nonsense. Ollama's default port is 11434.
-    parsed = urllib.parse.urlparse(endpoint)
-    return parsed.port == 11434 or "ollama" in (parsed.hostname or "")
-
-
 def _progress(message: str) -> None:
     print(f"  {message}", file=sys.stderr)
-
-
-def _warn_if_stale(ref: RepoRef, cached: cache_reader.CachedWrapper) -> None:
-    try:
-        current = repo_fetcher.remote_head_sha(ref.clone_url)
-    except RepoAccessError:
-        return
-    built_from = cached.manifest["commit_sha"]
-    if current != built_from:
-        print(
-            f"  Cache entry may be stale — repo has new commits (cached from {built_from[:12]}, now at "
-            f"{current[:12]}). It usually still works; `legwork --no-cache {ref.slug}` writes a fresh one.",
-            file=sys.stderr,
-        )
-
-
-def _build_from_cache(ref: RepoRef) -> tuple[retry_loop.RunResult, cache_reader.CachedWrapper] | None:
-    """A verified build from the public cache, or None to build fresh.
-    Precondition failures (repo gone, malware found) propagate."""
-    try:
-        cached = cache_reader.fetch(ref)
-    except cache_reader.CacheUnavailableError as exc:
-        print(f"  (skipping the Legwork cache: {exc})", file=sys.stderr)
-        return None
-    if cached is None:
-        return None
-    print(
-        f"Found {ref.slug} in the Legwork cache (written by {cached.manifest['llm_model']}); "
-        "installing and testing it — no model call needed",
-        file=sys.stderr,
-    )
-    _warn_if_stale(ref, cached)
-    result = retry_loop.run_cached(
-        ref.slug, local_store.new_build_dir(ref), cached.install_command, cached.wrapper_code, progress=_progress
-    )
-    if not result.success:
-        detail = codegen.failure_summary(result.attempts[-1].detail, 300)
-        print(f"  The cached wrapper didn't pass here ({detail}); writing a fresh one.", file=sys.stderr)
-        return None
-    return result, cached
 
 
 def cmd_build(repo: str, use_cache: bool = True) -> int:
@@ -199,67 +141,22 @@ def cmd_build(repo: str, use_cache: bool = True) -> int:
     except InvalidRepoURLError as exc:
         _err(str(exc))
         return 1
-
-    if use_cache:
-        try:
-            hit = _build_from_cache(ref)
-        except _BUILD_ERRORS as exc:
-            _err(f"{type(exc).__name__}: {exc}")
-            return 1
-        if hit is not None:
-            result, cached = hit
-            record = local_store.save_current(
-                ref,
-                result.attempt_dir,
-                install_command=cached.install_command,
-                entrypoint=cached.entrypoint,
-                model=f"{cached.manifest['llm_model']} (Legwork cache)",
-            )
-            print(f"\nInstalled the cached MCP wrapper for {ref.slug}; it passed its self-test here.")
-            print(f"  What it wraps: {record.entrypoint}")
-            print(f"  Saved to: {record.attempt_dir} ({local_store.human_size(local_store.disk_usage(Path(record.attempt_dir).parent))})")
-            _print_connect_instructions(ref)
-            return 0
-
-    try:
-        config = LLMConfig.from_env()
-    except LLMAuthError as exc:
-        _err(f"{exc}\n  If you keep them in a file: source ~/.legwork.env")
+    outcome = builder.build(ref, use_cache=use_cache, progress=_progress)
+    if not outcome.ok:
+        _err(outcome.error)
+        for line in outcome.attempt_lines:
+            print(f"  {line}", file=sys.stderr)
+        if outcome.log_path:
+            print(f"  Full error output: {outcome.log_path}", file=sys.stderr)
         return 1
-
-    if _looks_like_ollama(config.endpoint):
-        print(
-            "  Using Ollama: start it with OLLAMA_CONTEXT_LENGTH=32768 (or more). Its default window is a few\n"
-            "  thousand tokens and it silently cuts longer prompts, so the model never sees the instructions.",
-            file=sys.stderr,
-        )
-    build_dir = local_store.new_build_dir(ref)
-    print(f"Building an MCP wrapper for {ref.slug} (usually 1-3 minutes)", file=sys.stderr)
-    try:
-        result = retry_loop.run(ref.slug, build_dir, config, progress=_progress)
-    except _BUILD_ERRORS as exc:
-        _err(f"{type(exc).__name__}: {exc}")
-        return 1
-
-    if not result.success:
-        _err(f"no working wrapper for {ref.slug}.")
-        log = build_dir / "attempts.log"
-        log.write_text("".join(f"=== attempt {a.attempt_number}: {a.outcome}\n{a.detail}\n\n" for a in result.attempts))
-        for a in result.attempts:
-            print(f"  attempt {a.attempt_number}: {a.outcome} — {codegen.failure_summary(a.detail, 300)}", file=sys.stderr)
-        print(f"  Full error output: {log}", file=sys.stderr)
-        return 1
-
-    record = local_store.save_current(
-        ref,
-        result.attempt_dir,
-        install_command=result.install_command,
-        entrypoint=result.attempts[-1].detail,
-        model=config.model,
-    )
-    print(f"\nBuilt an MCP wrapper for {ref.slug} on attempt {len(result.attempts)} of {retry_loop.MAX_WRAPPER_ATTEMPTS}.")
+    record = outcome.record
+    if outcome.from_cache:
+        print(f"\nInstalled the cached MCP wrapper for {ref.slug}; it passed its self-test here.")
+    else:
+        print(f"\nBuilt an MCP wrapper for {ref.slug} on attempt {outcome.attempts} of {retry_loop.MAX_WRAPPER_ATTEMPTS}.")
     print(f"  What it wraps: {record.entrypoint}")
-    print(f"  Saved to: {record.attempt_dir} ({local_store.human_size(local_store.disk_usage(Path(record.attempt_dir).parent))})")
+    size = local_store.human_size(local_store.disk_usage(Path(record.attempt_dir).parent))
+    print(f"  Saved to: {record.attempt_dir} ({size})")
     _print_connect_instructions(ref)
     return 0
 
@@ -320,6 +217,30 @@ def cmd_contribute(repo: str, out: Path) -> int:
     return 0
 
 
+def cmd_find(query: str) -> int:
+    from legwork import discovery
+
+    try:
+        print(discovery.describe(discovery.find(query)))
+    except discovery.DiscoveryError as exc:
+        _err(str(exc))
+        return 1
+    print("\nBuild one with: legwork owner/repo")
+    return 0
+
+
+def cmd_hub(allow_read: list[str] | None, allow_net: bool) -> int:
+    from legwork import hub
+
+    try:
+        limits = sandbox_runner.check_read_grants(allow_read or [])
+        sandbox_runner._check_backend_available()
+    except (sandbox_runner.SandboxGrantError, sandbox_runner.SandboxUnavailableError) as exc:
+        _err(str(exc))
+        return 1
+    return hub.run(limits, allow_net)
+
+
 def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
     ref = None
     if repo is not None:
@@ -349,7 +270,7 @@ def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "-h", "--help"):
+    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "-h", "--help"):
         # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
         argv.insert(0, "build")
 
@@ -372,6 +293,11 @@ def main(argv: list[str] | None = None) -> int:
     contribute.add_argument(
         "--out", type=Path, default=cache_writer.DEFAULT_CACHE_DIR, help="cache folder to write into (default: ./cache)"
     )
+    find = sub.add_parser("find", help="search GitHub for tools that do something")
+    find.add_argument("query", nargs="+", help="a few keywords, e.g. extract tables pdf")
+    hub_parser = sub.add_parser("hub", help="MCP server: your AI finds, installs and uses tools on demand")
+    hub_parser.add_argument("--allow-read", action="append", metavar="PATH", help="the most any installed tool may read (repeatable)")
+    hub_parser.add_argument("--allow-net", action="store_true", help="let installed tools use the network if they ask")
     clean = sub.add_parser("clean", help="free disk space: remove old and failed builds")
     clean.add_argument("repo", nargs="?", help="only this repo (default: all)")
     clean.add_argument("--all", action="store_true", help="also remove current builds (rebuild before serving)")
@@ -380,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "build":
         return cmd_build(args.repo, use_cache=not args.no_cache)
+    if args.command == "find":
+        return cmd_find(" ".join(args.query))
+    if args.command == "hub":
+        return cmd_hub(args.allow_read, args.allow_net)
     if args.command == "clean":
         return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":
