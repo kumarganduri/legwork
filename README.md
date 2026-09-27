@@ -78,6 +78,10 @@ sudo apparmor_parser -r /etc/apparmor.d/bwrap
 If anything's missing, Legwork stops and prints these instructions.
 </details>
 
+**Tested on every commit:** macOS on Apple silicon and Intel; Ubuntu on
+x86-64 and ARM64; Fedora; Debian. **Windows:** not supported natively.
+WSL2 should behave like Ubuntu (install bubblewrap) but hasn't been tested.
+
 ```sh
 export LEGWORK_LLM_ENDPOINT=https://api.openai.com/v1
 export LEGWORK_LLM_API_KEY=...        # your own key; never a CLI flag
