@@ -41,6 +41,12 @@ Nothing from them was installed or run. Stars are not a trust signal.
 Full write-up, including what failed along the way and what we fixed:
 [docs/designs/legwork-trending-trial-2026-09-26.md](docs/designs/legwork-trending-trial-2026-09-26.md).
 
+**A second, larger run** on the next 22 new trending repos, with two
+models: **gpt-5 built 12 and refused 10 with reasons, with no crashes**;
+OpenRouter's free Nemotron built 4. That run also caught two false malware
+alarms and a gap where only published packages could be installed, both
+fixed. [Write-up](docs/designs/legwork-trending-trial-2-2026-09-27.md).
+
 ## Quick start
 
 You need **macOS or Linux**, [uv](https://docs.astral.sh/uv/), and any
