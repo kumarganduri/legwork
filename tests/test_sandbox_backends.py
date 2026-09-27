@@ -186,3 +186,14 @@ def test_macos_grants_are_read_only_in_the_profile(tmp_path):
     profile = sandbox_runner._generate_profile(tmp_path, allow_network=False, read_only=(tmp_path / "Downloads",))
     assert f'(allow file-read* (subpath "{(tmp_path / "Downloads").resolve()}"))' in profile
     assert f'(allow file-write* (subpath "{(tmp_path / "Downloads").resolve()}"))' not in profile
+
+
+def test_served_tools_outlive_the_thread_that_started_them(monkeypatch):
+    """--die-with-parent kills the sandbox when the *thread* that started it
+    exits; the hub starts tools from install threads. Serving must not use it;
+    one-shot installs and self-tests still do."""
+    monkeypatch.setattr("legwork.sandbox_runner.platform.system", lambda: "Linux")
+    monkeypatch.setattr("legwork.sandbox_runner._hidden_dirs", list)
+    served = sandbox_runner._sandboxed_argv(["x"], Path("/w"), False, None, die_with_parent=False)
+    assert "--die-with-parent" not in served
+    assert "--die-with-parent" in sandbox_runner._sandboxed_argv(["x"], Path("/w"), False, None)

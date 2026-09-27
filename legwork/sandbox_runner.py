@@ -245,7 +245,11 @@ def _hidden_dirs() -> list[Path]:
 
 
 def _bwrap_args(
-    workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = (), read_only: tuple[Path, ...] = ()
+    workdir: Path,
+    allow_network: bool,
+    extra_writable: tuple[Path, ...] = (),
+    read_only: tuple[Path, ...] = (),
+    die_with_parent: bool = True,
 ) -> list[str]:
     """The Linux equivalent of _generate_profile: everything read-only, home
     directories and every place local sockets live (/tmp, /run) replaced by
@@ -256,7 +260,7 @@ def _bwrap_args(
     args = [
         "bwrap",
         "--unshare-all",
-        "--die-with-parent",
+        *(["--die-with-parent"] if die_with_parent else []),
         "--new-session",
         "--ro-bind", "/", "/",
         "--dev", "/dev",
@@ -353,11 +357,12 @@ def _sandboxed_argv(
     extra_writable: tuple[Path, ...] = (),
     seccomp_fd: int | None = None,
     read_only: tuple[Path, ...] = (),
+    die_with_parent: bool = True,
 ) -> list[str]:
     if platform.system() == "Darwin":
         return ["sandbox-exec", "-f", str(profile_path), *command]
     seccomp = ["--seccomp", str(seccomp_fd)] if seccomp_fd is not None else []
-    return [*_bwrap_args(workdir, allow_network, extra_writable, read_only), *seccomp, "--", *command]
+    return [*_bwrap_args(workdir, allow_network, extra_writable, read_only, die_with_parent), *seccomp, "--", *command]
 
 
 _MACH_SERVICES = (
@@ -710,9 +715,14 @@ def exec_serve(
             os.write(seccomp_fd, program)
             os.lseek(seccomp_fd, 0, os.SEEK_SET)
             os.set_inheritable(seccomp_fd, True)  # must survive the exec into bwrap
+    # No --die-with-parent here: it fires when the *thread* that started the
+    # server exits, and MCP clients (the hub among them) may start servers
+    # from short-lived threads; the hub's tools died right after installing
+    # on Linux (2026-09-27). A served MCP server exits when its client closes
+    # stdin anyway.
     argv = _sandboxed_argv(
         command, workdir, allow_network=allow_network, profile_path=profile_path,
-        seccomp_fd=seccomp_fd, read_only=allow_read,
+        seccomp_fd=seccomp_fd, read_only=allow_read, die_with_parent=False,
     )
     os.chdir(workdir)
     os.execve(shutil.which(argv[0]), argv, _build_env(workdir, extra_env))
