@@ -176,6 +176,25 @@ without installing anything.
 7. **Serve.** `legwork serve owner/repo` runs the wrapper as an MCP server
    over stdio, sandboxed, network off.
 
+## Permissions: locked down unless you say so
+
+A served tool sees **none of your files and has no network**. Grant exactly
+what a tool needs when you add it to your client:
+
+```sh
+# Let markitdown read one folder (read-only):
+claude mcp add markitdown -- uvx legwork-mcp serve microsoft/markitdown --allow-read ~/Downloads
+
+# A tool that fetches web pages:
+uvx legwork-mcp serve owner/repo --allow-net
+```
+
+`--allow-read` is repeatable and always read-only. Some folders can't be
+granted even on request: `/`, your whole home folder, and places
+credentials live (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, keychains,
+browser cookies). With `--allow-net`, the tool still can't reach local
+sockets such as your SSH agent or Docker.
+
 ## What "built" means
 
 The self-test calls the **simplest** documented command and checks the
@@ -228,7 +247,7 @@ refuses to run. It never falls back to running unsandboxed.
 | Command | What it does |
 |---|---|
 | `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
-| `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key |
+| `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key. `--allow-read PATH`, `--allow-net` grant access (see Permissions) |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
 | `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 

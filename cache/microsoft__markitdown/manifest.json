@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/microsoft/markitdown",
+  "commit_sha": "b8f79c57ebc0044be41323d89b2a45d3fda8460e",
+  "synthesis_date": "2026-09-27T12:27:00+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-09-27T12:41:34+00:00"
+  },
+  "entrypoint": "Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins",
+  "install_command": "pip install \"markitdown[all]\"",
+  "mcp_sdk": "mcp<2"
+}
