@@ -195,6 +195,11 @@ credentials live (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, keychains,
 browser cookies). With `--allow-net`, the tool still can't reach local
 sockets such as your SSH agent or Docker.
 
+On macOS, the first time a tool reads a protected folder (Downloads,
+Documents, Desktop), macOS itself asks whether `uvx` may access it. That's
+the operating system's own privacy check, on top of Legwork's grant; allow
+it once.
+
 ## What "built" means
 
 The self-test calls the **simplest** documented command and checks the
