@@ -56,7 +56,7 @@ def test_install_from_the_cache_and_read_only_what_was_granted(tmp_path, monkeyp
 
         result = h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                            "params": {"name": "reverify__re_verify_claim", "arguments": {"target": "00", "claim": CLAIM}}})["result"]
-        assert not result["isError"] and '"verified": 1' in result["content"][0]["text"]
+        assert not result["isError"] and '"verified": 1' in result["content"][0]["text"], result["content"][0]["text"][-3000:]
 
         inside = h.use_tool("2akouwu/reverify", "re_verify_claim", {"target": str(granted / "blob.bin"), "claim": CLAIM})
         outside = h.use_tool("2akouwu/reverify", "re_verify_claim", {"target": str(other / "blob.bin"), "claim": CLAIM})
