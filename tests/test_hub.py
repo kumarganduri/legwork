@@ -58,7 +58,7 @@ def call(h, name, args=None):
 
 
 def install(h, repo="owner/repo", **grants):
-    with patch("legwork.hub.builder.build", side_effect=fake_build):
+    with patch("legwork.hub.builder.build", side_effect=fake_build), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5):
         result, text = call(h, "install_tool", {"repo": repo, **grants})
         for _ in range(100):
             if not text.startswith("Still installing"):
@@ -128,6 +128,11 @@ def test_install_then_use_directly_and_through_use_tool(limits):
     assert text == "echo: hi"
     _, text = call(h, "use_tool", {"repo": "owner/repo", "tool": "echo", "arguments": {"text": "again"}})
     assert text == "echo: again"
+    # the exported name works in use_tool too (Claude tried it that way first)
+    _, text = call(h, "use_tool", {"repo": "owner/repo", "tool": "repo__echo", "arguments": {"text": "x"}})
+    assert text == "echo: x"
+    result, text = call(h, "use_tool", {"repo": "owner/repo", "tool": "nope"})
+    assert result["isError"] and "Its tools: echo" in text
     h.close()
 
 
@@ -173,3 +178,15 @@ def test_use_tool_on_something_not_installed_says_what_to_do():
 def test_the_model_key_never_reaches_a_served_tool(monkeypatch):
     monkeypatch.setenv("LEGWORK_LLM_API_KEY", "sk-secret")
     assert "LEGWORK_LLM_API_KEY" not in hub._child_env()
+
+
+
+def test_install_waits_for_a_quick_install_instead_of_answering_at_once(limits):
+    """One call, one answer: Claude Desktop polled install_status four times in
+    13 seconds when the hub answered immediately."""
+    h, _ = make_hub([limits])
+    with patch("legwork.hub.builder.build", side_effect=fake_build):
+        _, text = call(h, "install_tool", {"repo": "owner/repo", "allow_read": [str(limits)]})
+    assert "owner/repo is installed" in text
+    assert 'use_tool(repo="owner/repo", tool="echo"' in text and "repo__echo" in text
+    h.close()

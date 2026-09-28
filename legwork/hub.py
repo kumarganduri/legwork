@@ -43,7 +43,12 @@ from legwork.mcp_stdio import MCPClientError, StdioMCPClient
 from legwork.repo_fetcher import InvalidRepoURLError, parse_repo_url
 
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-INSTALL_WAIT_SECONDS = 20
+# How long install_tool / install_status wait for a running install before
+# answering "still installing". Long enough that a cached install usually
+# finishes within one call (Claude Desktop polled four times in 13s at 20s
+# with an instant status), short enough to stay under clients' ~60s
+# per-call timeouts.
+INSTALL_WAIT_SECONDS = 45
 TOOL_TIMEOUT_SECONDS = 300
 
 INSTRUCTIONS = """\
@@ -242,8 +247,7 @@ class Hub:
             job = Job(slug)
             self.jobs[slug] = job
         threading.Thread(target=self._install, args=(job, ref, grants, net), daemon=True).start()
-        job.finished.wait(INSTALL_WAIT_SECONDS)
-        return self.install_status(slug)
+        return self.install_status(slug)  # waits up to INSTALL_WAIT_SECONDS
 
     def _install(self, job: Job, ref, grants: tuple[Path, ...], net: bool) -> None:
         try:
@@ -274,15 +278,23 @@ class Hub:
 
     def _ready_message(self, item: Installed, how: str) -> str:
         grants = ", ".join(str(p) for p in item.allow_read) or "no folders"
-        names = ", ".join(f"{_short_name(item.slug)}__{t['name']}" for t in item.tools) or "(none listed)"
+        prefix = _short_name(item.slug)
+        tools = "\n".join(
+            f"  - {t['name']}: {' '.join((t.get('description') or '').split())[:120]}" for t in item.tools
+        ) or "  (none listed)"
+        example = item.tools[0]["name"] if item.tools else "TOOL"
         return (
-            f"{item.slug} is {how}. Reads: {grants}; network: {'yes' if item.allow_net else 'no'}.\n"
-            f"Tools: {names}\nCall them directly, or through use_tool(repo, tool, arguments)."
+            f"{item.slug} is {how}. It may read: {grants}; network: {'yes' if item.allow_net else 'no'}.\n"
+            f"Tools:\n{tools}\n"
+            f"Call one as {prefix}__{example} if it's in your tool list; otherwise "
+            f'use_tool(repo="{item.slug}", tool="{example}", arguments={{...}}).'
         )
 
-    def install_status(self, repo: str) -> str:
+    def install_status(self, repo: str, wait: float = INSTALL_WAIT_SECONDS) -> str:
         slug = self._slug(repo)
         job = self.jobs.get(slug)
+        if job is not None and job.state == "running" and wait > 0:
+            job.finished.wait(wait)
         if job is None:
             if slug in self.installed:
                 return self._ready_message(self.installed[slug], "installed")
@@ -292,7 +304,7 @@ class Hub:
         recent = "\n".join(f"  {line}" for line in job.log[-6:]) or "  starting"
         if job.state == "failed":
             return f"Installing {slug} failed: {job.error}\nLast steps:\n{recent}"
-        return f"Still installing {slug} (builds take 1-5 minutes). Latest steps:\n{recent}\nCall install_status again shortly."
+        return f"Still installing {slug} (builds take 1-5 minutes). Latest steps:\n{recent}\nCall install_status again; it waits for progress."
 
     def list_installed_tools(self) -> str:
         if not self.installed:
@@ -309,6 +321,13 @@ class Hub:
         item = self.installed.get(slug)
         if item is None:
             raise HubError(f"{slug} isn't installed. Call install_tool first.")
+        # Accept the exported name too: Claude tried use_tool with
+        # "pdfplumber__extract_tables" before the plain name (2026-09-28).
+        prefix = _short_name(slug) + "__"
+        tool = tool.removeprefix(prefix)
+        known = [t["name"] for t in item.tools]
+        if known and tool not in known:
+            raise HubError(f"{slug} has no tool {tool!r}. Its tools: {', '.join(known)}")
         return self._call(item, tool, arguments or {})
 
     def _slug(self, repo: str) -> str:

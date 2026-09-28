@@ -1,6 +1,6 @@
 [project]
 name = "legwork-mcp"
-version = "0.7.0"
+version = "0.7.1"
 description = "Your AI finds the open-source tool it needs on GitHub; Legwork installs it safely, as a sandboxed MCP tool."
 readme = "README.md"
 requires-python = ">=3.10"
