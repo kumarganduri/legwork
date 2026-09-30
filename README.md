@@ -6,10 +6,9 @@
 
 **Your AI finds the open-source tool it needs on GitHub. Legwork installs it safely.**
 
-<p align="center">
-  <img src="docs/assets/demo.svg" width="860" alt="Legwork demo: build an MCP wrapper from the public cache with no API key, connect it to Claude Code, and block a malware repo before install.">
-</p>
-<p align="center"><sub>Real runs, real output. The 24-second install is sped up; the malware repo's name is masked.</sub></p>
+https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
+
+<p align="center"><sub>A real run in Claude Desktop. The 25-second install is sped up; the malware repos' names are masked.</sub></p>
 
 Add Legwork to Claude, Cursor or any [MCP](https://modelcontextprotocol.io)
 client once. When you ask for something your AI has no tool for, it
