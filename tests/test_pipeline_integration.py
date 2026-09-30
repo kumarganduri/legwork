@@ -53,9 +53,11 @@ def test_real_malicious_repo_clones_and_scan_blocks_it(workdir):
     import or run it."""
     try:
         cloned = fetch("kruzovic7/ai-data-extractor", workdir / "ai-data-extractor")
-    except RepoNotFoundError:
-        # GitHub took it down (gone by 2026-09-30). test_obfuscation_scanner.py
-        # still covers the same payload through the defanged fixture.
+    except (RepoNotFoundError, RepoAccessError):
+        # GitHub took it down (gone by 2026-09-30); on a rate-limited CI runner
+        # that shows up as an access error rather than not-found.
+        # test_obfuscation_scanner.py still covers the same payload through the
+        # defanged fixture.
         pytest.skip("the malicious repo has been removed from GitHub")
     with pytest.raises(ObfuscatedPayloadDetectedError, match="extract.py"):
         scan(cloned.path)
