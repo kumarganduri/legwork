@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from legwork.obfuscation_scanner import ObfuscatedPayloadDetectedError, scan
-from legwork.repo_fetcher import RepoAccessError, fetch
+from legwork.repo_fetcher import RepoAccessError, RepoNotFoundError, fetch
 
 
 @pytest.fixture
@@ -51,6 +51,11 @@ def test_real_malicious_repo_clones_and_scan_blocks_it(workdir):
     """The actual repo from the validation spike. Clone is safe (no code
     execution); scan() must block it before anything downstream would ever
     import or run it."""
-    cloned = fetch("kruzovic7/ai-data-extractor", workdir / "ai-data-extractor")
+    try:
+        cloned = fetch("kruzovic7/ai-data-extractor", workdir / "ai-data-extractor")
+    except RepoNotFoundError:
+        # GitHub took it down (gone by 2026-09-30). test_obfuscation_scanner.py
+        # still covers the same payload through the defanged fixture.
+        pytest.skip("the malicious repo has been removed from GitHub")
     with pytest.raises(ObfuscatedPayloadDetectedError, match="extract.py"):
         scan(cloned.path)

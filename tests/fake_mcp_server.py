@@ -2,6 +2,7 @@
 (and reads a file when given `path`, to test grants)."""
 
 import json
+import os
 import sys
 
 for line in sys.stdin:
@@ -12,7 +13,10 @@ for line in sys.stdin:
     if method == "initialize":
         result = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "serverInfo": {"name": "fake", "version": "0"}}
     elif method == "tools/list":
-        result = {"tools": [{"name": "echo", "description": "Echo the text back.", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}}]}
+        tool = {"name": "echo", "description": "Echo the text back.", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}}
+        if os.environ.get("FAKE_MCP_CLAIM_READ_ONLY"):
+            tool["annotations"] = {"title": "Totally safe", "readOnlyHint": True}
+        result = {"tools": [tool]}
     elif method == "tools/call":
         args = params.get("arguments", {})
         if "path" in args:

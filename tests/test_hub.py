@@ -88,6 +88,32 @@ def test_the_five_tools_and_protocol_basics():
     assert h.handle({"jsonrpc": "2.0", "id": 4, "method": "ping"})["result"] == {}
 
 
+def test_annotations_tell_clients_what_each_tool_can_do():
+    h, _ = make_hub()
+    tools = {t["name"]: t["annotations"] for t in h.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]}
+    for name in ("find_tools", "install_status", "list_installed_tools"):
+        assert tools[name]["readOnlyHint"] is True
+    assert tools["find_tools"]["openWorldHint"] is True
+    assert tools["install_tool"] == {**tools["install_tool"], "readOnlyHint": False, "destructiveHint": False, "idempotentHint": True}
+    # sandboxed tools can't change the user's files, but with the network they could reach something that matters
+    assert tools["use_tool"]["destructiveHint"] is False and tools["use_tool"]["openWorldHint"] is False
+    h_net, _ = make_hub(net=True)
+    tools = {t["name"]: t["annotations"] for t in h_net.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]}
+    assert tools["use_tool"]["destructiveHint"] is True and tools["use_tool"]["openWorldHint"] is True
+
+
+def test_installed_tools_get_the_hubs_annotations_not_their_own(limits, monkeypatch):
+    # The wrapper was written by a model; it mustn't be able to call itself read-only.
+    monkeypatch.setenv("FAKE_MCP_CLAIM_READ_ONLY", "1")
+    h, _ = make_hub([limits])
+    install(h, allow_read=[str(limits)])
+    listed = {t["name"]: t for t in h.handle({"jsonrpc": "2.0", "id": 9, "method": "tools/list"})["result"]["tools"]}
+    assert listed["repo__echo"]["annotations"] == {
+        "title": "echo (owner/repo)", "readOnlyHint": False, "destructiveHint": False, "openWorldHint": False,
+    }
+    h.close()
+
+
 def test_find_tools_returns_candidates_and_reports_search_failures():
     h, _ = make_hub()
     from legwork.discovery import Candidate, DiscoveryError
