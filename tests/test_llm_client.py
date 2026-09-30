@@ -49,6 +49,56 @@ def test_from_env_missing_vars_raises_auth_error(monkeypatch):
         LLMConfig.from_env()
 
 
+
+def _clear_env(monkeypatch):
+    for name in ("LEGWORK_LLM_ENDPOINT", "LEGWORK_LLM_API_KEY", "LEGWORK_LLM_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def _key_file(tmp_path, monkeypatch, text, mode=0o600):
+    path = tmp_path / "legwork.env"
+    path.write_text(text)
+    path.chmod(mode)
+    monkeypatch.setenv("LEGWORK_ENV_FILE", str(path))
+    return path
+
+
+def test_from_env_reads_the_key_file_when_the_environment_has_nothing(tmp_path, monkeypatch):
+    # How the hub gets a key in Claude Desktop and Cursor, which have no shell to source from.
+    _clear_env(monkeypatch)
+    _key_file(tmp_path, monkeypatch, (
+        "# my legwork key\n"
+        "export LEGWORK_LLM_ENDPOINT=https://api.example.com/v1/\n"
+        "LEGWORK_LLM_API_KEY='sk-from-file'\n"
+        'export LEGWORK_LLM_MODEL="gpt-test"\n'
+        "OPENAI_API_KEY=not-ours\n"
+        "$(rm -rf ~)\n"
+    ))
+    config = LLMConfig.from_env()
+    assert (config.endpoint, config.api_key, config.model) == ("https://api.example.com/v1", "sk-from-file", "gpt-test")
+
+
+def test_environment_variables_win_over_the_key_file(tmp_path, monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("LEGWORK_LLM_MODEL", "from-env")
+    _key_file(tmp_path, monkeypatch, "LEGWORK_LLM_ENDPOINT=https://e/v1\nLEGWORK_LLM_API_KEY=k\nLEGWORK_LLM_MODEL=from-file\n")
+    assert LLMConfig.from_env().model == "from-env"
+
+
+def test_a_key_file_other_users_can_read_is_refused(tmp_path, monkeypatch):
+    _clear_env(monkeypatch)
+    path = _key_file(tmp_path, monkeypatch, "LEGWORK_LLM_API_KEY=k\n", mode=0o644)
+    with pytest.raises(LLMAuthError, match=f"chmod 600 {path}"):
+        LLMConfig.from_env()
+
+
+def test_the_missing_key_message_names_the_key_file(tmp_path, monkeypatch):
+    _clear_env(monkeypatch)
+    _key_file(tmp_path, monkeypatch, "LEGWORK_LLM_ENDPOINT=https://e/v1\n")
+    with pytest.raises(LLMAuthError, match="LEGWORK_LLM_API_KEY, LEGWORK_LLM_MODEL") as info:
+        LLMConfig.from_env()
+    assert "legwork.env (chmod 600)" in str(info.value)
+
 # --- successful call ------------------------------------------------------
 
 

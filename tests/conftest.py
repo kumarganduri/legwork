@@ -23,3 +23,10 @@ def _no_live_cache(monkeypatch):
     everyone. Tests that cover the cache point LEGWORK_CACHE_URL at a
     local folder themselves."""
     monkeypatch.setenv("LEGWORK_CACHE_URL", "off")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_key_file(monkeypatch, tmp_path):
+    """Never read the developer's own ~/.legwork.env: a test expecting a
+    missing key would pass or fail depending on whose machine it ran on."""
+    monkeypatch.setenv("LEGWORK_ENV_FILE", str(tmp_path / "no-key-file.env"))

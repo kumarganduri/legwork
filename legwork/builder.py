@@ -130,7 +130,7 @@ def build(
         try:
             config = llm_config or LLMConfig.from_env()
         except LLMAuthError as exc:
-            return BuildOutcome(ok=False, ref=ref, error=f"{exc}\n  If you keep them in a file: source ~/.legwork.env")
+            return BuildOutcome(ok=False, ref=ref, error=str(exc))
         if looks_like_ollama(config.endpoint):
             progress(OLLAMA_TIP)
         build_dir = local_store.new_build_dir(ref)

@@ -88,7 +88,7 @@ def test_invoke_read_outside_home_succeeds(tmp_path):
 
 def test_invoke_read_elsewhere_in_home_fails(tmp_path):
     """The exfiltration-relevant restriction: reading arbitrary files
-    under $HOME (SSH keys, cloud credentials, shell history) outside the
+    under $HOME (SSH keys, cloud credentials, ~/.legwork.env) outside the
     sandbox workdir must fail, even though workdir itself is readable.
     Uses a file this test creates and controls, not a dotfile that may or
     may not exist on the machine running the suite."""

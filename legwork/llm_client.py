@@ -21,6 +21,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 DEFAULT_TIMEOUT_SECONDS = 60
 # 1 initial attempt + this many retries (3 total tries) on timeout/rate-limit.
@@ -63,25 +64,50 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> LLMConfig:
-        endpoint = os.environ.get("LEGWORK_LLM_ENDPOINT")
-        api_key = os.environ.get("LEGWORK_LLM_API_KEY")
-        model = os.environ.get("LEGWORK_LLM_MODEL")
-        missing = [
-            name
-            for name, value in (
-                ("LEGWORK_LLM_ENDPOINT", endpoint),
-                ("LEGWORK_LLM_API_KEY", api_key),
-                ("LEGWORK_LLM_MODEL", model),
-            )
-            if not value
-        ]
+        """From LEGWORK_LLM_* environment variables, falling back to the key
+        file (~/.legwork.env, or LEGWORK_ENV_FILE) for any that aren't set.
+        The file is what makes `legwork hub` work with a model: Claude Desktop
+        and Cursor start it with no shell to `source` from, and the
+        alternative, the key in their MCP config, stores it in plain text."""
+        names = ("LEGWORK_LLM_ENDPOINT", "LEGWORK_LLM_API_KEY", "LEGWORK_LLM_MODEL")
+        values = {name: os.environ.get(name) for name in names}
+        path = env_file_path()
+        if not all(values.values()) and path.exists():
+            from_file = _read_env_file(path)
+            values = {name: values[name] or from_file.get(name) for name in names}
+        missing = [name for name in names if not values[name]]
         if missing:
             raise LLMAuthError(
-                "Missing required env var(s): "
-                + ", ".join(missing)
-                + " — Legwork needs an OpenAI-compatible endpoint, key, and model."
+                "Missing " + ", ".join(missing) + ". Legwork needs an OpenAI-compatible endpoint, key and model: "
+                f"set them as environment variables or put them in {path} (chmod 600), one per line, "
+                "e.g. LEGWORK_LLM_MODEL=gpt-5."
             )
-        return cls(endpoint=endpoint.rstrip("/"), api_key=api_key, model=model)
+        return cls(endpoint=values["LEGWORK_LLM_ENDPOINT"].rstrip("/"), api_key=values["LEGWORK_LLM_API_KEY"], model=values["LEGWORK_LLM_MODEL"])
+
+
+def env_file_path() -> Path:
+    return Path(os.environ.get("LEGWORK_ENV_FILE") or Path.home() / ".legwork.env").expanduser()
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    """LEGWORK_LLM_* lines of a shell-style file (`export NAME=value` or
+    `NAME=value`, optionally quoted). Nothing is executed. Like ssh with a
+    private key, it refuses a file other users can read."""
+    if os.name == "posix" and path.stat().st_mode & 0o077:
+        raise LLMAuthError(f"{path} can be read by other users. Make it private first: chmod 600 {path}")
+    found = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
+        name, sep, value = line.partition("=")
+        name, value = name.strip(), value.strip()
+        if not sep or not name.startswith("LEGWORK_LLM_"):
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        found[name] = value
+    return found
 
 
 def _post_chat_completion(config: LLMConfig, messages: list[ChatMessage], timeout: float) -> str:

@@ -96,7 +96,10 @@ Desktop, while the app is quit):
   we caught was three days old). Descriptions are marked as untrusted text.
 
 Repos in the [public cache](cache/) install in about a minute with no API
-key. Others need a model key (see below), and building takes 1–5 minutes.
+key. Others need a model key, and building takes 1–5 minutes. Put the key
+in `~/.legwork.env` ([three lines](#model-providers), `chmod 600`) and the
+hub reads it when it needs to build, so the key never goes in your MCP
+config, where it would sit in plain text.
 
 `legwork find "extract tables pdf"` runs the same search from your terminal.
 
@@ -170,8 +173,16 @@ key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
 
 ## Model providers
 
-Any OpenAI-compatible chat-completions endpoint works. Put three lines in a
-private file (`chmod 600`) and `source` it before building:
+Any OpenAI-compatible chat-completions endpoint works. Put three lines in
+`~/.legwork.env` and make it private with `chmod 600 ~/.legwork.env`; Legwork
+reads it whenever the variables aren't set in your environment (and refuses
+it if other users can read it):
+
+```sh
+LEGWORK_LLM_ENDPOINT=https://api.openai.com/v1
+LEGWORK_LLM_API_KEY=sk-...
+LEGWORK_LLM_MODEL=gpt-5
+```
 
 | Provider | `LEGWORK_LLM_ENDPOINT` | `LEGWORK_LLM_MODEL` (tested) | Cost |
 |---|---|---|---|
