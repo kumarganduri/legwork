@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
 
 <p align="center"><sub>A real run in Claude Desktop. The 25-second install is sped up; the malware repos' names are masked.</sub></p>
 
-Add Legwork to Claude, Cursor or any [MCP](https://modelcontextprotocol.io)
+Add Legwork to Claude, Cursor, opencode or any [MCP](https://modelcontextprotocol.io)
 client once. When you ask for something your AI has no tool for, it
 searches GitHub, picks a repo, and asks you to approve installing it.
 Legwork then checks the code for malware, builds a working tool for it in a
@@ -36,7 +36,7 @@ approve the install, and it reads the table. Or build one tool yourself:
   malware repos below would have got in. Legwork scans the code first, and
   every tool it installs runs sandboxed, seeing only the folders you grant.
 - **It works across your tools:** the same install works in Claude Code,
-  Claude Desktop and Cursor.
+  Claude Desktop, Cursor and opencode.
 
 ## Proof, not a pitch
 
@@ -79,6 +79,19 @@ Desktop, while the app is quit):
 ```json
 { "mcpServers": { "legwork": { "command": "uvx",
   "args": ["legwork-mcp", "hub", "--allow-read", "/Users/you/Downloads"] } } }
+```
+
+For [opencode](https://opencode.ai), add this to `~/.config/opencode/opencode.json`.
+opencode runs MCP tools without asking by default, so the `permission` line
+is what makes it ask you before an install:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": { "legwork": { "type": "local",
+    "command": ["uvx", "legwork-mcp", "hub", "--allow-read", "~/Downloads"] } },
+  "permission": { "legwork_install_tool": "ask" }
+}
 ```
 
 - **You approve every install:** your client shows the repo and the
@@ -165,7 +178,7 @@ Connect it to Claude Code:
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
 clients. For Claude Desktop, add it to `claude_desktop_config.json` **while
 the app is quit**: the running app writes its settings back on exit and
-drops edits it didn't make. Tested with Claude Code, Claude Desktop and Cursor.
+drops edits it didn't make. Tested with Claude Code, Claude Desktop, Cursor and opencode.
 For a permanent `legwork` command: `uv tool install legwork-mcp`.
 
 **Repos already in the [public cache](cache/) need no model call and no API
