@@ -87,6 +87,7 @@ import functools
 import os
 import platform
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -190,6 +191,7 @@ def _bwrap_probe_error() -> str | None:
     try:
         result = subprocess.run(
             ["bwrap", "--unshare-all", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "true"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=15,
@@ -355,14 +357,19 @@ def _sandboxed_argv(
     command: list[str],
     workdir: Path,
     allow_network: bool,
-    profile_path: Path | None,
+    profile: MacProfile | None,
     extra_writable: tuple[Path, ...] = (),
     seccomp_fd: int | None = None,
     read_only: tuple[Path, ...] = (),
     die_with_parent: bool = True,
 ) -> list[str]:
     if platform.system() == "Darwin":
-        return ["sandbox-exec", "-f", str(profile_path), *command]
+        # Inline (-p) with every path passed as a parameter (-D): no path is
+        # ever part of the profile text, and there's no profile file for
+        # sandboxed code to rewrite before the next launch (pre-launch QA,
+        # 2026-10-02).
+        params = [arg for name, value in profile.params.items() for arg in ("-D", f"{name}={value}")]
+        return ["sandbox-exec", "-p", profile.text, *params, *command]
     seccomp = ["--seccomp", str(seccomp_fd)] if seccomp_fd is not None else []
     return [*_bwrap_args(workdir, allow_network, extra_writable, read_only, die_with_parent), *seccomp, "--", *command]
 
@@ -389,18 +396,23 @@ class SandboxGrantError(Exception):
 
 
 # Never grantable, even on request: where credentials and private data live.
-# Relative to $HOME; a grant equal to or inside any of these is refused.
+# Relative to $HOME. A grant equal to, inside, or CONTAINING any of these is
+# refused: granting ~/Library used to expose Keychains, Mail and Messages
+# beneath it (pre-launch QA, 2026-10-02).
 _SECRET_DIRS = (
     ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".azure", ".password-store",
-    ".netrc", ".legwork", "Library/Keychains", "Library/Cookies", "Library/Application Support",
-    "Library/Messages", "Library/Mail", "Library/Safari", "Library/Containers",
+    ".netrc", ".legwork", ".legwork.env", ".git-credentials", ".npmrc", ".pypirc", ".gitconfig",
+    ".zsh_history", ".bash_history", ".python_history", ".psql_history", ".mysql_history",
+    "Library/Keychains", "Library/Cookies", "Library/Application Support", "Library/Messages",
+    "Library/Mail", "Library/Safari", "Library/Containers", "Library/Group Containers",
 )
 
 
 def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
     """Validate `legwork serve --allow-read` folders: they must exist, and
-    can't be /, your home folder or anything above it, or a place secrets
-    live (~/.ssh, ~/.aws, ~/.config, keychains...). Returns resolved paths."""
+    can't be /, your home folder or anything above it, a place secrets live
+    (~/.ssh, ~/.aws, ~/.config, keychains, ~/.legwork.env...), or a folder
+    that contains one (~/Library). Returns resolved paths."""
     home = Path.home().resolve()
     granted = []
     for raw in paths:
@@ -415,6 +427,11 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
         for secret in _SECRET_DIRS:
             if path.is_relative_to(home / secret):
                 raise SandboxGrantError(f"--allow-read {raw}: ~/{secret} holds credentials or private data; refusing.")
+            if (home / secret).is_relative_to(path):
+                raise SandboxGrantError(
+                    f"--allow-read {raw}: that folder contains ~/{secret}, which holds credentials or "
+                    "private data. Grant the specific subfolder the tool needs instead."
+                )
         if not path.exists():
             raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
         granted.append(path)
@@ -441,11 +458,30 @@ def _ancestors_under_home(path: Path, home: Path) -> list[Path]:
     return [a for a in [path, *path.parents] if a.is_relative_to(home)]
 
 
+@dataclass(frozen=True)
+class MacProfile:
+    """A sandbox-exec profile and the paths it refers to. Paths go in
+    `params` and reach sandbox-exec as -D NAME=value, read in the profile as
+    (param "NAME"); they're never pasted into `text`. Pasted in, a granted
+    path containing a quote and parentheses could rewrite the rules and
+    switch the sandbox off (pre-launch QA, 2026-10-02)."""
+
+    text: str
+    params: dict[str, str]
+
+
 def _generate_profile(
     workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = (), read_only: tuple[Path, ...] = ()
-) -> str:
+) -> MacProfile:
     real_workdir = str(workdir.resolve())
     home = str(Path.home().resolve())
+    params = {"HOME_DIR": home, "WORKDIR": real_workdir}
+
+    def param(prefix: str, path: Path | str) -> str:
+        name = f"{prefix}_{sum(1 for k in params if k.startswith(prefix + '_'))}"
+        params[name] = str(path)
+        return f'(param "{name}")'
+
     lines = [
         "(version 1)",
         "(deny default)",
@@ -471,9 +507,9 @@ def _generate_profile(
         # unrestricted read + open network is the exfiltration path named
         # as the primary attack surface (env vars, SSH keys, cloud
         # credentials all live under $HOME).
-        f'(allow file-read* (require-not (subpath "{home}")))',
-        f'(allow file-read* (subpath "{real_workdir}"))',
-        f'(allow file-write* (subpath "{real_workdir}"))',
+        '(allow file-read* (require-not (subpath (param "HOME_DIR"))))',
+        '(allow file-read* (subpath (param "WORKDIR")))',
+        '(allow file-write* (subpath (param "WORKDIR")))',
     ]
     # A workdir under $HOME (e.g. saved wrappers in ~/.legwork): Python
     # resolves its own binary's real path at startup, which stats every
@@ -483,20 +519,20 @@ def _generate_profile(
     home_path, workdir_path = Path(home), Path(real_workdir)
     interpreter = interpreter_home()
     if interpreter is not None:
-        lines.append(f'(allow file-read* (subpath "{interpreter}"))')
+        lines.append(f"(allow file-read* (subpath {param('INTERPRETER', interpreter)}))")
     extra = [Path(d).resolve() for d in extra_writable]
     for d in extra:
-        lines.append(f'(allow file-read* file-write* (subpath "{d}"))')
+        lines.append(f"(allow file-read* file-write* (subpath {param('WRITABLE', d)}))")
     grants = [Path(d).resolve() for d in read_only]
     for d in grants:  # `legwork serve --allow-read`: read-only, exactly this folder
-        lines.append(f'(allow file-read* (subpath "{d}"))')
+        lines.append(f"(allow file-read* (subpath {param('GRANT', d)}))")
     metadata = set(_ancestors_under_home(workdir_path, home_path))
     for d in [*extra, *grants]:
         metadata |= set(_ancestors_under_home(d, home_path))
     if interpreter is not None:
         metadata |= set(_ancestors_under_home(interpreter, home_path))
     for ancestor in sorted(metadata):
-        lines.append(f'(allow file-read-metadata (literal "{ancestor}"))')
+        lines.append(f"(allow file-read-metadata (literal {param('ANCESTOR', ancestor)}))")
     # /usr/bin/python3, git, make, cc are xcrun stubs. With full Xcode
     # selected, their first run caches the tool lookup in xcrun_db in the
     # per-user temp folder; without that write every call fails ("couldn't
@@ -520,9 +556,9 @@ def _generate_profile(
             '(allow network-inbound (local ip "localhost:*"))',
             '(allow network-bind (local ip "*:*"))',
             '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
-            f'(allow network* (subpath "{real_workdir}"))',
+            '(allow network* (subpath (param "WORKDIR")))',
         ]
-    return "\n".join(lines)
+    return MacProfile("\n".join(lines), params)
 
 
 # Temp files belong in the workdir (TMPDIR). Python and most tools honour
@@ -576,11 +612,9 @@ def _run_sandboxed(
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
-    profile_path = None
+    profile = None
     if platform.system() == "Darwin":
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".sb", delete=False) as f:
-            f.write(_generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable, read_only=read_only))
-            profile_path = Path(f.name)
+        profile = _generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable, read_only=read_only)
 
     started = time.monotonic()
     with contextlib.ExitStack() as stack:
@@ -591,34 +625,50 @@ def _run_sandboxed(
             seccomp_file.write(program)
             seccomp_file.seek(0)
             seccomp_fd = seccomp_file.fileno()
-        full_command = _sandboxed_argv(command, workdir, allow_network, profile_path, extra_writable, seccomp_fd, read_only)
+        full_command = _sandboxed_argv(command, workdir, allow_network, profile, extra_writable, seccomp_fd, read_only)
+        # stdin is /dev/null: inherited, it was the hub's MCP transport, so an
+        # npm step could end the hub's input and install code could read the
+        # client's messages (pre-launch QA, 2026-10-02). Its own session, so
+        # anything it left running (`nohup ... &`) is killed when it's done.
+        proc = subprocess.Popen(
+            full_command,
+            pass_fds=(seccomp_fd,) if seccomp_fd is not None else (),
+            cwd=workdir,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_build_env(workdir, extra_env),
+            start_new_session=True,
+        )
         try:
-            result = subprocess.run(
-                full_command,
-                pass_fds=(seccomp_fd,) if seccomp_fd is not None else (),
-                cwd=workdir,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=_build_env(workdir, extra_env),
-                check=False,  # exit code inspected manually by install()/invoke()
-            )
+            stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
+            _kill_session(proc)
+            proc.communicate()
             raise timeout_error(
                 f"{' '.join(command)!r} exceeded {timeout}s inside the sandbox"
             ) from exc
         finally:
-            if profile_path is not None:
-                profile_path.unlink(missing_ok=True)
+            _kill_session(proc)
     duration = time.monotonic() - started
 
     return ExecutionResult(
         command=command,
-        exit_code=result.returncode,
-        stdout=result.stdout,
-        stderr=result.stderr,
+        exit_code=proc.returncode,
+        stdout=stdout,
+        stderr=stderr,
         duration_seconds=duration,
     )
+
+
+def _kill_session(proc: subprocess.Popen) -> None:
+    """Kill everything left in the process's session (it was started with
+    start_new_session, so its pid is the group id)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
 
 
 def install(
@@ -700,18 +750,18 @@ def exec_serve(
     policy (network off, reads/writes confined to `workdir`, minimal env),
     with no timeout: an MCP server lives as long as the client that launched
     it, and stdio is inherited directly because stdio IS the MCP transport.
-    Never returns. The profile is written into `workdir` rather than a temp
-    file, since nothing is left running to delete a temp file afterwards.
+    Never returns. On macOS the profile is passed inline, never as a file:
+    a file in `workdir` could be rewritten by the sandboxed code before the
+    next launch.
 
     `allow_read` (already checked by check_read_grants) and `allow_network`
     are the user's explicit grants from `legwork serve --allow-read/--allow-net`;
     without them a served tool sees no files of yours and no network. With
     network on, Linux gets the same no-Unix-sockets filter as installs."""
     _check_backend_available()
-    profile_path = None
-    if platform.system() == "Darwin":
-        profile_path = workdir / ".legwork-serve.sb"
-        profile_path.write_text(_generate_profile(workdir, allow_network=allow_network, read_only=allow_read))
+    profile = None
+    if platform.system() == "Darwin":  # inline: no file in the writable workdir to tamper with
+        profile = _generate_profile(workdir, allow_network=allow_network, read_only=allow_read)
     seccomp_fd = None
     if platform.system() == "Linux" and allow_network:
         program = no_unix_sockets_filter()
@@ -726,7 +776,7 @@ def exec_serve(
     # on Linux (2026-09-27). A served MCP server exits when its client closes
     # stdin anyway.
     argv = _sandboxed_argv(
-        command, workdir, allow_network=allow_network, profile_path=profile_path,
+        command, workdir, allow_network=allow_network, profile=profile,
         seccomp_fd=seccomp_fd, read_only=allow_read, die_with_parent=False,
     )
     os.chdir(workdir)

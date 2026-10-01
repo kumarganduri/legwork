@@ -10,6 +10,7 @@ import os
 import platform
 import shutil
 import socket
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ import pytest
 
 from legwork import sandbox_runner
 from legwork.sandbox_runner import (
+    check_read_grants,
     DependencyInstallError,
     InstallTimeoutExceeded,
     SandboxUnavailableError,
@@ -239,9 +241,10 @@ def test_exec_serve_uses_no_network_profile_and_minimal_env(tmp_path, monkeypatc
     with patch("legwork.sandbox_runner.os.execve", side_effect=fake_execve), pytest.raises(SystemExit):
         sandbox_runner.exec_serve(["/bin/echo", "hi"], tmp_path, {"EXTRA": "1"})
 
-    profile = Path(captured["args"][2]).read_text()
+    profile = captured["args"][2]  # inline: nothing for the tool to rewrite in its workdir
     assert "(allow network*)" not in profile
-    assert captured["args"][3:] == ["/bin/echo", "hi"]
+    assert not list(tmp_path.glob("*.sb"))
+    assert captured["args"][-2:] == ["/bin/echo", "hi"]
     assert "LEGWORK_LLM_API_KEY" not in captured["env"]
     assert captured["env"]["EXTRA"] == "1"
 
@@ -379,8 +382,8 @@ def test_only_allowlisted_system_services_are_reachable(tmp_path):
     service, including ones that open apps, read the clipboard or script
     other apps. Only the measured allowlist remains."""
     profile = sandbox_runner._generate_profile(tmp_path, allow_network=True)
-    assert "(allow mach-lookup)" not in profile
-    assert "com.apple.pasteboard" not in profile
+    assert "(allow mach-lookup)" not in profile.text
+    assert "com.apple.pasteboard" not in profile.text
     result = sandbox_runner._run_sandboxed(
         ["/bin/sh", "-c", "/usr/bin/pbpaste >/dev/null 2>&1; echo $?"],
         tmp_path,
@@ -483,7 +486,14 @@ def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
         shutil.rmtree(base)
 
 
-@pytest.mark.parametrize("target", ["~", "/", "~/.ssh", "~/.aws/credentials", "~/.config", "~/Library/Keychains"])
+@pytest.mark.parametrize(
+    "target",
+    [
+        "~", "/", "~/.ssh", "~/.aws/credentials", "~/.config", "~/Library/Keychains",
+        # Folders that CONTAIN secrets, and secret files (pre-launch QA, 2026-10-02)
+        "~/Library", "~/Library/Group Containers", "~/.legwork.env", "~/.zsh_history", "~/.npmrc",
+    ],
+)
 def test_grants_refuse_home_and_secret_folders_whether_or_not_they_exist(target):
     with pytest.raises(sandbox_runner.SandboxGrantError, match="whole home folder|credentials"):
         sandbox_runner.check_read_grants([target])
@@ -549,3 +559,72 @@ def test_a_tool_still_cannot_signal_processes_outside_its_sandbox(tmp_path):
         assert outside.poll() is None
     finally:
         outside.kill()
+
+
+@macos_only
+def test_a_granted_path_cannot_rewrite_the_sandbox_rules(tmp_path):
+    """Paths used to be pasted into the profile text: a folder named like
+    SBPL inside an allowed folder turned the sandbox off (pre-launch QA,
+    2026-10-02). They're parameters now, so the name is just a name."""
+    crafted = tmp_path / 'a")) (allow default) (allow file-read* (literal "b'
+    crafted.mkdir()
+    (crafted / "ok.txt").write_text("granted file")
+    grants = check_read_grants([str(crafted)])
+    probe = (
+        "import os, socket\n"
+        f"print(open({str(crafted / 'ok.txt')!r}).read())\n"
+        "for attempt in (lambda: open(os.path.expanduser('~/.zshrc')).read(),\n"
+        "                lambda: socket.create_connection(('1.1.1.1', 443), timeout=3),\n"
+        "                lambda: open('/private/tmp/legwork-escape-probe', 'w').write('x')):\n"
+        "    try:\n        attempt(); print('ESCAPED')\n"
+        "    except OSError:\n        print('blocked')\n"
+    )
+    result = sandbox_runner._run_sandboxed(
+        [SYSTEM_PYTHON, "-c", probe], tmp_path / "work", allow_network=False, timeout=30,
+        timeout_error=sandbox_runner.TimeoutExceeded, read_only=grants,
+    )
+    assert result.stdout.split("\n")[:4] == ["granted file", "blocked", "blocked", "blocked"]
+    assert not os.path.exists("/private/tmp/legwork-escape-probe")
+
+
+@macos_only
+def test_the_profile_never_touches_disk(tmp_path):
+    """A profile file in the workdir could be rewritten by the sandboxed code
+    before the next launch (pre-launch QA, 2026-10-02): it's passed inline."""
+    profile = sandbox_runner._generate_profile(tmp_path, allow_network=False, read_only=(tmp_path,))
+    argv = sandbox_runner._sandboxed_argv(["true"], tmp_path, False, profile)
+    assert argv[:3] == ["sandbox-exec", "-p", profile.text]
+    assert str(tmp_path.resolve()) not in profile.text
+    assert f"GRANT_0={tmp_path.resolve()}" in argv
+
+
+def test_sandboxed_code_cannot_read_the_callers_stdin(tmp_path):
+    """Inherited stdin was the hub's MCP transport: an npm step ended the
+    hub's input, and install code could read the client's messages."""
+    import subprocess
+
+    caller = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})\n"
+        "from pathlib import Path\n"
+        "from legwork import sandbox_runner as s\n"
+        f"r = s.invoke([{SYSTEM_PYTHON!r}, '-c', 'import sys; print(repr(sys.stdin.read()))'], Path({str(tmp_path)!r}))\n"
+        "print('child saw', r.stdout.strip())\n"
+        "print('caller still has', repr(sys.stdin.readline()))\n"
+    )
+    out = subprocess.run([sys.executable, "-c", caller], input="CLIENT MESSAGE\n", capture_output=True, text=True, timeout=60)
+    assert "child saw ''" in out.stdout, out.stderr
+    assert "caller still has 'CLIENT MESSAGE\\n'" in out.stdout
+
+
+def test_processes_left_behind_by_an_install_are_stopped(tmp_path):
+    """An install step could `nohup ... &` a process that outlived the
+    install, with network, and no timeout (pre-launch QA, 2026-10-02)."""
+    import time
+
+    heartbeat = tmp_path / "heartbeat"
+    install(["/bin/sh", "-c", "nohup /bin/sh -c 'while true; do echo x >> heartbeat; sleep 0.2; done' >/dev/null 2>&1 &"], tmp_path, timeout=60)
+    time.sleep(0.5)
+    size = heartbeat.stat().st_size if heartbeat.exists() else 0
+    time.sleep(1.5)
+    assert (heartbeat.stat().st_size if heartbeat.exists() else 0) == size

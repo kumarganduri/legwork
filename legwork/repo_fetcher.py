@@ -141,6 +141,7 @@ def clone_repo(ref: RepoRef, dest: Path) -> Path:
     try:
         result = subprocess.run(
             ["git", "clone", "--depth", "1", ref.clone_url, str(dest)],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=CLONE_TIMEOUT_SECONDS,
@@ -168,6 +169,7 @@ def remote_head_sha(url: str) -> str:
     try:
         result = subprocess.run(
             ["git", "ls-remote", url, "HEAD"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=30,
@@ -187,6 +189,7 @@ def head_sha(clone: Path) -> str:
     """The commit a clone is at — what a wrapper was synthesized against."""
     result = subprocess.run(
         ["git", "-C", str(clone), "rev-parse", "HEAD"],
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=10,

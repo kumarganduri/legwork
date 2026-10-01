@@ -184,8 +184,9 @@ def test_linux_grants_are_read_only_binds_and_network_is_opt_in():
 
 def test_macos_grants_are_read_only_in_the_profile(tmp_path):
     profile = sandbox_runner._generate_profile(tmp_path, allow_network=False, read_only=(tmp_path / "Downloads",))
-    assert f'(allow file-read* (subpath "{(tmp_path / "Downloads").resolve()}"))' in profile
-    assert f'(allow file-write* (subpath "{(tmp_path / "Downloads").resolve()}"))' not in profile
+    assert profile.params["GRANT_0"] == str((tmp_path / "Downloads").resolve())
+    assert '(allow file-read* (subpath (param "GRANT_0")))' in profile.text
+    assert "file-write*" not in "".join(line for line in profile.text.splitlines() if "GRANT_0" in line)
 
 
 def test_served_tools_outlive_the_thread_that_started_them(monkeypatch):

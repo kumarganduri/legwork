@@ -117,6 +117,7 @@ def _python_version(path: str) -> tuple[int, int] | None:
     try:
         out = subprocess.run(
             [path, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=10,
@@ -132,7 +133,7 @@ def _has_venv(path: str) -> bool:
     python3-venv is installed; skip such an interpreter rather than fail
     every build on it."""
     try:
-        return subprocess.run([path, "-c", "import ensurepip, venv"], capture_output=True, timeout=10, check=False).returncode == 0
+        return subprocess.run([path, "-c", "import ensurepip, venv"], stdin=subprocess.DEVNULL, capture_output=True, timeout=10, check=False).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
 
