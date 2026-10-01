@@ -107,3 +107,25 @@ def test_an_unpublished_repo_installs_from_its_source(tmp_path):
     )
     _install_and_self_test(tmp_path / "attempt-1", "pip install -q ./src", wrapper)
     assert (tmp_path / "attempt-1" / "src" / "pyproject.toml").exists()
+
+
+@pytest.mark.skipif(not sandbox_runner.available(), reason="no sandbox backend on this machine")
+@pytest.mark.skipif(not _network_available(), reason="needs PyPI for mcp")
+def test_a_multi_line_install_with_a_heredoc_runs_and_stops_at_a_failing_line(tmp_path):
+    """RapidOCR's install (2026-10-01) ended with a `python - <<'PY' ... PY`
+    model warm-up. Inlined as `a && <cmd> && b`, the closing PY became
+    `PY && python -m pip ...` and the heredoc never ended."""
+    from legwork.retry_loop import _install_and_self_test
+    from legwork.sandbox_runner import DependencyInstallError
+
+    install = "mkdir -p models\npython - <<'PY'\nopen('models/weights.txt', 'w').write('ready')\nPY\n"
+    wrapper = (
+        "from mcp.server.fastmcp import FastMCP\nmcp = FastMCP('t')\n"
+        "if __name__ == '__main__':\n    print(open('models/weights.txt').read())\n"
+    )
+    _install_and_self_test(tmp_path / "attempt-1", install, wrapper)
+    assert (tmp_path / "attempt-1" / "models" / "weights.txt").read_text() == "ready"
+
+    with pytest.raises(DependencyInstallError):
+        _install_and_self_test(tmp_path / "attempt-2", "false\necho 'carried on anyway' > marker\n", wrapper)
+    assert not (tmp_path / "attempt-2" / "marker").exists()

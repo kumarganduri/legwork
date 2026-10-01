@@ -232,7 +232,10 @@ def test_install_uses_venv_bin_first_on_path(tmp_path):
     # install command, not run as a separate unsandboxed step.
     command = install_call.args[0]
     assert "-m" in command[-1] and "venv" in command[-1]
-    assert VALID_DRAFT.install_command in command[-1]
+    # The model's command runs as its own script, in the same sandboxed step.
+    assert "/bin/sh -e ./legwork-install.sh" in command[-1]
+    script = tmp_path / "attempt-1" / "legwork-install.sh"
+    assert script.read_text() == VALID_DRAFT.install_command + "\n"
 
 
 # --- venv interpreter selection (found in the first live run) --------------
@@ -292,7 +295,7 @@ def test_mcp_pin_is_installed_after_the_models_install_command(tmp_path):
         run("owner/repo", tmp_path, CONFIG)
     shell_cmd = mocks["sandbox_install"].call_args.args[0][-1]
     assert MCP_SDK_PIN in shell_cmd
-    assert shell_cmd.index(VALID_DRAFT.install_command) < shell_cmd.index(MCP_SDK_PIN)
+    assert shell_cmd.index("legwork-install.sh") < shell_cmd.index(MCP_SDK_PIN)
 
 
 def test_third_attempt_prompt_includes_first_attempts_failure(tmp_path):

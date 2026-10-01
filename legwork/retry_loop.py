@@ -52,6 +52,7 @@ from legwork.llm_client import (
 MAX_WRAPPER_ATTEMPTS = 3
 # Shared by the attempts of one build, deleted when the build ends.
 DOWNLOAD_CACHE_DIR = ".download-cache"
+INSTALL_SCRIPT = "legwork-install.sh"  # the model's install command, run with sh -e
 # Room for one slow multi-GB install plus retries (installs may take up to
 # sandbox_runner.INSTALL_TIMEOUT_SECONDS each).
 TOTAL_RUN_TIMEOUT_SECONDS = 1800
@@ -199,9 +200,17 @@ def _install_and_self_test(
     # the target repo's own dependencies) pulled in mcp 2.x — the wrapper
     # is written against the 1.x API the prompt specifies.
     venv_env = {"PATH": f"{venv_dir / 'bin'}:{sandbox_runner.MINIMAL_PATH}"}
+    # The model's command runs as its own script with `sh -e`: inlined into
+    # one `a && <cmd> && b` line, a multi-line command broke two ways
+    # (2026-10-01). A heredoc's closing `PY` became `PY && python -m pip ...`,
+    # so the shell never saw it end, and only the first line's failure
+    # stopped the chain. Install scripts that download models are often
+    # multi-line now that the prompt asks for that.
+    script = attempt_dir / INSTALL_SCRIPT
+    script.write_text(install_command.rstrip("\n") + "\n")
     combined_install_cmd = (
         f"{shlex.quote(system_python)} -m venv {shlex.quote(str(venv_dir))}"
-        f" && {install_command}"
+        f" && /bin/sh -e ./{INSTALL_SCRIPT}"
         f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
     )
     progress("installing dependencies in a sandboxed venv")
