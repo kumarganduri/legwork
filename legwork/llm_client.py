@@ -27,6 +27,12 @@ DEFAULT_TIMEOUT_SECONDS = 60
 # 1 initial attempt + this many retries (3 total tries) on timeout/rate-limit.
 INFRA_RETRY_ATTEMPTS = 2
 INFRA_RETRY_BASE_DELAY_SECONDS = 2.0  # exponential backoff: 2s, then 4s
+# Rate limits reset by the minute, so 2s and 4s just burned a build attempt
+# (OpenAI 429s with four builds in parallel, 2026-10-01). A 429 waits as
+# long as the server's Retry-After says, or 10s, 20s, 40s, 60s, up to 2 minutes each.
+RATE_LIMIT_RETRY_ATTEMPTS = 4
+RATE_LIMIT_BASE_DELAY_SECONDS = 10.0
+RATE_LIMIT_MAX_DELAY_SECONDS = 120.0
 
 
 class LLMTimeoutError(Exception):
@@ -35,6 +41,18 @@ class LLMTimeoutError(Exception):
 
 class LLMRateLimitError(Exception):
     """The endpoint rate-limited the request, even after infra retries."""
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after  # seconds, from the Retry-After header
+
+
+def _retry_after(headers) -> float | None:
+    try:
+        value = float(headers.get("Retry-After")) if headers is not None else None
+    except (TypeError, ValueError):  # absent, or an HTTP date: use our own backoff
+        return None
+    return value if value is not None and value >= 0 else None
 
 
 class LLMAuthError(Exception):
@@ -136,7 +154,7 @@ def _post_chat_completion(config: LLMConfig, messages: list[ChatMessage], timeou
                 f"LLM endpoint auth failed ({exc.code}) — check your API key env var"
             ) from exc
         if exc.code == 429:
-            raise LLMRateLimitError("LLM endpoint rate-limited (429)") from exc
+            raise LLMRateLimitError("LLM endpoint rate-limited (429)", _retry_after(exc.headers)) from exc
         if exc.code >= 500:
             raise LLMTimeoutError(
                 f"LLM endpoint returned {exc.code} — treating as transient"
@@ -181,19 +199,27 @@ def complete(
 ) -> str:
     """Call the chat-completions endpoint with the infra-retry policy.
 
-    Timeout/rate-limit get up to INFRA_RETRY_ATTEMPTS retries with
-    exponential backoff (2s, 4s) — this budget is entirely separate from
-    the wrapper-repair retry loop (T6). Auth failures and malformed
-    responses are never retried here; they propagate immediately.
+    Timeouts and 5xx get up to INFRA_RETRY_ATTEMPTS retries (2s, 4s); rate
+    limits get up to RATE_LIMIT_RETRY_ATTEMPTS, waiting for Retry-After or
+    10s, 20s, 40s, 60s. This budget is entirely separate from the
+    wrapper-repair retry loop (T6). Auth failures and malformed responses
+    are never retried here; they propagate immediately.
     """
-    last_error: LLMTimeoutError | LLMRateLimitError | None = None
-    for attempt in range(INFRA_RETRY_ATTEMPTS + 1):
+    transient = rate_limited = 0
+    while True:
         try:
             return _post_chat_completion(config, messages, timeout)
-        except (LLMTimeoutError, LLMRateLimitError) as exc:
-            last_error = exc
-            if attempt < INFRA_RETRY_ATTEMPTS:
-                time.sleep(INFRA_RETRY_BASE_DELAY_SECONDS * (2**attempt))
-                continue
-            raise
-    raise last_error  # pragma: no cover — loop always returns or raises above
+        except LLMRateLimitError as exc:
+            if rate_limited >= RATE_LIMIT_RETRY_ATTEMPTS:
+                raise
+            if exc.retry_after is not None:
+                delay = min(exc.retry_after, RATE_LIMIT_MAX_DELAY_SECONDS)
+            else:
+                delay = min(RATE_LIMIT_BASE_DELAY_SECONDS * 2**rate_limited, 60.0)
+            time.sleep(delay)
+            rate_limited += 1
+        except LLMTimeoutError:
+            if transient >= INFRA_RETRY_ATTEMPTS:
+                raise
+            time.sleep(INFRA_RETRY_BASE_DELAY_SECONDS * (2**transient))
+            transient += 1

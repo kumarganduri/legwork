@@ -8,6 +8,7 @@ import pytest
 
 from legwork.llm_client import (
     INFRA_RETRY_ATTEMPTS,
+    RATE_LIMIT_RETRY_ATTEMPTS,
     ChatMessage,
     LLMAuthError,
     LLMConfig,
@@ -179,7 +180,36 @@ def test_rate_limit_retries_then_raises():
     ):
         with pytest.raises(LLMRateLimitError):
             complete(CONFIG, MESSAGES)
-    assert mock_urlopen.call_count == INFRA_RETRY_ATTEMPTS + 1
+    assert mock_urlopen.call_count == RATE_LIMIT_RETRY_ATTEMPTS + 1
+
+
+def test_rate_limits_wait_long_enough_for_the_limit_to_reset():
+    # 2s and 4s burned whole build attempts on OpenAI's per-minute limits (2026-10-01).
+    http_error = urllib.error.HTTPError(url="", code=429, msg="Too Many Requests", hdrs=None, fp=None)
+    with (
+        patch("legwork.llm_client.urllib.request.urlopen", side_effect=http_error),
+        patch("legwork.llm_client.time.sleep") as sleep,
+        pytest.raises(LLMRateLimitError),
+    ):
+        complete(CONFIG, MESSAGES)
+    assert [c.args[0] for c in sleep.call_args_list] == [10.0, 20.0, 40.0, 60.0]
+
+
+def test_rate_limits_follow_retry_after_capped_at_two_minutes():
+    import email.message
+
+    def limited(seconds):
+        headers = email.message.Message()
+        headers["Retry-After"] = seconds
+        return urllib.error.HTTPError(url="", code=429, msg="Too Many Requests", hdrs=headers, fp=None)
+
+    ok = _fake_response({"choices": [{"message": {"content": "done"}}]})
+    with (
+        patch("legwork.llm_client.urllib.request.urlopen", side_effect=[limited("7"), limited("900"), ok]),
+        patch("legwork.llm_client.time.sleep") as sleep,
+    ):
+        assert complete(CONFIG, MESSAGES) == "done"
+    assert [c.args[0] for c in sleep.call_args_list] == [7.0, 120.0]
 
 
 def test_5xx_treated_as_transient_and_retried():
@@ -236,6 +266,7 @@ def test_unexpected_4xx_raises_auth_error():
     ],
 )
 def test_router_errors_inside_a_200_are_retried_as_infrastructure(error, expected):
+    retries = RATE_LIMIT_RETRY_ATTEMPTS if expected is LLMRateLimitError else INFRA_RETRY_ATTEMPTS
     """OpenRouter reports upstream failures as HTTP 200 with an error body;
     that cost a wrapper-repair attempt before (provider tests, 2026-09-27)."""
     body = {"id": "gen-1", "error": error}
@@ -245,7 +276,7 @@ def test_router_errors_inside_a_200_are_retried_as_infrastructure(error, expecte
         pytest.raises(expected),
     ):
         complete(CONFIG, MESSAGES)
-    assert mock_urlopen.call_count == INFRA_RETRY_ATTEMPTS + 1
+    assert mock_urlopen.call_count == retries + 1
 
 
 def test_router_auth_error_inside_a_200_fails_fast():
