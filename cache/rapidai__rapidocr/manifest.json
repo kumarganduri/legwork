@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/RapidAI/RapidOCR",
+  "commit_sha": "9936171fa42eb4ca4d900941c827c80f6847535b",
+  "synthesis_date": "2026-10-01T19:21:25+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:21:27+00:00"
+  },
+  "entrypoint": "Offline OCR on local images using RapidOCR (ONNX Runtime), with optional visualization output",
+  "install_command": "pip install rapidocr onnxruntime\npython - << 'PY'\n# Pre-initialize RapidOCR to ensure any required assets/models are prepared while network is available.\ntry:\n    from rapidocr import RapidOCR\n    _ = RapidOCR()\n    print(\"RapidOCR initialized successfully during install.\")\nexcept Exception as e:\n    # Not fatal for installation; some environments bundle models and won't need downloads at this step.\n    print(\"RapidOCR pre-initialization warning:\", e)\nPY",
+  "mcp_sdk": "mcp<2"
+}

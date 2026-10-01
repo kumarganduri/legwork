@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/danielgatis/rembg",
+  "commit_sha": "202e42649a8492a7c49f808de36608a7d1cbbfe3",
+  "synthesis_date": "2026-10-01T19:13:51+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:13:56+00:00"
+  },
+  "entrypoint": "Remove image backgrounds from local images using rembg’s Python API (models cached under ./models)",
+  "install_command": "pip install \"rembg[cpu,cli]\"\nREMBG_HOME=./models python - <<'PY'\nimport os\nos.makedirs(\"./models\", exist_ok=True)\nfrom PIL import Image\nfrom rembg import new_session, remove\n# Pre-download a small, fast model to ensure offline operation\nsession = new_session(\"u2net\")\n# Trigger a load by processing a tiny image\nimg = Image.new(\"RGBA\", (8, 8), (255, 255, 255, 255))\nout = remove(img, session=session)\nout.save(\"._rembg_warmup.png\")\nprint(\"rembg warm-up done\")\nPY",
+  "mcp_sdk": "mcp<2"
+}

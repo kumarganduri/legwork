@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/mikefarah/yq",
+  "commit_sha": "247492ffba4089e7d33f6cef17789bd35e80b0b6",
+  "synthesis_date": "2026-10-01T19:25:35+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:25:38+00:00"
+  },
+  "entrypoint": "Run yq to query and transform YAML/JSON/XML/INI/etc via jq-like expressions (evaluate expressions against files or stdin, and convert formats)",
+  "install_command": "set -e\n\n# Determine platform\nOS=\"$(uname -s)\"\nARCH=\"$(uname -m)\"\n\ncase \"$OS\" in\n  Linux)   PLATFORM_OS=\"linux\" ;;\n  Darwin)  PLATFORM_OS=\"darwin\" ;;\n  *) echo \"Unsupported OS: $OS\" >&2; exit 1 ;;\nesac\n\ncase \"$ARCH\" in\n  x86_64|amd64)   PLATFORM_ARCH=\"amd64\" ;;\n  arm64|aarch64)  PLATFORM_ARCH=\"arm64\" ;;\n  armv7l|armv7)   PLATFORM_ARCH=\"arm\" ;;\n  i386|i686)      PLATFORM_ARCH=\"386\" ;;\n  *) echo \"Unsupported architecture: $ARCH\" >&2; exit 1 ;;\nesac\n\nFILENAME=\"yq_${PLATFORM_OS}_${PLATFORM_ARCH}\"\nURL=\"https://github.com/mikefarah/yq/releases/latest/download/${FILENAME}\"\n\nmkdir -p ./bin\necho \"Downloading ${URL} ...\"\ncurl -fsSL \"$URL\" -o ./bin/yq\nchmod +x ./bin/yq\n\n# Quick smoke test (no network needed beyond the download above)\n./bin/yq --version >/dev/null 2>&1 || (echo \"Downloaded yq failed to run\" >&2; exit 1)",
+  "mcp_sdk": "mcp<2"
+}

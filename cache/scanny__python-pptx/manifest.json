@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/scanny/python-pptx",
+  "commit_sha": "278b47b1dedd5b46ee84c286e77cdfb0bf4594be",
+  "synthesis_date": "2026-10-01T18:47:02+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:47:03+00:00"
+  },
+  "entrypoint": "Create, update, and extract text from PowerPoint (.pptx) files using the python-pptx library",
+  "install_command": "pip install python-pptx",
+  "mcp_sdk": "mcp<2"
+}

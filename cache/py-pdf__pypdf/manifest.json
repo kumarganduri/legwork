@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/py-pdf/pypdf",
+  "commit_sha": "0d43fad5bdaea3d487ae63b29b47f870fc3f9eb6",
+  "synthesis_date": "2026-10-01T18:47:46+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-2-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:47:48+00:00"
+  },
+  "entrypoint": "PDF text extraction, metadata reading, splitting, and merging using pypdf",
+  "install_command": "pip install pypdf[crypto]",
+  "mcp_sdk": "mcp<2"
+}

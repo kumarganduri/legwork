@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/prettier/prettier",
+  "commit_sha": "1e816fd83500580b5cd20c542eed1f02621bfd28",
+  "synthesis_date": "2026-10-01T18:33:10+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:33:14+00:00"
+  },
+  "entrypoint": "Run Prettier’s CLI to format code (format from string via stdin or operate on files) using ./node_modules/.bin/prettier",
+  "install_command": "npm install prettier",
+  "mcp_sdk": "mcp<2"
+}

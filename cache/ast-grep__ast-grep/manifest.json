@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/ast-grep/ast-grep",
+  "commit_sha": "25334496c105c9c728f0a6024f3d164aed40cacc",
+  "synthesis_date": "2026-10-01T18:36:34+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:36:35+00:00"
+  },
+  "entrypoint": "Run the ast-grep CLI for AST-based code search and rewrite",
+  "install_command": "pip install ast-grep-cli",
+  "mcp_sdk": "mcp<2"
+}

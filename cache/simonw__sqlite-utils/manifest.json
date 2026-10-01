@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/simonw/sqlite-utils",
+  "commit_sha": "6bc1d33d583c54bd69fbdd2071117e2d38c354a1",
+  "synthesis_date": "2026-10-01T18:30:36+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:30:37+00:00"
+  },
+  "entrypoint": "Run SQLite queries and modify tables using the sqlite-utils Python library",
+  "install_command": "pip install sqlite-utils",
+  "mcp_sdk": "mcp<2"
+}

@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/Zulko/moviepy",
+  "commit_sha": "211e4b15f6ce4f34a6a9efbfff40590e43a68f77",
+  "synthesis_date": "2026-10-01T18:55:35+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:55:37+00:00"
+  },
+  "entrypoint": "Trim and transcode local video files using MoviePy (FFmpeg pre-downloaded for offline use)",
+  "install_command": "pip install moviepy\nmkdir -p .imageio\nIMAGEIO_USERDIR=./.imageio python -c \"import imageio_ffmpeg,sys; sys.stdout.write(imageio_ffmpeg.get_ffmpeg_exe())\"",
+  "mcp_sdk": "mcp<2"
+}

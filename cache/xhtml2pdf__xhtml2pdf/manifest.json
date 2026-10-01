@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/xhtml2pdf/xhtml2pdf",
+  "commit_sha": "be20dff03ec2e0bad581ef974bb87e7225054f9c",
+  "synthesis_date": "2026-10-01T18:49:18+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:49:20+00:00"
+  },
+  "entrypoint": "Convert HTML (string or local .html file) to a PDF using xhtml2pdf’s Python API",
+  "install_command": "pip install xhtml2pdf",
+  "mcp_sdk": "mcp<2"
+}

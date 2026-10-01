@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/collective/icalendar",
+  "commit_sha": "a2f557ec34bd8b7c51ead792bbac05c60b05d682",
+  "synthesis_date": "2026-10-01T19:00:54+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-2-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:00:55+00:00"
+  },
+  "entrypoint": "Parse and generate iCalendar (.ics) files: list events from ICS text or file, and create/append events to ICS files",
+  "install_command": "pip install icalendar",
+  "mcp_sdk": "mcp<2"
+}

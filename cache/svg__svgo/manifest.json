@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/svg/svgo",
+  "commit_sha": "e4cb29bebcc9820ac979dfc05106b512cc5de986",
+  "synthesis_date": "2026-10-01T18:57:10+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:57:12+00:00"
+  },
+  "entrypoint": "Optimize SVG files using the local svgo CLI (minify a file or an SVG string)",
+  "install_command": "npm install svgo",
+  "mcp_sdk": "mcp<2"
+}

@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/python-openxml/python-docx",
+  "commit_sha": "e45454602b53e8e572b179ccf1c91093ec9f4ed7",
+  "synthesis_date": "2026-10-01T18:46:42+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:46:44+00:00"
+  },
+  "entrypoint": "Create, read, and modify .docx files using python-docx (create new documents, extract paragraphs, and append text into a new copy)",
+  "install_command": "pip install python-docx",
+  "mcp_sdk": "mcp<2"
+}

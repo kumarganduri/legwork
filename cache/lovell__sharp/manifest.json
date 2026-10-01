@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/lovell/sharp",
+  "commit_sha": "d2f235bbbddbdce38dfdda5294754b5e40b66565",
+  "synthesis_date": "2026-10-01T19:24:58+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:25:00+00:00"
+  },
+  "entrypoint": "Image resizing/format conversion and metadata via the Node sharp library invoked from Python",
+  "install_command": "npm install sharp",
+  "mcp_sdk": "mcp<2"
+}

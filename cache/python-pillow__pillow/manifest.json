@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/python-pillow/Pillow",
+  "commit_sha": "53286b80749c9587418b5d6725b2813ab413b6e3",
+  "synthesis_date": "2026-10-01T19:24:15+00:00",
+  "wrapper_language": "python",
+  "source_license": "unrecognized (LICENSE)",
+  "license_flag": "unrecognized: a human should read the license file",
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:24:17+00:00"
+  },
+  "entrypoint": "Perform common image operations (inspect, resize, rotate, convert, crop, grayscale, overlay text) via Pillow's Python API",
+  "install_command": "pip install pillow",
+  "mcp_sdk": "mcp<2"
+}

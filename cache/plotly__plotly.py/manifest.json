@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/plotly/plotly.py",
+  "commit_sha": "d586d225b8577fa3a4ff8954bdd47ef3b9cc0c07",
+  "synthesis_date": "2026-10-01T18:31:40+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:31:43+00:00"
+  },
+  "entrypoint": "Generate interactive Plotly bar charts as HTML from x/y data using plotly.graph_objects",
+  "install_command": "pip install plotly",
+  "mcp_sdk": "mcp<2"
+}
