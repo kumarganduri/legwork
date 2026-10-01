@@ -54,7 +54,15 @@ already active: use plain `pip install`. Install npm packages LOCALLY in \
 the current directory (`npm install <pkg>`, never `-g`) and call them as \
 `./node_modules/.bin/<cmd>`. No sudo, no global or system-wide installs: \
 they fail in the sandbox. Do NOT install, upgrade, or pin the `mcp` \
-package: Legwork installs `{MCP_SDK_PIN}` itself.>
+package: Legwork installs `{MCP_SDK_PIN}` itself. The same install command \
+can run on other machines (macOS or Linux, x86-64 or arm64): never hard-code \
+one platform. Prefer pip/npm packages that ship binaries for every platform; \
+if you must download a release binary, choose it with `uname -s` and \
+`uname -m`. The tool itself runs with the NETWORK OFF, so if the library \
+downloads models, weights or data on first use, download them HERE, into a \
+folder under the current one (e.g. ./models), and make the wrapper load \
+them from there (the library's model-path option, or an env var such as \
+HF_HOME set before importing it).>
 ```
 
 ```python
@@ -62,12 +70,21 @@ package: Legwork installs `{MCP_SDK_PIN}` itself.>
 capability as one or more typed MCP tools. Use the MCP Python SDK 1.x API \
 exactly like this: `from mcp.server.fastmcp import FastMCP`, \
 `mcp = FastMCP("<name>")`, and decorate each tool function with \
-`@mcp.tool()`. The decorated function stays directly callable. MUST include \
+`@mcp.tool()`. The decorated function stays directly callable. Return \
+compact, useful results: text, or JSON-serializable dicts/lists of the \
+meaningful fields (the recognized text, the numbers, the rows), never \
+repr() of library objects or raw arrays. A tool that produces an image \
+returns it so the client can show it: `from mcp.server.fastmcp import Image` \
+and `return Image(path=out_path)` (or `Image(data=png_bytes, format="png")`). \
+Input files are read-only: write any output file under the current folder \
+and return its absolute path (`os.path.abspath`). MUST include \
 an `if __name__ == "__main__":` self-test. The self-test runs with the \
 NETWORK OFF and must finish within 60 seconds. It calls the SIMPLEST \
 documented command or function that works offline (a --version or --help \
 call, or a small local computation -- never a showcase feature and never \
-anything that downloads or calls a service), and checks only that the \
+anything that downloads or calls a service; if the tool uses models \
+downloaded during install, the self-test must load them from that folder, \
+which proves it works offline), and checks only that the \
 call succeeded and returned something non-empty; raise if not. Do NOT \
 assert a specific type, keys, fields or values unless the README shows \
 that exact output, and never assert on the tool's own verdicts or \
