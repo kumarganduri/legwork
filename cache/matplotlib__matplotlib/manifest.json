@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/matplotlib/matplotlib",
+  "commit_sha": "44f2e0033a77d9f32f34b06573c104282a1bdc3c",
+  "synthesis_date": "2026-10-01T19:23:21+00:00",
+  "wrapper_language": "python",
+  "source_license": "none",
+  "license_flag": "missing: no license file, so redistribution terms are unknown",
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:23:27+00:00"
+  },
+  "entrypoint": "Generate static plots (line, scatter, histogram) with Matplotlib and return PNG images",
+  "install_command": "pip install matplotlib",
+  "mcp_sdk": "mcp<2"
+}

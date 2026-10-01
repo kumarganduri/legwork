@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/astral-sh/ruff",
+  "commit_sha": "598f4bdfd558c38d86f46fffbf03e73b8b8c3002",
+  "synthesis_date": "2026-10-01T18:32:48+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:32:54+00:00"
+  },
+  "entrypoint": "Ruff CLI to lint (check) and format Python code",
+  "install_command": "pip install ruff",
+  "mcp_sdk": "mcp<2"
+}

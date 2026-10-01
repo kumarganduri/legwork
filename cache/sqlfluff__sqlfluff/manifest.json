@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/sqlfluff/sqlfluff",
+  "commit_sha": "2e2275713d078f29529250f7ff883fbf66f83e0d",
+  "synthesis_date": "2026-10-01T18:34:57+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:35:00+00:00"
+  },
+  "entrypoint": "Lint SQL strings using the sqlfluff CLI (and report the installed sqlfluff version)",
+  "install_command": "pip install sqlfluff",
+  "mcp_sdk": "mcp<2"
+}

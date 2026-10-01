@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/duckdb/duckdb",
+  "commit_sha": "489a45586acd1e9bba7c82099eecabc8acba28fe",
+  "synthesis_date": "2026-10-01T18:29:23+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:29:33+00:00"
+  },
+  "entrypoint": "Execute SQL queries with DuckDB (in-memory or file-backed) and return results",
+  "install_command": "pip install duckdb",
+  "mcp_sdk": "mcp<2"
+}

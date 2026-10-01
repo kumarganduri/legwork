@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/python-jsonschema/jsonschema",
+  "commit_sha": "51cd75e399c760e5aa3adce600dcce1385756ab0",
+  "synthesis_date": "2026-10-01T18:31:59+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:32:00+00:00"
+  },
+  "entrypoint": "Validate JSON data against JSON Schema using the jsonschema Python library",
+  "install_command": "pip install \"jsonschema[format]\"",
+  "mcp_sdk": "mcp<2"
+}

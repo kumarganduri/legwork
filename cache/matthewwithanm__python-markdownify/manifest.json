@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/matthewwithanm/python-markdownify",
+  "commit_sha": "bc98c9e134ec55b2853716ab859754f061cb7054",
+  "synthesis_date": "2026-10-01T18:57:08+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:57:10+00:00"
+  },
+  "entrypoint": "Convert HTML (string or file) to Markdown using the python-markdownify library",
+  "install_command": "pip install markdownify",
+  "mcp_sdk": "mcp<2"
+}

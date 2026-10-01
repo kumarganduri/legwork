@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/joke2k/faker",
+  "commit_sha": "1879c986b303c7ed9f2979727dd218a47c47119f",
+  "synthesis_date": "2026-10-01T18:58:53+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:58:54+00:00"
+  },
+  "entrypoint": "Generate arbitrary fake data fields by provider name via the Faker Python API, with optional locales, seeding, repeats, and custom providers",
+  "install_command": "pip install Faker",
+  "mcp_sdk": "mcp<2"
+}

@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/wireservice/csvkit",
+  "commit_sha": "6d19c625214977ab2988e674441ca24638bc12d3",
+  "synthesis_date": "2026-10-01T18:30:37+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:30:38+00:00"
+  },
+  "entrypoint": "Run csvkit CLI tools (csvcut, csvstat, in2csv, etc.) via a generic subprocess wrapper",
+  "install_command": "pip install csvkit",
+  "mcp_sdk": "mcp<2"
+}

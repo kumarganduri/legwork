@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/adbar/trafilatura",
+  "commit_sha": "96e19b949c3ac4a9e193b41fe2fb352e7150db86",
+  "synthesis_date": "2026-10-01T18:58:25+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:58:36+00:00"
+  },
+  "entrypoint": "Extract main text and metadata from HTML strings or local HTML files using Trafilatura",
+  "install_command": "pip install trafilatura",
+  "mcp_sdk": "mcp<2"
+}

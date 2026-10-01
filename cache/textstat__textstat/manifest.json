@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/textstat/textstat",
+  "commit_sha": "e398f27543389283e847fc29568b049623c0e243",
+  "synthesis_date": "2026-10-01T19:22:43+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T19:22:44+00:00"
+  },
+  "entrypoint": "Compute readability metrics and text statistics from text using the textstat Python library",
+  "install_command": "pip install textstat\npython -c \"import nltk; nltk.download('cmudict', download_dir='./nltk_data', quiet=True, raise_on_error=True)\"",
+  "mcp_sdk": "mcp<2"
+}

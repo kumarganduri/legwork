@@ -1,0 +1,17 @@
+{
+  "source_repo_url": "https://github.com/yt-dlp/yt-dlp",
+  "commit_sha": "51bab8a0116f4d8004c315706d809782607d5847",
+  "synthesis_date": "2026-10-01T18:22:01+00:00",
+  "wrapper_language": "python",
+  "source_license": "Unlicense",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-10-01T18:22:03+00:00"
+  },
+  "entrypoint": "Use yt-dlp to download media or extract info from URLs via its Python API",
+  "install_command": "pip install \"yt-dlp[default]\"",
+  "mcp_sdk": "mcp<2"
+}
