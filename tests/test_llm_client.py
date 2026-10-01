@@ -283,3 +283,18 @@ def test_router_auth_error_inside_a_200_fails_fast():
     body = {"error": {"message": "No auth credentials found", "code": 401}}
     with patch("legwork.llm_client.urllib.request.urlopen", return_value=_fake_response(body)), pytest.raises(LLMAuthError):
         complete(CONFIG, MESSAGES)
+
+
+def test_an_account_out_of_credit_stops_at_once_with_the_reason():
+    """OpenAI sends 429 for an empty account too; waiting never fixes it."""
+    import io
+
+    body = b'{"error": {"type": "insufficient_quota", "code": "credit_balance_exhausted", "message": "You have no credits remaining."}}'
+    http_error = urllib.error.HTTPError(url="", code=429, msg="Too Many Requests", hdrs=None, fp=io.BytesIO(body))
+    with (
+        patch("legwork.llm_client.urllib.request.urlopen", side_effect=http_error) as mock_urlopen,
+        patch("legwork.llm_client.time.sleep") as sleep,
+        pytest.raises(LLMAuthError, match="out of credit: You have no credits remaining"),
+    ):
+        complete(CONFIG, MESSAGES)
+    assert mock_urlopen.call_count == 1 and not sleep.called

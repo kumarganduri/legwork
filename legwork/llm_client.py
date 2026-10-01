@@ -47,6 +47,20 @@ class LLMRateLimitError(Exception):
         self.retry_after = retry_after  # seconds, from the Retry-After header
 
 
+def _out_of_credit_message(exc: urllib.error.HTTPError) -> str | None:
+    """OpenAI answers 429 both for "slow down" and for "no credit left"
+    (insufficient_quota). Only the first goes away by waiting: with an empty
+    account, every build retried for minutes and then said "rate-limited"
+    (2026-10-01)."""
+    try:
+        error = json.loads(exc.read().decode("utf-8", errors="replace")).get("error") or {}
+    except (ValueError, AttributeError, OSError):
+        return None
+    if not isinstance(error, dict) or "insufficient_quota" not in (error.get("type"), error.get("code")):
+        return None
+    return f"Your model account is out of credit: {error.get('message') or 'insufficient_quota'}"
+
+
 def _retry_after(headers) -> float | None:
     try:
         value = float(headers.get("Retry-After")) if headers is not None else None
@@ -154,6 +168,9 @@ def _post_chat_completion(config: LLMConfig, messages: list[ChatMessage], timeou
                 f"LLM endpoint auth failed ({exc.code}) — check your API key env var"
             ) from exc
         if exc.code == 429:
+            out_of_credit = _out_of_credit_message(exc)
+            if out_of_credit:
+                raise LLMAuthError(out_of_credit) from exc
             raise LLMRateLimitError("LLM endpoint rate-limited (429)", _retry_after(exc.headers)) from exc
         if exc.code >= 500:
             raise LLMTimeoutError(
