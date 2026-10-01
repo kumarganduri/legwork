@@ -28,6 +28,7 @@ to stdout.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -187,9 +188,24 @@ class Hub:
             self.installed[entry["repo"]] = Installed(entry["repo"], *grants)
 
     def _save(self) -> None:
+        """Merge this hub's installs into hub.json under a lock, keeping every
+        entry it doesn't hold. Rewriting the file from memory lost installs
+        made by another hub on the same LEGWORK_HOME (one per client), and
+        erased entries a hub skipped because it was started with narrower
+        --allow-read (pre-launch QA, 2026-10-02)."""
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
-        entries = [{"repo": i.slug, "allow_read": [str(p) for p in i.allow_read], "allow_net": i.allow_net} for i in self.installed.values()]
-        self._state_path.write_text(json.dumps({"installed": entries}, indent=2) + "\n")
+        with open(self._state_path.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                on_disk = json.loads(self._state_path.read_text()).get("installed", [])
+            except (OSError, ValueError):
+                on_disk = []
+            merged = {e["repo"]: e for e in on_disk if isinstance(e, dict) and "repo" in e}
+            for i in self.installed.values():
+                merged[i.slug] = {"repo": i.slug, "allow_read": [str(p) for p in i.allow_read], "allow_net": i.allow_net}
+            tmp = self._state_path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps({"installed": list(merged.values())}, indent=2) + "\n")
+            os.replace(tmp, self._state_path)
 
     # --- grants ---------------------------------------------------------------
 
@@ -243,7 +259,7 @@ class Hub:
     def _call(self, item: Installed, tool: str, arguments: dict) -> dict:
         try:
             self._start(item)
-            return item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS)
+            return _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
         except MCPClientError as exc:
             if item.client is not None:
                 item.client.close()
@@ -398,16 +414,21 @@ class Hub:
 
     def _call_tool(self, name: str, args: dict) -> dict:
         try:
+            if not isinstance(args, dict):
+                raise HubError("arguments must be an object")
             if name == "find_tools":
-                return _text(self.find_tools(args.get("query", "")))
+                return _text(self.find_tools(_arg(args, "query", str, "")))
             if name == "install_tool":
-                return _text(self.install_tool(args.get("repo", ""), args.get("allow_read"), bool(args.get("allow_net"))))
+                allow_read = _arg(args, "allow_read", list, [])
+                if not all(isinstance(p, str) for p in allow_read):
+                    raise HubError("allow_read must be a list of folder paths")
+                return _text(self.install_tool(_arg(args, "repo", str, ""), allow_read, bool(args.get("allow_net"))))
             if name == "install_status":
-                return _text(self.install_status(args.get("repo", "")))
+                return _text(self.install_status(_arg(args, "repo", str, "")))
             if name == "list_installed_tools":
                 return _text(self.list_installed_tools())
             if name == "use_tool":
-                return self.use_tool(args.get("repo", ""), args.get("tool", ""), args.get("arguments"))
+                return self.use_tool(_arg(args, "repo", str, ""), _arg(args, "tool", str, ""), _arg(args, "arguments", dict, {}))
             routed = self._route(name)
             if routed:
                 return self._call(routed[0], routed[1], args)
@@ -423,6 +444,38 @@ class Hub:
 
 class _MethodNotFound(Exception):
     pass
+
+
+# A tool's text reply is cut here so it can't flood the client: a `select *`
+# over a 400k-row CSV came back as 96 MB of JSON (pre-launch QA,
+# 2026-10-02). An hour of transcript is ~60k characters, well under this.
+MAX_TEXT_CHARS = 200_000
+
+
+def _cap_text(result: dict) -> dict:
+    for item in result.get("content") or []:
+        text = item.get("text") if isinstance(item, dict) and item.get("type") == "text" else None
+        if isinstance(text, str) and len(text) > MAX_TEXT_CHARS:
+            item["text"] = (
+                text[:MAX_TEXT_CHARS] + f"\n\n[Legwork cut this reply from {len(text):,} to {MAX_TEXT_CHARS:,} "
+                "characters. Ask the tool for less: a LIMIT, a page range, or specific fields.]"
+            )
+    return result
+
+
+def _arg(args: dict, key: str, kind: type, default):
+    """A tool argument of the expected JSON type; a missing or null one is
+    the default. A wrong type used to crash the worker thread and leave the
+    call unanswered (pre-launch QA, 2026-10-02)."""
+    value = args.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, kind) or (kind is int and isinstance(value, bool)):
+        raise HubError(f"{key} must be a {_JSON_NAMES.get(kind, kind.__name__)}")
+    return value
+
+
+_JSON_NAMES = {str: "string", list: "list", dict: "object", bool: "boolean"}
 
 
 def _text(text: str, error: bool = False) -> dict:
@@ -485,6 +538,11 @@ def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False) -> int:
 
 
 def _answer(hub: Hub, message: dict) -> None:
-    reply = hub.handle(message)
+    try:
+        reply = hub.handle(message)
+    except Exception as exc:  # noqa: BLE001 — a request must always get an answer, never a silent hang
+        if not isinstance(message, dict) or "id" not in message:
+            return
+        reply = {"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32603, "message": f"internal error: {exc}"}}
     if reply is not None:
         _write_stdout(reply)

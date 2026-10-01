@@ -216,3 +216,67 @@ def test_install_waits_for_a_quick_install_instead_of_answering_at_once(limits):
     assert "owner/repo is installed" in text
     assert 'use_tool(repo="owner/repo", tool="echo"' in text and "repo__echo" in text
     h.close()
+
+
+# --- shared state and malformed requests (pre-launch QA, 2026-10-02) ---------------------
+
+
+def test_two_hubs_on_one_home_keep_each_others_installs(limits):
+    """One hub per client (Claude Desktop, Cursor...) shares LEGWORK_HOME; the
+    last to save used to drop what the other had installed."""
+    a, _ = make_hub([limits])
+    b, _ = make_hub([limits])
+    install(a, "owner/first")
+    install(b, "owner/second")
+    a.close(); b.close()
+    saved = json.loads((local_store.legwork_home() / "hub.json").read_text())
+    assert {e["repo"] for e in saved["installed"]} == {"owner/first", "owner/second"}
+
+
+def test_a_narrower_restart_doesnt_erase_installs_it_skips(limits, tmp_path):
+    other = tmp_path / "Other"
+    other.mkdir()
+    h, _ = make_hub([limits, other])
+    install(h, "owner/wide", allow_read=[str(other)])
+    install(h, "owner/narrow", allow_read=[str(limits)])
+    h.close()
+    narrow, _ = make_hub([limits])  # started without Other: owner/wide is skipped...
+    install(narrow, "owner/third")  # ...and a save must not erase it
+    narrow.close()
+    wide, _ = make_hub([limits, other])
+    assert {"owner/wide", "owner/narrow", "owner/third"} <= set(wide.installed)
+    wide.close()
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("use_tool", {"repo": "owner/repo", "tool": None}),
+        ("find_tools", {"query": 123}),
+        ("install_tool", {"repo": None}),
+        ("install_tool", {"repo": "owner/repo", "allow_read": [None]}),
+        ("use_tool", {"repo": "owner/repo", "tool": "x", "arguments": "not an object"}),
+    ],
+)
+def test_malformed_arguments_get_an_error_reply_not_silence(tool, args):
+    h, _ = make_hub()
+    reply = h.handle({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+    assert reply["id"] == 7
+    assert reply["result"]["isError"] is True
+
+
+def test_an_unexpected_failure_still_answers_the_request(monkeypatch):
+    sent = []
+    monkeypatch.setattr(hub, "_write_stdout", sent.append)
+    h, _ = make_hub()
+    monkeypatch.setattr(h, "handle", lambda m: (_ for _ in ()).throw(RuntimeError("boom")))
+    hub._answer(h, {"jsonrpc": "2.0", "id": 9, "method": "tools/call"})
+    assert sent and sent[0]["id"] == 9 and "boom" in sent[0]["error"]["message"]
+
+
+def test_huge_text_replies_are_cut_with_a_note_and_images_are_left_alone():
+    big = {"content": [{"type": "text", "text": "x" * (hub.MAX_TEXT_CHARS + 5)}, {"type": "image", "data": "y" * 10, "mimeType": "image/png"}]}
+    out = hub._cap_text(big)
+    assert len(out["content"][0]["text"]) < hub.MAX_TEXT_CHARS + 300
+    assert "Ask the tool for less" in out["content"][0]["text"]
+    assert out["content"][1]["data"] == "y" * 10
