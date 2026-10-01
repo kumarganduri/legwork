@@ -246,7 +246,9 @@ class Hub:
                 # The hub sets the annotations: the wrapper's own were written by a
                 # model and could claim anything (readOnlyHint to skip a prompt).
                 annotations = _served_annotations(f"{t['name']} ({item.slug})", item.allow_net)
-                tools.append({**t, "name": name, "description": description, "annotations": annotations})
+                exported = {**t, "name": name, "description": description, "annotations": annotations}
+                exported.pop("outputSchema", None)  # results are relayed as text only: see _cap_text
+                tools.append(exported)
         return tools
 
     def _route(self, exported_name: str) -> tuple[Installed, str] | None:
@@ -453,6 +455,14 @@ MAX_TEXT_CHARS = 200_000
 
 
 def _cap_text(result: dict) -> dict:
+    """Relay a tool result as text, capped. structuredContent is dropped: Python
+    MCP servers put the same data in the text content, and relayed alongside
+    it, a duckdb `select *` was capped at 200 KB of text but sent 37.6 MB of
+    structuredContent anyway (QA re-verification, 2026-10-02). A result with
+    only structured content gets it as JSON text instead."""
+    structured = result.pop("structuredContent", None)
+    if structured is not None and not result.get("content"):
+        result["content"] = [{"type": "text", "text": json.dumps(structured, ensure_ascii=False)}]
     for item in result.get("content") or []:
         text = item.get("text") if isinstance(item, dict) and item.get("type") == "text" else None
         if isinstance(text, str) and len(text) > MAX_TEXT_CHARS:

@@ -280,3 +280,22 @@ def test_huge_text_replies_are_cut_with_a_note_and_images_are_left_alone():
     assert len(out["content"][0]["text"]) < hub.MAX_TEXT_CHARS + 300
     assert "Ask the tool for less" in out["content"][0]["text"]
     assert out["content"][1]["data"] == "y" * 10
+
+
+def test_structured_content_is_dropped_so_the_cap_covers_everything():
+    """The text cap held, but 37.6 MB of structuredContent rode along (QA, 2026-10-02)."""
+    rows = [{"n": i} for i in range(5)]
+    both = hub._cap_text({"content": [{"type": "text", "text": json.dumps(rows)}], "structuredContent": {"result": rows}})
+    assert "structuredContent" not in both and json.loads(both["content"][0]["text"]) == rows
+    only = hub._cap_text({"content": [], "structuredContent": {"result": ["x" * (hub.MAX_TEXT_CHARS + 10)]}})
+    assert "structuredContent" not in only
+    assert "Ask the tool for less" in only["content"][0]["text"]
+
+
+def test_exported_tools_dont_promise_structured_output(limits):
+    h, _ = make_hub([limits])
+    install(h)
+    h.installed["owner/repo"].tools[0]["outputSchema"] = {"type": "object"}
+    exported = [t for t in h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"] if t["name"] == "repo__echo"]
+    assert exported and "outputSchema" not in exported[0]
+    h.close()
