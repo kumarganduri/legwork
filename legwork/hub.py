@@ -85,7 +85,10 @@ STATIC_TOOLS = [
         "find_tools",
         "Search GitHub for open-source tools that do something, with facts to choose by "
         "(stars, license, freshness, cached, already has an MCP server). Installs nothing.",
-        {"query": {"type": "string", "description": "A few keywords, e.g. 'extract tables pdf'"}},
+        {"query": {"type": "string", "description": (
+            "2-3 keywords, e.g. 'extract tables pdf'. Every word must match on GitHub, so "
+            "leave out filler; if the results look off, try fewer or different words."
+        )}},
         ["query"],
         {"title": "Find tools on GitHub", "readOnlyHint": True, "openWorldHint": True},
     ),

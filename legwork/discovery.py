@@ -5,8 +5,9 @@ another MCP client's model) picks. Nothing here installs anything.
 
 Two GitHub searches are merged, because neither alone is enough: sorting
 by stars surfaces the established library (pdfplumber for "extract tables
-pdf") that relevance ranking misses, and relevance ranking catches on-topic
-repos too new to have many stars. Each candidate is annotated with what
+pdf") that relevance ranking misses, and relevance ranking, which also reads
+READMEs, catches other wordings and on-topic repos too new to have many
+stars. Each candidate is annotated with what
 matters for trusting it: stars, license, last update, age (the malware in
 our trials was three days old with ~700 stars), whether the Legwork cache
 already has it, and whether it already ships its own MCP server.
@@ -39,6 +40,19 @@ MIN_STARS = 20
 NEW_REPO_DAYS = 30
 MAX_CANDIDATES = 6
 _TIMEOUT = 15
+# GitHub search needs every word to match, with no stemming: "extract tables
+# from pdf" misses pdfplumber over the word "from", and "read pdf tables"
+# returned a hand-detection repo (OpenClaw test, 2026-10-01). Filler words a
+# model adds go before searching.
+# Models also write web-search queries ("GitHub open-source tool extract tables
+# from PDF best maintained stars license", gpt-5.4-mini in OpenClaw).
+_FILLER = frozenset(
+    "a an and any app application best can cli command for from get github good in into library "
+    "license line maintained my of on open open-source or package popular program read repo "
+    "repository some source stars that the this to tool tools use using which with".split()
+)
+MAX_TERMS = 4  # every word must match, so long queries find little or nothing
+MIN_RESULTS = 3  # fewer than this and the last word is dropped, down to two words
 _OWN_MCP_RE = re.compile(r"model context protocol|\bmcp[ -]server\b|\b[a-z0-9]+-mcp\b|\bmcp\.json\b", re.IGNORECASE)
 
 
@@ -86,8 +100,9 @@ def _get_json(url: str) -> dict:
         raise DiscoveryError(f"couldn't reach GitHub search: {exc}") from exc
 
 
-def _search(query: str, sort: str | None) -> list[dict]:
-    params = {"q": f"{query} fork:false archived:false stars:>={MIN_STARS}", "per_page": "10"}
+def _search(query: str, sort: str | None, in_readme: bool = False) -> list[dict]:
+    where = "in:name,description,topics,readme " if in_readme else ""
+    params = {"q": f"{query} {where}fork:false archived:false stars:>={MIN_STARS}", "per_page": "10"}
     if sort:
         params["sort"] = sort
     return _get_json(f"{SEARCH_URL}?{urllib.parse.urlencode(params)}").get("items", [])
@@ -131,25 +146,52 @@ def _annotate(candidate: Candidate) -> Candidate:
     return candidate
 
 
-def find(query: str, limit: int = MAX_CANDIDATES) -> list[Candidate]:
+def search_terms(query: str) -> str:
+    """The words worth sending to GitHub: lowercased, punctuation and filler
+    removed. Falls back to all the words if nothing else is left."""
+    # Tokens with a colon are search qualifiers (site:, stars:, user:): dropped,
+    # so a query can't undo the star floor or narrow results to one account.
+    raw = [t for t in query.lower().split() if ":" not in t]
+    words = [w for w in re.findall(r"[\w.+#-]+", " ".join(raw)) if w.strip(".-")]
+    kept = [w for w in words if w not in _FILLER]
+    return " ".join((kept or words)[:MAX_TERMS])
+
+
+@dataclass
+class Found:
+    terms: str  # what was actually searched, after cleanup and narrowing
+    candidates: list[Candidate]
+
+
+def find(query: str, limit: int = MAX_CANDIDATES) -> Found:
     """Up to `limit` candidates for `query` (a few keywords), best first."""
-    query = " ".join(query.split())
-    if not query:
+    terms = search_terms(query).split()
+    if not terms:
         raise DiscoveryError("describe what you need in a few words, e.g. 'extract tables pdf'")
-    by_stars = _search(query, sort="stars")
-    by_relevance = _search(query, sort=None)
+    by_stars = _search(" ".join(terms), sort="stars")
+    while len(by_stars) < MIN_RESULTS and len(terms) > 2:
+        terms = terms[:-1]
+        by_stars = _search(" ".join(terms), sort="stars")
+    # READMEs only for relevance: they use more word forms ("Table extraction"
+    # finds pdfplumber), but sorted by stars they surface awesome-lists.
+    by_relevance = _search(" ".join(terms), sort=None, in_readme=True)
     merged: dict[str, dict] = {}
-    for item in by_stars[:limit] + by_relevance[:3]:
+    for item in by_stars[:limit] + by_relevance[:4]:
         merged.setdefault(item["full_name"].lower(), item)
     candidates = sorted((_candidate(i) for i in merged.values()), key=lambda c: -c.stars)[:limit]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        return list(pool.map(_annotate, candidates))
+        return Found(" ".join(terms), list(pool.map(_annotate, candidates)))
 
 
-def describe(candidates: list[Candidate]) -> str:
+def describe(found: Found) -> str:
     """A compact, model-readable list. Descriptions are marked untrusted."""
+    header = f"Searched GitHub for: {found.terms}\n\n"
+    candidates = found.candidates
     if not candidates:
-        return "No matching repositories found. Try different or fewer keywords."
+        return header + (
+            "No matching repositories found. GitHub search needs every word to match: "
+            "try fewer or different keywords (e.g. 'pdf tables')."
+        )
     lines = []
     for i, c in enumerate(candidates, 1):
         age = c.days_since(c.created_at) if c.created_at else None
@@ -169,4 +211,4 @@ def describe(candidates: list[Candidate]) -> str:
         )
         if c.description:
             lines.append(f"   description (untrusted, from the repo): {c.description}")
-    return "\n".join(lines)
+    return header + "\n".join(lines)

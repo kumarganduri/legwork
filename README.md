@@ -10,7 +10,7 @@ https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
 
 <p align="center"><sub>A real run in Claude Desktop. The 25-second install is sped up; the malware repos' names are masked.</sub></p>
 
-Add Legwork to Claude, Cursor, opencode or any [MCP](https://modelcontextprotocol.io)
+Add Legwork to Claude, Cursor, Codex, opencode or any [MCP](https://modelcontextprotocol.io)
 client once. When you ask for something your AI has no tool for, it
 searches GitHub, picks a repo, and asks you to approve installing it.
 Legwork then checks the code for malware, builds a working tool for it in a
@@ -36,7 +36,7 @@ approve the install, and it reads the table. Or build one tool yourself:
   malware repos below would have got in. Legwork scans the code first, and
   every tool it installs runs sandboxed, seeing only the folders you grant.
 - **It works across your tools:** the same install works in Claude Code,
-  Claude Desktop, Cursor and opencode.
+  Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
 
 ## Proof, not a pitch
 
@@ -116,6 +116,34 @@ config, where it would sit in plain text.
 
 `legwork find "extract tables pdf"` runs the same search from your terminal.
 
+### Other MCP clients
+
+Legwork is a standard MCP server over stdio, so any client that runs local
+MCP servers can use it. What differs is whether the client asks you before
+it calls a tool. Legwork labels its tools (searching only reads; installing
+acts), and the clients marked "asks" use those labels.
+
+| Client | Tested | Add Legwork | Before an install |
+|---|---|---|---|
+| Claude Code | ✅ | `claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
+| Claude Desktop, Cursor | ✅ | JSON above | asks (Cursor: unless auto-run is on) |
+| opencode | ✅ 1.18 | JSON above | asks only with the `permission` line above |
+| Codex CLI | ✅ 0.159 | `codex mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
+| Goose | ✅ 1.52 | `goose session --with-extension "uvx legwork-mcp hub --allow-read ~/Downloads"` | asks with `GOOSE_MODE=smart_approve`; the default mode doesn't |
+| OpenClaw | ✅ 2026.9 | `openclaw mcp add legwork --command uvx --arg legwork-mcp --arg hub --arg --allow-read --arg ~/Downloads` | its default full-permission mode doesn't ask |
+| Gemini CLI, Cline, Zed, Continue, ... | not yet | the same command in the client's MCP config | check the client's settings |
+
+In every client, the folders and network you start the hub with stay the
+ceiling, whether or not the client asks.
+
+**Faster starts:** `uvx` downloads Legwork on the first run, which can be
+slower than some clients wait (Codex allows 10 seconds; add
+`startup_timeout_sec = 60` under `[mcp_servers.legwork]` in
+`~/.codex/config.toml`). Or install it once with `uv tool install
+legwork-mcp` and use the full path that `which legwork` prints, plus
+`hub ...`, as the command (desktop apps don't see your shell's `PATH`);
+`uv tool upgrade legwork-mcp` updates it.
+
 ## Quick start
 
 You need **macOS or Linux**, [uv](https://docs.astral.sh/uv/), and any
@@ -178,7 +206,7 @@ Connect it to Claude Code:
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
 clients. For Claude Desktop, add it to `claude_desktop_config.json` **while
 the app is quit**: the running app writes its settings back on exit and
-drops edits it didn't make. Tested with Claude Code, Claude Desktop, Cursor and opencode.
+drops edits it didn't make. Tested with Claude Code, Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
 For a permanent `legwork` command: `uv tool install legwork-mcp`.
 
 **Repos already in the [public cache](cache/) need no model call and no API

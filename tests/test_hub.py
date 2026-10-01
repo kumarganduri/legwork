@@ -116,10 +116,10 @@ def test_installed_tools_get_the_hubs_annotations_not_their_own(limits, monkeypa
 
 def test_find_tools_returns_candidates_and_reports_search_failures():
     h, _ = make_hub()
-    from legwork.discovery import Candidate, DiscoveryError
+    from legwork.discovery import Candidate, DiscoveryError, Found
 
     c = Candidate("jsvine/pdfplumber", 10778, "Plumb a PDF", "MIT", "Python", "2026-08-06T00:00:00Z", "2016-01-01T00:00:00Z", [])
-    with patch("legwork.hub.discovery.find", return_value=[c]):
+    with patch("legwork.hub.discovery.find", return_value=Found("extract tables pdf", [c])):
         _, text = call(h, "find_tools", {"query": "extract tables pdf"})
     assert "jsvine/pdfplumber" in text and "untrusted" in text
     with patch("legwork.hub.discovery.find", side_effect=DiscoveryError("GitHub's search limit was reached")):
