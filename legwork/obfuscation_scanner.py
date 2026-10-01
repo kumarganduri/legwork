@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
+import threading
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,8 +87,30 @@ def _is_computed_name(node: ast.expr) -> bool:
     patterns. The real malicious fixture builds its names inline, so it
     still trips this (and its XOR/byte-array signal blocks it on its own).
     Known trade-off: an attacker can store the decoded name in a variable
-    first to dodge this particular signal."""
-    return not _is_literal_str(node) and not isinstance(node, (ast.Name, ast.Attribute))
+    first to dodge this particular signal.
+
+    Templates count as plain too (2026-10-01): Pillow's plugin loader does
+    `__import__(f"{__spec__.parent}.{plugin}")` and
+    `getattr(core, f"{decoder_name}_decoder")`, which blocked the library.
+    An f-string or `%`/`+` template that only fills in variables shows the
+    name in the source; the real payloads build every name from a call
+    (`__import__(_a4jgwq6195([...], 181).decode())`), and still trip this."""
+    return not _is_plain_name(node)
+
+
+def _is_plain_name(node: ast.expr) -> bool:
+    if _is_literal_str(node) or isinstance(node, (ast.Name, ast.Attribute)):
+        return True
+    if isinstance(node, ast.JoinedStr):
+        return all(
+            _is_literal_str(v) or (isinstance(v, ast.FormattedValue) and _is_plain_name(v.value)) for v in node.values
+        )
+    if isinstance(node, ast.Subscript):  # getattr(self, self.items[i]) (sympy)
+        return _is_plain_name(node.value) and (isinstance(node.slice, ast.Constant) or _is_plain_name(node.slice))
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)):
+        right = node.right.elts if isinstance(node.right, ast.Tuple) else [node.right]
+        return _is_plain_name(node.left) and all(_is_plain_name(r) for r in right)
+    return False
 
 
 def _is_int_list_literal(node: ast.expr, min_len: int = _BYTE_ARRAY_MIN_LEN) -> bool:
@@ -144,7 +168,12 @@ class _Visitor(ast.NodeVisitor):
             and _is_computed_name(node.args[1])
         )
 
-        if isinstance(func, ast.Name) and func.id in ("exec", "eval"):
+        # Like getattr above, only code that's built inline counts: payloads
+        # run what they decode, exec(decode(blob)). Code passed in through a
+        # variable (python-pptx's test steps: eval(value)) or written as a
+        # literal (sympy: exec('from sympy import *', ns)) isn't hidden;
+        # both blocked well-known libraries, 2026-10-01.
+        if isinstance(func, ast.Name) and func.id in ("exec", "eval") and node.args and _is_computed_name(node.args[0]):
             self.findings.append(
                 Finding(self.file, node.lineno, "literal-exec-eval", f"direct call to {func.id}()")
             )
@@ -217,11 +246,43 @@ def scan_file(path: Path) -> list[Finding]:
         with warnings.catch_warnings():  # the repo's own SyntaxWarnings are noise here
             warnings.simplefilter("ignore")
             tree = ast.parse(source, filename=str(path))
-    except (SyntaxError, ValueError, UnicodeDecodeError):
+    except (SyntaxError, ValueError, UnicodeDecodeError, RecursionError, MemoryError):
         return []
     visitor = _Visitor(path)
-    visitor.visit(tree)
+    try:
+        visitor.visit(tree)
+    except RecursionError:
+        # Generated code can nest deeper than the default limit (sympy's
+        # resolvent_lookup.py crashed the scan, 2026-10-01). Retry with room.
+        visitor = _Visitor(path)
+        if not _visit_deep(visitor, tree):
+            return [Finding(path, 0, "too-deep-to-scan", "nested too deeply to scan")]
     return visitor.finalize()
+
+
+def _visit_deep(visitor: ast.NodeVisitor, tree: ast.AST) -> bool:
+    """Visit `tree` on a thread with a large stack and a raised recursion
+    limit. False if even that isn't enough."""
+    done = []
+
+    def run():
+        try:
+            visitor.visit(tree)
+            done.append(True)
+        except RecursionError:
+            pass
+
+    old_limit, old_stack = sys.getrecursionlimit(), threading.stack_size()
+    sys.setrecursionlimit(max(old_limit, 100_000))
+    threading.stack_size(512 * 1024 * 1024)
+    try:
+        worker = threading.Thread(target=run)
+        worker.start()
+        worker.join()
+    finally:
+        threading.stack_size(old_stack)
+        sys.setrecursionlimit(old_limit)
+    return bool(done)
 
 
 # --- JavaScript / TypeScript ------------------------------------------------
@@ -313,7 +374,9 @@ def scan_js_file(path: Path) -> list[Finding]:
 
 def _iter_python_files(root: Path):
     for path in root.rglob("*.py"):
-        if any(part in _SKIP_DIRS for part in path.parts):
+        # A folder can be named x.py (PayloadsAllTheThings has one), and a
+        # symlink can point outside the repo: only regular files are read.
+        if any(part in _SKIP_DIRS for part in path.parts) or not path.is_file() or path.is_symlink():
             continue
         yield path
 

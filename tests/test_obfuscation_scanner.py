@@ -136,6 +136,61 @@ def test_literal_exec_call_detected(tmp_path):
     assert any(x.pattern == "literal-exec-eval" for x in findings)
 
 
+
+def test_eval_of_a_variable_is_not_a_signal_but_eval_of_decoded_code_is(tmp_path):
+    """python-pptx (2026-10-01) was blocked for test steps doing eval(value)
+    beside getattr(picture, "crop_%s" % side): two weak signals, both benign."""
+    f = tmp_path / "steps.py"
+    f.write_text(
+        "def then_text(context, value):\n"
+        "    context.shape.text = eval(value)\n"
+        "def then_crop(context, side):\n"
+        "    return getattr(context.picture, 'crop_%s' % side)\n"
+    )
+    findings = scan_file(f)
+    assert not any(x.pattern == "literal-exec-eval" for x in findings)
+    assert not is_blocking(findings)
+    g = tmp_path / "loader.py"
+    g.write_text("exec(base64.b64decode(BLOB))\neval(self.code)\n")
+    assert [x.line for x in scan_file(g) if x.pattern == "literal-exec-eval"] == [1]
+
+
+def test_name_templates_that_fill_in_variables_are_not_dynamic(tmp_path):
+    """Pillow (2026-10-01) was blocked for its plugin loader: f-string module
+    and attribute names. Names built by a call still count."""
+    f = tmp_path / "Image.py"
+    f.write_text(
+        "__import__(f'{__spec__.parent}.{plugin}', globals(), locals(), [])\n"
+        "decoder = getattr(core, f'{decoder_name}_decoder')\n"
+        "crop = getattr(picture, 'crop_%s' % side)\n"
+        "mod = __import__('pkg.' + name)\n"
+    )
+    findings = scan_file(f)
+    assert not any(x.pattern in ("dynamic-getattr", "dynamic-import") for x in findings)
+    assert not is_blocking(findings)
+    g = tmp_path / "loader.py"
+    g.write_text(
+        "m = __import__(f'{decode(blob)}')\n"
+        "fn = getattr(m, 'x' + key.decode())\n"
+    )
+    assert {x.pattern for x in scan_file(g)} >= {"dynamic-import", "dynamic-getattr"}
+
+
+def test_literal_code_and_indexed_names_are_not_signals(tmp_path):
+    """sympy (2026-10-01): exec of a visible literal plus getattr with a name
+    taken from a list blocked the library."""
+    f = tmp_path / "sympy_parser.py"
+    f.write_text(
+        "def __getitem__(self, index):\n"
+        "    return getattr(self, self.items[index])\n"
+        "exec('from sympy import *', global_dict)\n"
+    )
+    findings = scan_file(f)
+    assert not findings
+    g = tmp_path / "loader.py"
+    g.write_text("exec(zlib.decompress(BLOB))\nf = getattr(m, names[decode(k)])\n")
+    assert {x.pattern for x in scan_file(g)} == {"literal-exec-eval", "dynamic-getattr"}
+
 # --- false-positive resistance ----------------------------------------------
 
 
@@ -183,16 +238,16 @@ def test_syntax_error_file_is_skipped_not_crashed(tmp_path):
 
 def test_scan_repo_finds_findings_in_nested_files(tmp_path):
     (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "mod.py").write_text("exec('x')\n")
+    (tmp_path / "pkg" / "mod.py").write_text("exec(decode(x))\n")
     findings = scan_repo(tmp_path)
     assert any(f.pattern == "literal-exec-eval" for f in findings)
 
 
 def test_scan_repo_skips_vendored_and_venv_dirs(tmp_path):
     (tmp_path / ".venv" / "lib").mkdir(parents=True)
-    (tmp_path / ".venv" / "lib" / "evil.py").write_text("exec('x')\n")
+    (tmp_path / ".venv" / "lib" / "evil.py").write_text("exec(decode(x))\n")
     (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
-    (tmp_path / "node_modules" / "pkg" / "evil.py").write_text("exec('x')\n")
+    (tmp_path / "node_modules" / "pkg" / "evil.py").write_text("exec(decode(x))\n")
     findings = scan_repo(tmp_path)
     assert findings == []
 
@@ -311,3 +366,20 @@ def test_bundled_javascript_needs_a_strong_signal(tmp_path):
     assert is_blocking(scan_js_file(handwritten))
     bundled.write_text("eval(atob(payload));")  # a strong signal blocks anywhere
     assert is_blocking(scan_js_file(bundled))
+
+
+def test_scan_repo_skips_folders_named_like_python_files(tmp_path):
+    """PayloadsAllTheThings has a directory called `Configuration Python __init__.py`;
+    reading it crashed the scan (2026-10-01)."""
+    (tmp_path / "Configuration Python __init__.py").mkdir()
+    (tmp_path / "ok.py").write_text("x = 1\n")
+    assert scan_repo(tmp_path) == []
+
+
+def test_deeply_nested_generated_code_is_scanned_not_crashed_on(tmp_path):
+    """sympy's resolvent_lookup.py (generated polynomials) overflowed the
+    recursive visitor and crashed the whole scan (2026-10-01)."""
+    f = tmp_path / "generated.py"
+    f.write_text("x = " + "(1 + " * 180 + "1" + ")" * 180 + "\nexec(decode(blob))\n")
+    findings = scan_file(f)
+    assert [x.pattern for x in findings] == ["literal-exec-eval"]
