@@ -357,6 +357,12 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
   can reach "abstract" Unix sockets (such as an X11 display), because the
   seccomp filter that blocks Unix sockets during install only covers those
   two. The run phase has no network and isn't affected.
+- **macOS can't stop a process that detaches itself.** Each install and
+  self-test is cleaned up when it finishes, but on macOS code that
+  deliberately detaches (`setsid`) can keep running afterwards. It stays in
+  the sandbox (no home folder, no writes outside its own folder) but keeps
+  the install step's network access until you log out. Linux's sandbox
+  stops these too.
 - **The scanner is heuristic.** It catches the obfuscation patterns seen in
   real payloads so far, and a determined author can get past it.
 
