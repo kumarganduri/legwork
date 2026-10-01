@@ -100,7 +100,9 @@ from typing import NoReturn
 # on a GitHub runner's network and would take minutes on a home connection
 # (measured 2026-09-26), so installs get 15 minutes.
 INSTALL_TIMEOUT_SECONDS = 900
-INVOKE_TIMEOUT_SECONDS = 60
+# A self-test that loads an AI model offline (docling, rembg) takes over a
+# minute on first load (2026-10-01), so self-tests get 3 minutes.
+INVOKE_TIMEOUT_SECONDS = 180
 
 # Deliberately narrow — no inherited secrets. /opt/homebrew is included
 # since that's where Homebrew-installed tools (including sandbox-exec's own

@@ -79,7 +79,7 @@ and `return Image(path=out_path)` (or `Image(data=png_bytes, format="png")`). \
 Input files are read-only: write any output file under the current folder \
 and return its absolute path (`os.path.abspath`). MUST include \
 an `if __name__ == "__main__":` self-test. The self-test runs with the \
-NETWORK OFF and must finish within 60 seconds. It calls the SIMPLEST \
+NETWORK OFF and must finish within 3 minutes. It calls the SIMPLEST \
 documented command or function that works offline (a --version or --help \
 call, or a small local computation -- never a showcase feature and never \
 anything that downloads or calls a service; if the tool uses models \

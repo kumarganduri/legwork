@@ -91,7 +91,7 @@ def test_system_prompt_asks_for_an_offline_non_guessing_self_test():
     Claude's and Ollama's reached for the network, which is off."""
     prompt = build_messages("# Repo")[0].content
     assert "SIMPLEST" in prompt
-    assert "NETWORK OFF" in prompt and "60 seconds" in prompt
+    assert "NETWORK OFF" in prompt and "3 minutes" in prompt
     assert "assert a specific type" in prompt
     assert "never assert on the tool's own verdicts" in prompt
 
