@@ -492,6 +492,8 @@ def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
         "~", "/", "~/.ssh", "~/.aws/credentials", "~/.config", "~/Library/Keychains",
         # Folders that CONTAIN secrets, and secret files (pre-launch QA, 2026-10-02)
         "~/Library", "~/Library/Group Containers", "~/.legwork.env", "~/.zsh_history", "~/.npmrc",
+        # Different letter case: the same folders on macOS's default filesystem
+        "~/.SSH", "~/LIBRARY", "~/Library/KEYCHAINS", "~/.Legwork.env",
     ],
 )
 def test_grants_refuse_home_and_secret_folders_whether_or_not_they_exist(target):
@@ -628,3 +630,13 @@ def test_processes_left_behind_by_an_install_are_stopped(tmp_path):
     size = heartbeat.stat().st_size if heartbeat.exists() else 0
     time.sleep(1.5)
     assert (heartbeat.stat().st_size if heartbeat.exists() else 0) == size
+
+
+def test_your_home_folder_is_refused_in_any_letter_case(monkeypatch, tmp_path):
+    """/USERS/me is your home on macOS's case-insensitive filesystem."""
+    home = tmp_path / "Users" / "me"
+    home.mkdir(parents=True)
+    monkeypatch.setattr("legwork.sandbox_runner.Path.home", lambda: home)
+    for spelling in (str(home).upper(), str(tmp_path / "USERS"), str(home).replace("me", "ME")):
+        with pytest.raises(sandbox_runner.SandboxGrantError, match="whole home folder"):
+            sandbox_runner.check_read_grants([spelling])

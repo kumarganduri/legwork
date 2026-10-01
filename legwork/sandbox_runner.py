@@ -419,15 +419,15 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
         path = Path(raw).expanduser().resolve()
         # Refusals come before the existence check: a secret folder is refused
         # as such whether or not it exists here.
-        if path == Path("/") or home.is_relative_to(path):
+        if path == Path("/") or _within(home, path):
             raise SandboxGrantError(
                 f"--allow-read {raw}: that's your whole home folder (or above it). "
                 "Grant the specific folder the tool needs, e.g. ~/Downloads."
             )
         for secret in _SECRET_DIRS:
-            if path.is_relative_to(home / secret):
+            if _within(path, home / secret):
                 raise SandboxGrantError(f"--allow-read {raw}: ~/{secret} holds credentials or private data; refusing.")
-            if (home / secret).is_relative_to(path):
+            if _within(home / secret, path):
                 raise SandboxGrantError(
                     f"--allow-read {raw}: that folder contains ~/{secret}, which holds credentials or "
                     "private data. Grant the specific subfolder the tool needs instead."
@@ -436,6 +436,16 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
             raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
         granted.append(path)
     return tuple(granted)
+
+
+def _within(path: Path, root: Path) -> bool:
+    """`path` is `root` or inside it, ignoring letter case. macOS's default
+    filesystem does: ~/.SSH is ~/.ssh, and /USERS/me is your home, so an
+    exact comparison let both through (pre-launch QA, 2026-10-02). On a
+    case-sensitive filesystem this only refuses a few more look-alikes."""
+    path_parts = [p.casefold() for p in path.parts]
+    root_parts = [p.casefold() for p in root.parts]
+    return path_parts[: len(root_parts)] == root_parts
 
 
 def interpreter_home() -> Path | None:
