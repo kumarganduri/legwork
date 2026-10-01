@@ -459,7 +459,10 @@ def _generate_profile(
         # clipboard or script other apps (tightened 2026-09-26).
         "(allow mach-lookup " + " ".join(f'(global-name "{name}")' for name in _MACH_SERVICES) + ")",
         "(allow iokit-open)",
-        "(allow signal (target self))",
+        # Its own children too, which inherit this sandbox: moviepy could
+        # start ffmpeg but not stop it (os.kill: Operation not permitted,
+        # 2026-10-01). Processes outside the sandbox stay out of reach.
+        "(allow signal (target same-sandbox))",
         # Reads: allowed everywhere EXCEPT under the user's home directory
         # (needed for Python/pip/system libraries, which mostly live
         # outside $HOME) — then separately re-allowed for the sandbox

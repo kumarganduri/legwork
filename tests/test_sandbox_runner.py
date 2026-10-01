@@ -518,3 +518,34 @@ def test_served_tools_get_network_only_when_granted(tmp_path, allow_net):
     assert f"net:{'yes' if allow_net else 'no'}" in out
     if platform.system() == "Linux" and allow_net:
         assert "unix:no" in out
+
+
+def test_a_tool_can_stop_the_processes_it_started(tmp_path):
+    """moviepy starts ffmpeg and terminates it when done; the macOS profile
+    only allowed signalling the tool itself (2026-10-01)."""
+    code = (
+        "import subprocess, sys\n"
+        "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        "p.terminate(); p.wait(timeout=10); print('stopped', p.returncode)\n"
+    )
+    result = invoke([SYSTEM_PYTHON, "-c", code], tmp_path)
+    assert "stopped" in result.stdout
+
+
+def test_a_tool_still_cannot_signal_processes_outside_its_sandbox(tmp_path):
+    import subprocess
+
+    outside = subprocess.Popen([SYSTEM_PYTHON, "-c", "import time; time.sleep(60)"])
+    try:
+        code = (
+            "import os, signal\n"
+            "try:\n"
+            f"    os.kill({outside.pid}, signal.SIGTERM); print('killed')\n"
+            "except (PermissionError, ProcessLookupError) as e:\n"
+            "    print('refused', type(e).__name__)\n"
+        )
+        result = invoke([SYSTEM_PYTHON, "-c", code], tmp_path)
+        assert "refused" in result.stdout
+        assert outside.poll() is None
+    finally:
+        outside.kill()
