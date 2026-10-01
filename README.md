@@ -55,6 +55,11 @@ at the time, carried the same byte-identical obfuscated dropper under different
 file names. Legwork's pre-install scan refused both in about a second.
 Nothing from them was installed or run. Stars are not a trust signal.
 
+The scanner has to stay quiet on ordinary code too. Run over the 150
+most-starred Python, JavaScript and TypeScript repos on GitHub
+(2026-10-01), it blocks one: lodash, for a vendored 2009 debugging script
+that really does run `eval(unescape(...))`.
+
 Full write-up, including what failed along the way and what we fixed:
 [docs/designs/legwork-trending-trial-2026-09-26.md](docs/designs/legwork-trending-trial-2026-09-26.md).
 
@@ -108,8 +113,11 @@ is what makes it ask you before an install:
   already has an MCP server, and a warning on very new repos (the malware
   we caught was three days old). Descriptions are marked as untrusted text.
 
-Repos in the [public cache](cache/) install in about a minute with no API
-key. Others need a model key, and building takes 1–5 minutes. Put the key
+**41 popular tools are in the [public cache](cache/) and install in about a
+minute with no API key**: speech-to-text, OCR, background removal, PDFs and
+Office files, video, YouTube transcripts, charts, DuckDB and CSV tools, maths
+and units, and linters and formatters. Each was built, reviewed by hand and
+tried with a real call before it was added. Others need a model key, and building takes 1–5 minutes. Put the key
 in `~/.legwork.env` ([three lines](#model-providers), `chmod 600`) and the
 hub reads it when it needs to build, so the key never goes in your MCP
 config, where it would sit in plain text.
