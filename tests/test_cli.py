@@ -205,3 +205,12 @@ def test_serve_passes_grants_and_refuses_unsafe_ones(tmp_path, capsys):
         assert cli.main(["serve", "owner/repo", "--allow-read", "~"]) == 1
     exec_serve.assert_not_called()
     assert "whole home folder" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flag", ["--version", "-V"])
+def test_version_flag_prints_the_version(flag, capsys):
+    """`legwork --version` was taken for a repo name by the build shorthand."""
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main([flag])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.startswith("legwork ")

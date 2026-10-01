@@ -268,13 +268,21 @@ def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
     return 0
 
 
+def _installed_version() -> str:
+    try:
+        return importlib.metadata.version(DIST_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "-h", "--help"):
+    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "-h", "--help", "-V", "--version"):
         # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
         argv.insert(0, "build")
 
     parser = argparse.ArgumentParser(prog="legwork", description="Point it at a GitHub repo, get a working MCP tool back.")
+    parser.add_argument("-V", "--version", action="version", version=f"legwork {_installed_version()}")
     sub = parser.add_subparsers(dest="command", required=True)
     build = sub.add_parser("build", help="build an MCP wrapper for a GitHub repo (also: legwork <repo>)")
     build.add_argument("repo", help="github.com URL or owner/repo")
@@ -285,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-read",
         action="append",
         metavar="PATH",
-        help="let the tool read this file or folder (read-only; repeatable). By default it sees none of your files",
+        help="let the tool read this file or folder (read-only; repeatable). By default it sees nothing in your home folder",
     )
     serve.add_argument("--allow-net", action="store_true", help="let the tool use the network (off by default)")
     contribute = sub.add_parser("contribute", help="write a built wrapper + manifest as a public-cache entry")

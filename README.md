@@ -14,8 +14,8 @@ Add Legwork to Claude, Cursor, Codex, opencode or any [MCP](https://modelcontext
 client once. When you ask for something your AI has no tool for, it
 searches GitHub, picks a repo, and asks you to approve installing it.
 Legwork then checks the code for malware, builds a working tool for it in a
-sandbox, tests it, and hands it over. It can only touch the folders you
-allow.
+sandbox, tests it, and hands it over. In your home folder it can only read
+the folders you allow.
 
 ```sh
 claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
@@ -34,7 +34,8 @@ approve the install, and it reads the table. Or build one tool yourself:
 - **Whatever your AI installs runs with full access to your machine:** your
   SSH keys, your files, your environment variables. That's how the two
   malware repos below would have got in. Legwork scans the code first, and
-  every tool it installs runs sandboxed, seeing only the folders you grant.
+  every tool it installs runs sandboxed: in your home folder it sees only
+  the folders you grant.
 - **It works across your tools:** the same install works in Claude Code,
   Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
 
@@ -291,8 +292,8 @@ without installing anything.
 
 ## Permissions: locked down unless you say so
 
-A served tool sees **none of your files and has no network**. Grant exactly
-what a tool needs when you add it to your client:
+A served tool **sees nothing in your home folder and has no network**. Grant
+exactly what a tool needs when you add it to your client:
 
 ```sh
 # Let markitdown read one folder (read-only):
@@ -303,10 +304,15 @@ uvx legwork-mcp serve owner/repo --allow-net
 ```
 
 `--allow-read` is repeatable and always read-only. Some folders can't be
-granted even on request: `/`, your whole home folder, and places
-credentials live (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, keychains,
-browser cookies). With `--allow-net`, the tool still can't reach local
-sockets such as your SSH agent or Docker.
+granted even on request: `/`, your whole home folder, places credentials
+live (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, keychains, browser
+cookies, `~/.npmrc`, `~/.legwork.env`, shell history), and any folder that
+contains one of those (such as `~/Library`). With `--allow-net`, the tool
+still can't reach local sockets such as your SSH agent or Docker.
+
+Outside your home folder, tools can read system locations such as `/usr`,
+`/opt`, `/etc`, `/tmp` and `/Users/Shared`, because Python and the libraries
+they need live there. Don't keep secrets in those places.
 
 On macOS, the first time a tool reads a protected folder (Downloads,
 Documents, Desktop), macOS itself asks whether `uvx` may access it. That's
@@ -335,7 +341,8 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
 - **Install time is the biggest risk.** Package installs and `install.sh`
   scripts run with network on, because they have to. The sandbox limits
   them to their own working folder: no access to your home directory (SSH
-  keys, cloud credentials, dotfiles), no writes outside the folder, and an
+  keys, cloud credentials, dotfiles; system locations such as `/tmp` stay
+  readable), no writes outside the folder, and an
   environment with none of your variables (including your model key). A
   malicious package can still misbehave inside that folder and reach the
   network during install.
