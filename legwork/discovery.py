@@ -19,6 +19,7 @@ as untrusted wherever they're shown to a model.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import urllib.error
@@ -47,7 +48,8 @@ _TIMEOUT = 15
 # Models also write web-search queries ("GitHub open-source tool extract tables
 # from PDF best maintained stars license", gpt-5.4-mini in OpenClaw).
 _FILLER = frozenset(
-    "a an and any app application best can cli command for from get github good in into library "
+    "a an and any app application best can cli command create do for from generate get github good i in "
+    "into library make me need offline something thing turn want help file files find search look "
     "license line maintained my of on open open-source or package popular program read repo "
     "repository some source stars that the this to tool tools use using which with".split()
 )
@@ -129,12 +131,15 @@ def _read_url(url: str) -> str | None:
         return None
 
 
-def _annotate(candidate: Candidate) -> Candidate:
+def _annotate(candidate: Candidate, cached: set[str] | None = None) -> Candidate:
     owner, repo = candidate.slug.split("/", 1)
-    try:
-        candidate.in_cache = cache_reader.fetch(RepoRef(owner, repo)) is not None
-    except cache_reader.CacheUnavailableError:
-        candidate.in_cache = False
+    if cached:
+        candidate.in_cache = candidate.slug.lower() in cached
+    else:
+        try:
+            candidate.in_cache = cache_reader.fetch(RepoRef(owner, repo)) is not None
+        except cache_reader.CacheUnavailableError:
+            candidate.in_cache = False
     signals = " ".join([candidate.slug, candidate.description, *candidate.topics])
     if not _OWN_MCP_RE.search(signals) and "mcp" not in candidate.topics:
         for url in RAW_README_URLS:
@@ -178,9 +183,50 @@ def find(query: str, limit: int = MAX_CANDIDATES) -> Found:
     merged: dict[str, dict] = {}
     for item in by_stars[:limit] + by_relevance[:4]:
         merged.setdefault(item["full_name"].lower(), item)
-    candidates = sorted((_candidate(i) for i in merged.values()), key=lambda c: -c.stars)[:limit]
+    index = cache_reader.fetch_index()
+    cached_slugs = {e["repo"].lower() for e in index}
+    # Cached tools that fit the need go first: they install in about a minute
+    # with no API key and were reviewed. GitHub's ranking often misses them:
+    # "speech to text transcribe" didn't list faster-whisper, so a client with
+    # no key picked openai/whisper and gave up (QA, Claude Code, 2026-10-02).
+    lifted = cache_matches(search_terms(query).split(), index)
+    lifted_slugs = {c.slug.lower() for c in lifted}
+    others = sorted((_candidate(i) for i in merged.values() if i["full_name"].lower() not in lifted_slugs), key=lambda c: -c.stars)
+    others = others[: max(limit - len(lifted), 3)]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        return Found(" ".join(terms), list(pool.map(_annotate, candidates)))
+        others = list(pool.map(lambda c: _annotate(c, cached_slugs), others))
+    return Found(" ".join(terms), lifted + others)
+
+
+MAX_CACHE_MATCHES = 3
+
+
+def _stem(term: str) -> str:
+    return term if len(term) <= 4 else term[: max(4, len(term) - 3)]
+
+
+def cache_matches(terms: list[str], index: list[dict], limit: int = MAX_CACHE_MATCHES) -> list[Candidate]:
+    """Cached repos whose name, description or topics fit the search terms.
+    A term matches a word that starts with its stem, so "transcribe" finds
+    "transcription" (but not "transform") and "tables" finds "table"."""
+    if not terms:
+        return []
+    scored = []
+    for entry in index:
+        text = " ".join([entry["repo"], entry.get("what", ""), entry.get("about", ""), *map(str, entry.get("topics") or [])])
+        words = re.findall(r"[a-z0-9]+", text.lower())
+        score = sum(1 for t in terms if any(w.startswith(_stem(t)) or (t.startswith(w) and len(w) >= 3) for w in words))
+        if score >= (1 if len(terms) <= 2 else math.ceil(0.6 * len(terms))):
+            scored.append((score, entry.get("stars", 0), entry))
+    scored.sort(key=lambda x: (-x[0], -x[1]))
+    return [
+        Candidate(
+            slug=e["repo"], stars=int(e.get("stars") or 0), description=" ".join(e.get("what", "").split())[:160],
+            license=e.get("license") or "none", language=e.get("language") or "-", pushed_at=e.get("pushed_at") or "",
+            created_at=e.get("created_at") or "", topics=[], in_cache=True,
+        )
+        for _, _, e in scored[:limit]
+    ]
 
 
 def describe(found: Found) -> str:

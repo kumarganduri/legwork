@@ -130,7 +130,13 @@ def build(
         try:
             config = llm_config or LLMConfig.from_env()
         except LLMAuthError as exc:
-            return BuildOutcome(ok=False, ref=ref, error=str(exc))
+            # Without this, a client with no key told its user Legwork needed a
+            # key to install anything (QA, Claude Code, 2026-10-02).
+            return BuildOutcome(ok=False, ref=ref, error=(
+                f"{exc}\n{ref.slug} isn't in the Legwork public cache, so building it needs that key. "
+                "Without a key, choose a repo that find_tools marks 'in the Legwork cache': those install "
+                "with no key, in about a minute."
+            ))
         if looks_like_ollama(config.endpoint):
             progress(OLLAMA_TIP)
         build_dir = local_store.new_build_dir(ref)

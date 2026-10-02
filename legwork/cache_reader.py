@@ -94,3 +94,18 @@ def fetch(ref: RepoRef) -> CachedWrapper | None:
     if manifest["source_repo_url"].lower() != f"https://github.com/{ref.slug}".lower():
         raise CacheUnavailableError(f"the cache entry {name} is for {manifest['source_repo_url']}, not {ref.slug}")
     return CachedWrapper(manifest=manifest, wrapper_code=wrapper)
+
+
+def fetch_index() -> list[dict]:
+    """The cache's index.json: one entry per cached repo (repo, what it
+    does, license, a stars snapshot). Empty when the cache is off or out of
+    reach: search still works without it, it just can't lift cached tools."""
+    base = os.environ.get(CACHE_URL_ENV, DEFAULT_CACHE_URL)
+    if base.strip().lower() in ("", "off"):
+        return []
+    try:
+        raw = _read(base, "index.json")
+        entries = json.loads(raw) if raw else []
+    except (CacheUnavailableError, ValueError):
+        return []
+    return [e for e in entries if isinstance(e, dict) and isinstance(e.get("repo"), str)] if isinstance(entries, list) else []
