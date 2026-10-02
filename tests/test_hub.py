@@ -5,6 +5,7 @@ real install through the public cache."""
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -299,3 +300,17 @@ def test_exported_tools_dont_promise_structured_output(limits):
     exported = [t for t in h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"] if t["name"] == "repo__echo"]
     assert exported and "outputSchema" not in exported[0]
     h.close()
+
+
+def test_a_request_sent_just_before_the_client_closes_still_gets_its_reply(tmp_path):
+    """The hub exited 0.2s after stdin closed and could drop the reply to a
+    request already in flight (smoke test of 0.7.6, 2026-10-02)."""
+    import subprocess
+
+    request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}})
+    out = subprocess.run(
+        [sys.executable, "-c", "from legwork.hub import run; run()"],
+        input=request + "\n", capture_output=True, text=True, timeout=60,
+        env={**os.environ, "LEGWORK_HOME": str(tmp_path / "home")},
+    )
+    assert json.loads(out.stdout.splitlines()[0])["id"] == 1

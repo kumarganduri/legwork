@@ -452,6 +452,7 @@ class _MethodNotFound(Exception):
 # over a 400k-row CSV came back as 96 MB of JSON (pre-launch QA,
 # 2026-10-02). An hour of transcript is ~60k characters, well under this.
 MAX_TEXT_CHARS = 200_000
+SHUTDOWN_GRACE_SECONDS = 10
 
 
 def _cap_text(result: dict) -> dict:
@@ -528,6 +529,7 @@ def _child_env() -> dict[str, str]:
 def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False) -> int:
     """Serve MCP over stdio until the client closes stdin."""
     hub = Hub(allow_read, allow_net)
+    workers: list[threading.Thread] = []
     try:
         for line in sys.stdin:
             line = line.strip()
@@ -540,9 +542,16 @@ def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False) -> int:
                 continue
             # Tool calls can take minutes (use_tool); answer each on its own thread
             # so a slow tool never blocks a ping or a status check.
-            threading.Thread(target=lambda m=message: _answer(hub, m), daemon=True).start()
+            worker = threading.Thread(target=lambda m=message: _answer(hub, m), daemon=True)
+            worker.start()
+            workers = [w for w in workers if w.is_alive()] + [worker]
     finally:
-        time.sleep(0.2)
+        # The client closed stdin: give requests already in flight a moment to
+        # be answered. Exiting after a fixed 0.2s dropped the reply to an
+        # initialize sent just before the close (smoke test, 2026-10-02).
+        deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
+        for w in workers:
+            w.join(max(0.0, deadline - time.monotonic()))
         hub.close()
     return 0
 
