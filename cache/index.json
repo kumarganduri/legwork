@@ -1,38 +1,5 @@
 [
  {
-  "repo": "2akouwu/reverify",
-  "folder": "2akouwu__reverify",
-  "what": "Verify claims about binaries using Reverify’s deterministic tools (wraps `reverify verify --json`)",
-  "about": "Stop your AI from making things up — it proposes, deterministic tools decide, every claim checked against ground truth with evidence. Grounded facts and context survive resets. Reverse engineering is the proving ground. MCP server + CLI.",
-  "topics": [
-   "ai",
-   "ai-agents",
-   "ai-coding",
-   "anti-hallucination",
-   "binary-analysis",
-   "context-engineering",
-   "ctf",
-   "developer-tools",
-   "disassembler",
-   "grounding",
-   "hallucination",
-   "hallucination-detection",
-   "llm",
-   "malware-analysis",
-   "mcp",
-   "mcp-server",
-   "python",
-   "reverse-engineering",
-   "security-tools",
-   "verification"
-  ],
-  "license": "MIT",
-  "language": "Python",
-  "stars": 1254,
-  "created_at": "2026-08-31T01:02:18Z",
-  "pushed_at": "2026-10-01T11:31:02Z"
- },
- {
   "repo": "adbar/trafilatura",
   "folder": "adbar__trafilatura",
   "what": "Extract main text and metadata from HTML strings or local HTML files using Trafilatura",
@@ -61,7 +28,7 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 6908,
+  "stars": 6907,
   "created_at": "2019-04-08T11:38:48Z",
   "pushed_at": "2026-10-02T16:53:41Z"
  },
@@ -89,7 +56,7 @@
   ],
   "license": "MIT",
   "language": "Rust",
-  "stars": 16103,
+  "stars": 16108,
   "created_at": "2022-07-01T19:21:00Z",
   "pushed_at": "2026-10-01T19:31:47Z"
  },
@@ -113,9 +80,9 @@
   ],
   "license": "MIT",
   "language": "Rust",
-  "stars": 49881,
+  "stars": 49886,
   "created_at": "2022-08-09T17:17:44Z",
-  "pushed_at": "2026-10-02T19:00:56Z"
+  "pushed_at": "2026-10-03T00:47:17Z"
  },
  {
   "repo": "collective/icalendar",
@@ -152,7 +119,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 24946,
+  "stars": 24954,
   "created_at": "2020-08-10T14:38:24Z",
   "pushed_at": "2026-09-20T17:16:21Z"
  },
@@ -170,9 +137,9 @@
   ],
   "license": "MIT",
   "language": "C++",
-  "stars": 41873,
+  "stars": 41878,
   "created_at": "2018-06-26T15:04:45Z",
-  "pushed_at": "2026-10-02T18:50:03Z"
+  "pushed_at": "2026-10-02T22:25:09Z"
  },
  {
   "repo": "gitleaks/gitleaks",
@@ -203,7 +170,7 @@
   ],
   "license": "MIT",
   "language": "Go",
-  "stars": 29612,
+  "stars": 29632,
   "created_at": "2018-01-27T18:19:31Z",
   "pushed_at": "2026-09-30T04:14:02Z"
  },
@@ -221,7 +188,7 @@
   "language": "Python",
   "stars": 2808,
   "created_at": "2012-07-13T16:27:11Z",
-  "pushed_at": "2026-10-01T15:02:16Z"
+  "pushed_at": "2026-10-02T21:21:27Z"
  },
  {
   "repo": "jdepoix/youtube-transcript-api",
@@ -249,7 +216,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 8413,
+  "stars": 8414,
   "created_at": "2018-04-20T13:55:04Z",
   "pushed_at": "2026-09-10T14:20:32Z"
  },
@@ -271,7 +238,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 19424,
+  "stars": 19421,
   "created_at": "2012-11-12T23:00:09Z",
   "pushed_at": "2026-09-29T00:56:28Z"
  },
@@ -318,7 +285,7 @@
   ],
   "license": "AGPL-3.0",
   "language": "Haskell",
-  "stars": 40118,
+  "stars": 40120,
   "created_at": "2012-11-17T03:15:11Z",
   "pushed_at": "2026-10-02T00:32:34Z"
  },
@@ -330,7 +297,7 @@
   "topics": [],
   "license": "BSD-2-Clause",
   "language": "Python",
-  "stars": 4947,
+  "stars": 4948,
   "created_at": "2011-11-10T09:36:22Z",
   "pushed_at": "2026-03-25T03:05:38Z"
  },
@@ -360,7 +327,7 @@
   ],
   "license": "Apache-2.0",
   "language": "JavaScript",
-  "stars": 32735,
+  "stars": 32737,
   "created_at": "2013-08-19T20:24:24Z",
   "pushed_at": "2026-10-02T16:08:48Z"
  },
@@ -382,9 +349,9 @@
   ],
   "license": "none",
   "language": "Python",
-  "stars": 23317,
+  "stars": 23319,
   "created_at": "2011-02-19T03:17:12Z",
-  "pushed_at": "2026-10-02T17:42:11Z"
+  "pushed_at": "2026-10-03T02:47:06Z"
  },
  {
   "repo": "matthewwithanm/python-markdownify",
@@ -394,7 +361,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 2253,
+  "stars": 2252,
   "created_at": "2012-06-29T16:30:23Z",
   "pushed_at": "2026-06-30T20:26:41Z"
  },
@@ -414,9 +381,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 187996,
+  "stars": 188115,
   "created_at": "2024-11-13T19:56:40Z",
-  "pushed_at": "2026-10-02T04:50:58Z"
+  "pushed_at": "2026-10-03T02:35:06Z"
  },
  {
   "repo": "mikefarah/yq",
@@ -442,63 +409,9 @@
   ],
   "license": "MIT",
   "language": "Go",
-  "stars": 16044,
+  "stars": 16046,
   "created_at": "2015-09-26T22:14:44Z",
   "pushed_at": "2026-10-01T03:57:01Z"
- },
- {
-  "repo": "mikehasa/golive-skill",
-  "folder": "mikehasa__golive-skill",
-  "what": "Run the GoLive CLI (npm package \"golive\") to fetch version info and other read-only commands",
-  "about": "Take your agent-built product live: hosting, database, domain, email, payments — on your own accounts. Open-source Agent Skill + zero-dependency Node CLI: detect → plan → approve → apply → verify. No GoLive account, backend or telemetry.",
-  "topics": [
-   "agent-skill",
-   "agent-skills",
-   "ai-agents",
-   "claude-code",
-   "cloudflare",
-   "codex",
-   "database",
-   "deployment",
-   "developer-tools",
-   "devops",
-   "dns",
-   "godaddy",
-   "hosting",
-   "infrastructure",
-   "neon",
-   "netlify",
-   "porkbun",
-   "skills",
-   "supabase",
-   "vercel"
-  ],
-  "license": "MIT",
-  "language": "TypeScript",
-  "stars": 1183,
-  "created_at": "2026-09-23T13:37:26Z",
-  "pushed_at": "2026-09-30T12:21:24Z"
- },
- {
-  "repo": "nokia-applied-research/AnyJev",
-  "folder": "nokia-applied-research__anyjev",
-  "what": "Decide a multiple-choice question via AnyJev against a running vLLM HTTP server and return calibrated choice probabilities (L0 or raw)",
-  "about": "Turn any LLM into a Jev-style decision model: typed decisions, real probabilities, no training. (continue updating, welcome any issue and PR request)",
-  "topics": [
-   "calibration",
-   "decision-model",
-   "jev",
-   "jev-model",
-   "llm",
-   "system-one",
-   "transformers",
-   "vllm"
-  ],
-  "license": "Apache-2.0",
-  "language": "Python",
-  "stars": 1012,
-  "created_at": "2026-09-21T05:55:40Z",
-  "pushed_at": "2026-10-02T02:42:49Z"
  },
  {
   "repo": "plotly/plotly.py",
@@ -523,7 +436,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 18818,
+  "stars": 18821,
   "created_at": "2013-11-21T05:53:08Z",
   "pushed_at": "2026-10-01T07:39:55Z"
  },
@@ -554,9 +467,9 @@
   ],
   "license": "MIT",
   "language": "JavaScript",
-  "stars": 52316,
+  "stars": 52315,
   "created_at": "2016-11-29T17:13:37Z",
-  "pushed_at": "2026-10-02T18:31:38Z"
+  "pushed_at": "2026-10-03T02:26:54Z"
  },
  {
   "repo": "py-pdf/pypdf",
@@ -575,9 +488,9 @@
   ],
   "license": "BSD-2-Clause",
   "language": "Python",
-  "stars": 10240,
+  "stars": 10241,
   "created_at": "2012-01-06T17:13:38Z",
-  "pushed_at": "2026-10-02T09:31:35Z"
+  "pushed_at": "2026-10-03T07:38:34Z"
  },
  {
   "repo": "python-jsonschema/jsonschema",
@@ -605,7 +518,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 5732,
+  "stars": 5733,
   "created_at": "2013-10-15T14:50:41Z",
   "pushed_at": "2026-08-01T14:59:42Z"
  },
@@ -626,9 +539,9 @@
   ],
   "license": "unrecognized (LICENSE)",
   "language": "Python",
-  "stars": 13875,
+  "stars": 13880,
   "created_at": "2012-07-24T21:38:39Z",
-  "pushed_at": "2026-10-02T12:14:28Z"
+  "pushed_at": "2026-10-03T10:35:09Z"
  },
  {
   "repo": "RapidAI/RapidOCR",
@@ -651,9 +564,9 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 8028,
+  "stars": 8030,
   "created_at": "2021-01-04T08:02:09Z",
-  "pushed_at": "2026-10-02T03:10:56Z"
+  "pushed_at": "2026-10-03T02:56:58Z"
  },
  {
   "repo": "scanny/python-pptx",
@@ -701,9 +614,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 9910,
+  "stars": 9912,
   "created_at": "2018-11-01T23:56:04Z",
-  "pushed_at": "2026-10-02T18:54:08Z"
+  "pushed_at": "2026-10-03T11:35:12Z"
  },
  {
   "repo": "svg/svgo",
@@ -722,7 +635,7 @@
   ],
   "license": "MIT",
   "language": "JavaScript",
-  "stars": 22710,
+  "stars": 22711,
   "created_at": "2012-08-22T10:41:43Z",
   "pushed_at": "2026-08-27T14:58:51Z"
  },
@@ -742,7 +655,7 @@
   "language": "Python",
   "stars": 14985,
   "created_at": "2010-04-30T20:37:14Z",
-  "pushed_at": "2026-10-02T18:30:04Z"
+  "pushed_at": "2026-10-02T22:51:12Z"
  },
  {
   "repo": "SYSTRAN/faster-whisper",
@@ -761,7 +674,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 25677,
+  "stars": 25682,
   "created_at": "2023-02-11T09:17:27Z",
   "pushed_at": "2026-10-01T14:01:34Z"
  },
@@ -780,7 +693,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 1387,
+  "stars": 1386,
   "created_at": "2014-06-18T10:54:08Z",
   "pushed_at": "2026-10-02T09:01:39Z"
  },
@@ -792,7 +705,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 6415,
+  "stars": 6414,
   "created_at": "2011-04-01T03:00:30Z",
   "pushed_at": "2026-09-21T23:53:59Z"
  },
@@ -821,25 +734,6 @@
   "pushed_at": "2026-09-28T22:13:45Z"
  },
  {
-  "repo": "yetone/magpie",
-  "folder": "yetone__magpie",
-  "what": "Run magpie CLI commands (list presets, models, agents, or arbitrary subcommands)",
-  "about": "Every agent's model. One place. Codex on DeepSeek, Claude Code on Kimi, from the menu bar.",
-  "topics": [
-   "claude-code",
-   "codex",
-   "deepseek",
-   "gemini-cli",
-   "llm",
-   "macos"
-  ],
-  "license": "MIT",
-  "language": "Go",
-  "stars": 4256,
-  "created_at": "2026-09-23T16:22:35Z",
-  "pushed_at": "2026-10-02T18:46:14Z"
- },
- {
   "repo": "yt-dlp/yt-dlp",
   "folder": "yt-dlp__yt-dlp",
   "what": "Use yt-dlp to download media or extract info from URLs via its Python API",
@@ -855,7 +749,7 @@
   ],
   "license": "Unlicense",
   "language": "Python",
-  "stars": 194982,
+  "stars": 195151,
   "created_at": "2020-10-26T04:22:55Z",
   "pushed_at": "2026-09-27T22:09:13Z"
  },
@@ -875,7 +769,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 14943,
+  "stars": 14944,
   "created_at": "2013-08-12T09:39:28Z",
   "pushed_at": "2026-08-26T06:17:08Z"
  }

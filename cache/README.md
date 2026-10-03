@@ -1,13 +1,12 @@
 # Legwork public cache
 
 Wrappers here are used by `legwork owner/repo` without a model call, so
-these 41 repos build with no API key. Each one is still scanned, installed and
-self-tested on your machine before it's used. Entries added since 2026-10-01 were also
-reviewed by hand and tried with a real call before they were merged.
+these 37 repos build with no API key. Every entry was reviewed by hand and
+tried with a real call before it was merged, and each is still scanned, installed and
+self-tested on your machine before it's used.
 
 | Repo | What the wrapper does | Install | License |
 |---|---|---|---|
-| [2akouwu/reverify](https://github.com/2akouwu/reverify) | Verify claims about binaries using Reverify’s deterministic tools (wraps `reverify verify --json`) | `pip install reverify` | MIT |
 | [adbar/trafilatura](https://github.com/adbar/trafilatura) | Extract main text and metadata from HTML strings or local HTML files using Trafilatura | `pip install trafilatura` | Apache-2.0 |
 | [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep) | Run the ast-grep CLI for AST-based code search and rewrite | `pip install ast-grep-cli` | MIT |
 | [astral-sh/ruff](https://github.com/astral-sh/ruff) | Ruff CLI to lint (check) and format Python code | `pip install ruff` | MIT |
@@ -27,8 +26,6 @@ reviewed by hand and tried with a real call before they were merged.
 | [matthewwithanm/python-markdownify](https://github.com/matthewwithanm/python-markdownify) | Convert HTML (string or file) to Markdown using the python-markdownify library | `pip install markdownify` | MIT |
 | [microsoft/markitdown](https://github.com/microsoft/markitdown) | Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins | `pip install "markitdown[all]"` | MIT |
 | [mikefarah/yq](https://github.com/mikefarah/yq) | Run yq to query and transform YAML/JSON/XML/INI/etc via jq-like expressions (evaluate expressions against files or stdin, and convert formats) | platform-specific binary download | MIT |
-| [mikehasa/golive-skill](https://github.com/mikehasa/golive-skill) | Run the GoLive CLI (npm package "golive") to fetch version info and other read-only commands | `npm install --no-fund --no-audit golive@alpha` | MIT |
-| [nokia-applied-research/AnyJev](https://github.com/nokia-applied-research/AnyJev) | Decide a multiple-choice question via AnyJev against a running vLLM HTTP server and return calibrated choice probabilities (L0 or raw) | `pip install "anyjev[hf]"` | Apache-2.0 |
 | [plotly/plotly.py](https://github.com/plotly/plotly.py) | Generate interactive Plotly bar charts as HTML from x/y data using plotly.graph_objects | `pip install plotly` | MIT |
 | [prettier/prettier](https://github.com/prettier/prettier) | Run Prettier’s CLI to format code (format from string via stdin or operate on files) using ./node_modules/.bin/prettier | `npm install prettier` | MIT |
 | [py-pdf/pypdf](https://github.com/py-pdf/pypdf) | PDF text extraction, metadata reading, splitting, and merging using pypdf | `pip install pypdf[crypto]` | BSD-2-Clause |
@@ -45,7 +42,6 @@ reviewed by hand and tried with a real call before they were merged.
 | [textstat/textstat](https://github.com/textstat/textstat) | Compute readability metrics and text statistics from text using the textstat Python library | `pip install textstat` + model/data download | MIT |
 | [wireservice/csvkit](https://github.com/wireservice/csvkit) | Run csvkit CLI tools (csvcut, csvstat, in2csv, etc.) via a generic subprocess wrapper | `pip install csvkit` | MIT |
 | [xhtml2pdf/xhtml2pdf](https://github.com/xhtml2pdf/xhtml2pdf) | Convert HTML (string or local .html file) to a PDF using xhtml2pdf’s Python API | `pip install xhtml2pdf` | Apache-2.0 |
-| [yetone/magpie](https://github.com/yetone/magpie) | Run magpie CLI commands (list presets, models, agents, or arbitrary subcommands) | `curl -fsSL https://usemagpie.ai/install.sh \| sh` | MIT |
 | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | Use yt-dlp to download media or extract info from URLs via its Python API | `pip install "yt-dlp[default]"` | Unlicense |
 | [Zulko/moviepy](https://github.com/Zulko/moviepy) | Trim and transcode local video files using MoviePy (FFmpeg pre-downloaded for offline use) | `pip install moviepy` + model/data download | MIT |
 

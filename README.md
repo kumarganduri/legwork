@@ -114,7 +114,7 @@ is what makes it ask you before an install:
   already has an MCP server, and a warning on very new repos (the malware
   we caught was three days old). Descriptions are marked as untrusted text.
 
-**41 tools are in the [public cache](cache/) and install in about a minute
+**37 tools are in the [public cache](cache/) and install in about a minute
 with no API key**: speech-to-text, OCR, background removal, PDFs and
 Office files, video, YouTube transcripts, charts, DuckDB and CSV tools, maths
 and units, and linters and formatters. Each was built, reviewed by hand and
