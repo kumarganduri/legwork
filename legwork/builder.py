@@ -78,20 +78,24 @@ def _warn_if_stale(ref: RepoRef, cached: cache_reader.CachedWrapper, progress: C
         return
     built_from = cached.manifest["commit_sha"]
     if current != built_from:
+        # Most repos move on daily, and the cached wrapper is tested on this
+        # machine either way; the old wording read as a warning on most
+        # installs (fresh QA, 2026-10-03).
         progress(
-            f"Cache entry may be stale — repo has new commits (cached from {built_from[:12]}, now at "
-            f"{current[:12]}). It usually still works; `legwork --no-cache {ref.slug}` writes a fresh one."
+            f"The cached wrapper was written for an earlier commit ({built_from[:12]}; now {current[:12]}); "
+            "it's tested here before use."
         )
 
 
-def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> BuildOutcome | None:
+def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> tuple[BuildOutcome | None, str]:
+    """(outcome, state): state is "hit", "miss", "unreachable" or "failed"."""
     try:
         cached = cache_reader.fetch(ref)
     except cache_reader.CacheUnavailableError as exc:
         progress(f"(skipping the Legwork cache: {exc})")
-        return None
+        return None, "unreachable"
     if cached is None:
-        return None
+        return None, "miss"
     progress(
         f"Found {ref.slug} in the Legwork cache (written by {cached.manifest['llm_model']}); "
         "installing and testing it — no model call needed"
@@ -103,7 +107,7 @@ def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> BuildOutcome |
     if not result.success:
         detail = codegen.failure_summary(result.attempts[-1].detail, 300)
         progress(f"The cached wrapper didn't pass here ({detail}); writing a fresh one.")
-        return None
+        return None, "failed"
     record = local_store.save_current(
         ref,
         result.attempt_dir,
@@ -111,7 +115,28 @@ def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> BuildOutcome |
         entrypoint=cached.entrypoint,
         model=f"{cached.manifest['llm_model']} (Legwork cache)",
     )
-    return BuildOutcome(ok=True, ref=ref, record=record, from_cache=True, attempts=1)
+    return BuildOutcome(ok=True, ref=ref, record=record, from_cache=True, attempts=1), "hit"
+
+
+def _no_key_message(ref: RepoRef, cache_state: str, exc: Exception) -> str:
+    """Why a model key is needed, accurately. A client with no key once told its
+    user Legwork needed a key to install anything; offline, Legwork said a cached
+    repo wasn't cached; a misspelt repo asked for a key (QA, 2026-10-02/03)."""
+    if cache_state == "miss":
+        try:
+            repo_fetcher.check_repo(ref.slug)
+        except (RepoNotFoundError, RepoAccessError) as missing:
+            if isinstance(missing, RepoNotFoundError):
+                return f"{ref.slug} wasn't found on GitHub (or it's private). Check the name, or use find_tools."
+    why = {
+        "miss": f"{ref.slug} isn't in the Legwork public cache, so building it needs that key.",
+        "unreachable": f"Legwork couldn't reach its public cache to check for {ref.slug}, and building without it needs that key. Try again when you're online.",
+        "failed": f"The cached wrapper for {ref.slug} didn't pass on this machine, and writing a fresh one needs that key.",
+    }.get(cache_state, f"Building {ref.slug} needs that key.")
+    return (
+        f"{exc}\n{why} Without a key, choose a repo that find_tools marks 'in the Legwork cache': those install "
+        "with no key, in about a minute."
+    )
 
 
 def build(
@@ -123,20 +148,15 @@ def build(
     """Build `ref`, from the cache when possible. Never raises for an
     ordinary failure: the outcome says what happened."""
     try:
+        cache_state = "off"
         if use_cache:
-            hit = _from_cache(ref, progress)
+            hit, cache_state = _from_cache(ref, progress)
             if hit is not None:
                 return hit
         try:
             config = llm_config or LLMConfig.from_env()
         except LLMAuthError as exc:
-            # Without this, a client with no key told its user Legwork needed a
-            # key to install anything (QA, Claude Code, 2026-10-02).
-            return BuildOutcome(ok=False, ref=ref, error=(
-                f"{exc}\n{ref.slug} isn't in the Legwork public cache, so building it needs that key. "
-                "Without a key, choose a repo that find_tools marks 'in the Legwork cache': those install "
-                "with no key, in about a minute."
-            ))
+            return BuildOutcome(ok=False, ref=ref, error=_no_key_message(ref, cache_state, exc))
         if looks_like_ollama(config.endpoint):
             progress(OLLAMA_TIP)
         build_dir = local_store.new_build_dir(ref)

@@ -26,7 +26,9 @@ CLONE_TIMEOUT_SECONDS = 120  # shares the install-phase timeout budget
 _FULL_URL_RE = re.compile(
     r"^(?:https?://)?(?:www\.)?github\.com/"
     r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)/"
-    r"(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
+    r"(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?"
+    # A link to a branch, file or folder is still that repo (fresh QA, 2026-10-03).
+    r"(?:/(?:tree|blob)/\S*|/)?$"
 )
 _SHORTHAND_RE = re.compile(
     r"^(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)/"

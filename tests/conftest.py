@@ -30,3 +30,13 @@ def _no_real_key_file(monkeypatch, tmp_path):
     """Never read the developer's own ~/.legwork.env: a test expecting a
     missing key would pass or fail depending on whose machine it ran on."""
     monkeypatch.setenv("LEGWORK_ENV_FILE", str(tmp_path / "no-key-file.env"))
+
+
+@pytest.fixture(autouse=True)
+def _no_live_repo_check(monkeypatch):
+    """The no-key message checks GitHub that the repo exists; tests never call
+    GitHub for that. Tests of the not-found path patch it themselves."""
+    from legwork import builder
+    from legwork.repo_fetcher import parse_repo_url
+
+    monkeypatch.setattr(builder.repo_fetcher, "check_repo", parse_repo_url)

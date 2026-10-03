@@ -189,8 +189,7 @@ def test_stale_cache_entry_is_used_with_a_warning(tmp_path, capsys, up_to_date):
     with patch("legwork.cli.retry_loop.run_cached", side_effect=_cached_ok):
         assert cli.main(["owner/repo"]) == 0
     err = capsys.readouterr().err
-    assert "Cache entry may be stale — repo has new commits" in err
-    assert "legwork --no-cache owner/repo" in err
+    assert "written for an earlier commit" in err and "tested here before use" in err
 
 
 def test_a_cached_wrapper_that_fails_here_falls_back_to_a_fresh_build(tmp_path, capsys, monkeypatch, up_to_date):
@@ -209,7 +208,21 @@ def test_a_cached_wrapper_that_fails_here_falls_back_to_a_fresh_build(tmp_path, 
 
 def test_cache_miss_without_a_model_key_explains_what_is_missing(tmp_path, capsys):
     assert cli.main(["owner/repo"]) == 1
-    assert "LEGWORK_LLM" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "LEGWORK_LLM" in err and "isn't in the Legwork public cache" in err
+
+
+def test_a_repo_that_doesnt_exist_says_so_instead_of_asking_for_a_key(capsys, monkeypatch):
+    """A misspelt repo asked for a model key (fresh QA, 2026-10-03)."""
+    from legwork import builder
+    from legwork.repo_fetcher import RepoNotFoundError
+
+    def missing(_):
+        raise RepoNotFoundError("nope")
+
+    monkeypatch.setattr(builder.repo_fetcher, "check_repo", missing)
+    assert cli.main(["owner/repo"]) == 1
+    assert "wasn't found on GitHub" in capsys.readouterr().err
 
 
 def test_no_cache_flag_skips_the_cache(tmp_path):
