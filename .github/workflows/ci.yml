@@ -38,6 +38,8 @@ jobs:
       # from the public cache, use the tool on a real file, check refusals.
       - name: End to end (hub, no key)
         run: uv run python scripts/e2e_hub.py
+      - name: legwork doctor
+        run: uv run legwork doctor
 
   # Other Linux families, as a normal (non-root) user like a real one. The
   # container is privileged only so bubblewrap can create namespaces inside

@@ -281,7 +281,7 @@ def _installed_version() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "-h", "--help", "-V", "--version"):
+    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "-h", "--help", "-V", "--version"):
         # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
         argv.insert(0, "build")
 
@@ -314,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         "--outputs", metavar="DIR",
         help="where files that tools make are copied (default: ~/Legwork/outputs; 'off' to keep them in the tool's folder)",
     )
+    sub.add_parser("doctor", help="check this machine is ready (sandbox, key, cache, clients); paste it into bug reports")
     clean = sub.add_parser("clean", help="free disk space: remove old and failed builds")
     clean.add_argument("repo", nargs="?", help="only this repo (default: all)")
     clean.add_argument("--all", action="store_true", help="also remove current builds (rebuild before serving)")
@@ -322,6 +323,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "build":
         return cmd_build(args.repo, use_cache=not args.no_cache)
+    if args.command == "doctor":
+        from legwork import doctor
+
+        return doctor.run()
     if args.command == "find":
         return cmd_find(" ".join(args.query))
     if args.command == "hub":
