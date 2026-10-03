@@ -38,7 +38,11 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-_SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", "build", "dist"}
+# Only git's own data. The scan runs on a fresh clone before anything is
+# installed, so a node_modules/, dist/, build/ or venv/ there was committed by
+# the repo, which is where a payload started by an install hook would hide
+# (pre-launch review, 2026-10-03).
+_SKIP_DIRS = {".git", "__pycache__"}
 
 # Patterns strong enough to block on their own — each is rare in ordinary
 # code and was actually present in the real malicious file.
@@ -376,7 +380,9 @@ def _iter_python_files(root: Path):
     for path in root.rglob("*.py"):
         # A folder can be named x.py (PayloadsAllTheThings has one), and a
         # symlink can point outside the repo: only regular files are read.
-        if any(part in _SKIP_DIRS for part in path.parts) or not path.is_file() or path.is_symlink():
+        # Parts inside the repo only: a clone under a folder named build/ or
+        # dist/ used to skip every Python file.
+        if any(part in _SKIP_DIRS for part in path.relative_to(root).parts) or not path.is_file() or path.is_symlink():
             continue
         yield path
 

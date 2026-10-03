@@ -243,13 +243,26 @@ def test_scan_repo_finds_findings_in_nested_files(tmp_path):
     assert any(f.pattern == "literal-exec-eval" for f in findings)
 
 
-def test_scan_repo_skips_vendored_and_venv_dirs(tmp_path):
-    (tmp_path / ".venv" / "lib").mkdir(parents=True)
-    (tmp_path / ".venv" / "lib" / "evil.py").write_text("exec(decode(x))\n")
-    (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
-    (tmp_path / "node_modules" / "pkg" / "evil.py").write_text("exec(decode(x))\n")
-    findings = scan_repo(tmp_path)
-    assert findings == []
+def test_committed_vendored_folders_are_scanned(tmp_path):
+    """The scan runs on a fresh clone before installing, so a node_modules/,
+    dist/ or .venv/ there was committed, and a payload started by an install
+    hook could hide in it (pre-launch review, 2026-10-03)."""
+    for folder in (".venv/lib", "node_modules/pkg", "dist", "build"):
+        (tmp_path / folder).mkdir(parents=True)
+        (tmp_path / folder / "evil.py").write_text("exec(decode(x))\n")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "hook.py").write_text("exec(decode(x))\n")
+    flagged = {f.file.relative_to(tmp_path).parts[0] for f in scan_repo(tmp_path)}
+    assert flagged == {".venv", "node_modules", "dist", "build"}
+
+
+def test_a_clone_inside_a_folder_named_build_is_still_scanned(tmp_path):
+    """Skip folders were matched against the whole absolute path, so a clone
+    under any build/ or dist/ folder skipped every Python file."""
+    root = tmp_path / "build" / "repo"
+    root.mkdir(parents=True)
+    (root / "evil.py").write_text("exec(decode(x))\n")
+    assert scan_repo(root)
 
 
 def test_scan_passes_clean_repo(tmp_path):
@@ -309,12 +322,15 @@ def test_ordinary_javascript_is_not_blocked(tmp_path, source):
     assert not is_blocking(scan_js_file(path))
 
 
-def test_scan_names_the_javascript_file_and_skips_node_modules(tmp_path):
-    (tmp_path / "node_modules" / "dep").mkdir(parents=True)
-    (tmp_path / "node_modules" / "dep" / "index.js").write_text("eval(atob(x))")
-    scan(tmp_path)  # vendored dependencies aren't the repo's own code
+def test_scan_names_the_javascript_file_including_committed_node_modules(tmp_path):
     (tmp_path / "tailwind.config.js").write_text((FIXTURES / "js_whitespace_hidden_loader.js").read_text())
     with pytest.raises(ObfuscatedPayloadDetectedError, match="tailwind.config.js"):
+        scan(tmp_path)
+    (tmp_path / "tailwind.config.js").unlink()
+    # A committed node_modules is the repo's to answer for (pre-launch review, 2026-10-03).
+    (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+    (tmp_path / "node_modules" / "dep" / "index.js").write_text("eval(atob(x))")
+    with pytest.raises(ObfuscatedPayloadDetectedError, match="node_modules/dep/index.js"):
         scan(tmp_path)
 
 
