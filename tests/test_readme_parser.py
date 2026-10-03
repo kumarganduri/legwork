@@ -204,3 +204,18 @@ def test_at_most_max_linked_docs(tmp_path):
     for n in names:
         (tmp_path / n).write_text(n)
     assert [p.name for p in parse_readme(tmp_path).linked_docs] == names[:MAX_LINKED_DOCS]
+
+
+def test_a_readme_that_links_out_of_the_repo_is_ignored(tmp_path):
+    """It would be read on the host and sent to the model (pre-launch review, 2026-10-03)."""
+    from legwork.readme_parser import find_readme
+
+    secret = tmp_path / "private.txt"
+    secret.write_text("not for the model")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").symlink_to(secret)
+    assert find_readme(repo) is None
+    (repo / "README.md").unlink()
+    (repo / "README.md").write_text("# Real readme")
+    assert find_readme(repo) == repo / "README.md"

@@ -100,7 +100,13 @@ def find_readme(repo_root: Path) -> Path | None:
     README that only exists nested (e.g. docs/README.md) isn't picked up
     in v1."""
     try:
-        entries = {p.name: p for p in repo_root.iterdir() if p.is_file()}
+        root = repo_root.resolve()
+        # A README that's a symlink out of the repo would be read here, on the
+        # host, and sent to the model (pre-launch review, 2026-10-03).
+        entries = {
+            p.name: p for p in repo_root.iterdir()
+            if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root)
+        }
     except FileNotFoundError:
         return None
     for candidate in _README_FILENAMES:
