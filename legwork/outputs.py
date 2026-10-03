@@ -26,9 +26,12 @@ DEFAULT_DIR = Path.home() / "Legwork" / "outputs"
 MAX_FILES = 20
 MAX_FILE_BYTES = 1024**3  # 1 GiB
 MAX_TOTAL_BYTES = 2 * 1024**3
-# The tool's own machinery, not results.
-_SKIP_DIRS = {".venv", "venv", "node_modules", "src", "models", ".tmp", ".legwork-bin", "__pycache__", ".git", ".cache", "nltk_data", ".imageio", "gitleaks-bin", "bin"}
+# The tool's own machinery, not results. HOME is the tool's folder, so
+# libraries' caches and settings land there too: hidden folders, and macOS's
+# Library (onnxruntime keeps a database under Library/Application Support).
+_SKIP_DIRS = {"venv", "node_modules", "src", "models", "__pycache__", "nltk_data", "gitleaks-bin", "bin", "Library"}
 _SKIP_FILES = {"wrapper.py", "legwork-install.sh"}
+_SKIP_SUFFIXES = ("-wal", "-shm", "-journal")  # SQLite's working files
 
 
 Snapshot = dict[str, tuple[int, int]]  # relative path -> (mtime_ns, size)
@@ -68,9 +71,9 @@ def collect(workdir: Path, before: Snapshot, dest_root: Path, label: str) -> lis
 def _candidates(workdir: Path):
     """Plain, singly-linked files outside the tool's own machinery."""
     for dirpath, dirnames, filenames in os.walk(workdir, followlinks=False):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
         for name in filenames:
-            if name in _SKIP_FILES and Path(dirpath) == workdir:
+            if name.startswith(".") or name.endswith(_SKIP_SUFFIXES) or (name in _SKIP_FILES and Path(dirpath) == workdir):
                 continue
             path = Path(dirpath) / name
             try:

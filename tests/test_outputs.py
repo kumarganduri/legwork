@@ -67,3 +67,20 @@ def test_names_dont_overwrite_earlier_copies(tmp_path):
         (work / "result.txt").write_text(f"run {since}")
         outputs.collect(work, since, tmp_path / "out", "t")
     assert sorted(p.name for p in (tmp_path / "out" / "t").iterdir()) == ["result (2).txt", "result.txt"]
+
+
+def test_library_caches_and_hidden_files_are_not_results(tmp_path):
+    """HOME is the tool's folder, so onnxruntime's database under
+    Library/Application Support was copied next to rembg's image (2026-10-03)."""
+    work = _tool_folder(tmp_path)
+    since = outputs.snapshot(work)
+    support = work / "Library" / "Application Support" / "Microsoft" / ".onnxruntime"
+    support.mkdir(parents=True)
+    (support / "onnxruntime.db-wal").write_bytes(b"x")
+    (work / ".config").mkdir()
+    (work / ".config" / "settings.json").write_text("{}")
+    (work / ".DS_Store").write_bytes(b"x")
+    (work / "outputs").mkdir()
+    (work / "outputs" / "photo.out.png").write_bytes(b"png")
+    (work / "outputs" / "rows.db-journal").write_bytes(b"x")
+    assert [c.name for c in outputs.collect(work, since, tmp_path / "out", "rembg")] == ["photo.out.png"]
