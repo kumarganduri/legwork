@@ -26,6 +26,7 @@ stray line would corrupt the client's stream. Errors go to stderr.
 from __future__ import annotations
 
 import argparse
+import difflib
 import importlib.metadata
 import json
 import os
@@ -122,11 +123,14 @@ def _server_name(ref: RepoRef) -> str:
 
 
 def _print_connect_instructions(ref: RepoRef) -> None:
+    # With no grant every file in your home folder reads as "not found", so
+    # the example grants one folder (fresh QA, 2026-10-03).
     launch = [*_self_command(), "serve", ref.slug]
+    downloads = str(Path.home() / "Downloads")
     name = _server_name(ref)
-    config = {"mcpServers": {name: {"command": launch[0], "args": launch[1:]}}}
-    print("\nConnect it to Claude Code:")
-    print(f"  claude mcp add {name} -- {shlex.join(launch)}")
+    config = {"mcpServers": {name: {"command": launch[0], "args": [*launch[1:], "--allow-read", downloads]}}}
+    print("\nConnect it to Claude Code (it can read only the folder you name, read-only; add --allow-net if it needs the internet):")
+    print(f"  claude mcp add {name} -- {shlex.join(launch)} --allow-read ~/Downloads")
     print("\nOr add this to any MCP client's config (Claude Desktop, Cursor):")
     print(json.dumps(config, indent=2))
 
@@ -281,7 +285,14 @@ def _installed_version() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] not in ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "-h", "--help", "-V", "--version"):
+    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor")
+    if argv and argv[0] not in (*commands, "-h", "--help", "-V", "--version"):
+        if not argv[0].startswith("-") and "/" not in argv[0]:
+            # "legwork doctr" said "Invalid repo URL: 'doctr'" (fresh QA, 2026-10-03)
+            close = difflib.get_close_matches(argv[0], commands, n=1)
+            hint = f"Did you mean `legwork {close[0]}`? " if close else ""
+            _err(f"unknown command {argv[0]!r}. {hint}Commands: {', '.join(commands)}; or give a repo as owner/repo.")
+            return 2
         # `legwork <repo>` and `legwork --no-cache <repo>` shorthands
         argv.insert(0, "build")
 

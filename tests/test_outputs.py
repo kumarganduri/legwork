@@ -84,3 +84,11 @@ def test_library_caches_and_hidden_files_are_not_results(tmp_path):
     (work / "outputs" / "photo.out.png").write_bytes(b"png")
     (work / "outputs" / "rows.db-journal").write_bytes(b"x")
     assert [c.name for c in outputs.collect(work, since, tmp_path / "out", "rembg")] == ["photo.out.png"]
+
+
+def test_moviepys_temporary_audio_is_not_a_result(tmp_path):
+    work = _tool_folder(tmp_path)
+    since = outputs.snapshot(work)
+    (work / "clip_trimmedTEMP_MPY_wvf_snd.mp4").write_bytes(b"x")
+    (work / "clip_trimmed.mp4").write_bytes(b"video")
+    assert [c.name for c in outputs.collect(work, since, tmp_path / "out", "moviepy")] == ["clip_trimmed.mp4"]

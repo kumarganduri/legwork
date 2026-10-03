@@ -13,5 +13,6 @@
   },
   "entrypoint": "Use yt-dlp to download media or extract info from URLs via its Python API",
   "install_command": "pip install \"yt-dlp[default]==2026.8.19\"",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "needs_network": true
 }

@@ -177,4 +177,5 @@ def _clean_index_entry(entry) -> dict | None:
         "language": text("language") or "-", "created_at": text("created_at"), "pushed_at": text("pushed_at"),
         "stars": stars if isinstance(stars, int) and not isinstance(stars, bool) else 0,
         "topics": [t for t in entry.get("topics") or [] if isinstance(t, str)] if isinstance(entry.get("topics"), list) else [],
+        "needs_network": entry.get("needs_network") is True,
     }

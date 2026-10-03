@@ -66,8 +66,16 @@ def test_build_success_records_the_wrapper_and_prints_connect_instructions(capsy
     assert "claude mcp add repo --" in out
     assert "serve owner/repo" in out
     config = json.loads(out[out.index("{") :])
-    assert config["mcpServers"]["repo"]["args"][-2:] == ["serve", "owner/repo"]
+    # With no grant, every file at home reads as "not found" (fresh QA, 2026-10-03)
+    assert config["mcpServers"]["repo"]["args"][-4:-2] == ["serve", "owner/repo"]
+    assert config["mcpServers"]["repo"]["args"][-2] == "--allow-read" and "--allow-read ~/Downloads" in out
     assert local_store.load_current(REF).entrypoint == "does a thing"
+
+
+def test_a_mistyped_command_is_named_not_read_as_a_repo(capsys):
+    """"legwork doctr" said "Invalid repo URL: 'doctr'" (fresh QA, 2026-10-03)."""
+    assert cli.main(["doctr"]) == 2
+    assert "Did you mean `legwork doctor`?" in capsys.readouterr().err
 
 
 def test_build_failure_reports_each_attempt_and_exits_1(capsys):

@@ -50,7 +50,8 @@ def trim_video(
     - input_path: path to the source video (must exist).
     - start: start time in seconds (optional).
     - end: end time in seconds (optional).
-    - output_path: output file path (defaults to <input_stem>_trimmed.mp4).
+    - output_path: output file name (defaults to <input_stem>_trimmed.mp4 in the tool's own folder;
+      the folder the input is in is usually read-only).
     - codec: video codec to use (default: libx264).
     - fps: output frames per second (optional; uses source FPS if None).
     - audio: whether to include audio (default: True).
@@ -69,7 +70,7 @@ def trim_video(
     base_out = (
         output_path
         if output_path
-        else os.path.splitext(src)[0] + "_trimmed.mp4"
+        else os.path.splitext(os.path.basename(src))[0] + "_trimmed.mp4"
     )
     out_path = _abs(base_out)
 

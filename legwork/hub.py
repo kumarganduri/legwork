@@ -297,10 +297,13 @@ class Hub:
             self._start(item)
             workdir = self._workdir(item) if self.outputs_dir is not None else None
             before = outputs.snapshot(workdir) if workdir else {}
+            arguments = _expand_home(arguments)
             result = _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
-            if workdir:
+            # A failed call's leftovers aren't results: a failed moviepy trim
+            # left its temporary audio file (fresh QA, 2026-10-03).
+            if workdir and not result.get("isError"):
                 self._copy_outputs(item, workdir, before, result)
-            return _mark_untrusted(_sandbox_hint(result, item), item)
+            return _mark_untrusted(_sandbox_hint(result, item, arguments, workdir), item)
         except MCPClientError as exc:
             if item.client is not None:
                 item.client.close()
@@ -397,8 +400,18 @@ class Hub:
             f"  - {t['name']}: {' '.join((t.get('description') or '').split())[:120]}" for t in item.tools
         ) or "  (none listed)"
         example = item.tools[0]["name"] if item.tools else "TOOL"
+        net_note = ""
+        if not item.allow_net and _needs_network(item.slug):
+            # It installed, then every call failed with a DNS error (fresh QA, 2026-10-03)
+            net_note = (
+                "Note: this tool fetches from the internet, so without network its calls will fail. "
+                + ("Install it again with allow_net=true." if self.limit_net else
+                   "This hub was started without --allow-net: ask the user to add --allow-net to Legwork's "
+                   "MCP config and restart it, then install again with allow_net=true.")
+                + "\n"
+            )
         return (
-            f"{item.slug} is {how}. It may read: {grants}; network: {'yes' if item.allow_net else 'no'}.\n"
+            f"{item.slug} is {how}. It may read: {grants}; network: {'yes' if item.allow_net else 'no'}.\n{net_note}"
             f"Tools:\n{tools}\n"
             f"Call one as {prefix}__{example} if it's in your tool list; otherwise "
             f'use_tool(repo="{item.slug}", tool="{example}", arguments={{...}}).'
@@ -664,26 +677,80 @@ def _mark_untrusted(result: dict, item: Installed) -> dict:
     return result
 
 
+_MISSING_SIGNS = ("No such file", "not found", "Not found", "FileNotFoundError", "does not exist", "doesn't exist")
 _DENIAL_SIGNS = (
     "Operation not permitted", "Permission denied", "Read-only file system",
     "nodename nor servname", "Name or service not known", "Temporary failure in name resolution",
 )
 
 
-def _sandbox_hint(result: dict, item: Installed) -> dict:
+def _needs_network(slug: str) -> bool:
+    """Whether the public cache marks this tool as needing the internet."""
+    try:
+        from legwork import cache_reader
+
+        return any(e["repo"].lower() == slug.lower() and e.get("needs_network") for e in cache_reader.fetch_index())
+    except Exception:  # noqa: BLE001 — a hint, never a failure
+        return False
+
+
+def _expand_home(arguments: dict) -> dict:
+    """"~/Downloads/memo.m4a" means your home, but the tool's HOME is its own
+    folder, so it read as "No such file" (fresh QA, 2026-10-03). Expanded
+    here; the sandbox still decides what the tool may read."""
+    def expand(value):
+        if isinstance(value, str) and (value == "~" or value.startswith("~/")):
+            return os.path.expanduser(value)
+        if isinstance(value, list):
+            return [expand(v) for v in value]
+        return value
+
+    return {key: expand(value) for key, value in arguments.items()}
+
+
+def _paths_outside_grants(arguments: dict, item: Installed, workdir: Path | None) -> list[str]:
+    """Paths in the call, in your home folder, that the tool may not read."""
+    home = Path.home()
+    values = [v for value in arguments.values() for v in (value if isinstance(value, list) else [value])]
+    outside = []
+    for value in values:
+        if not isinstance(value, str) or not value.startswith("/") or "\n" in value or len(value) > 4096:
+            continue
+        path = Path(os.path.normpath(value))
+        if not sandbox_runner._within(path, home):
+            continue  # the sandbox can read most places outside home; not a grant question
+        allowed = [*item.allow_read, *([workdir] if workdir else [])]
+        if not any(sandbox_runner._within(path, root) for root in allowed):
+            outside.append(value)
+    return outside
+
+
+def _sandbox_hint(result: dict, item: Installed, arguments: dict | None = None, workdir: Path | None = None) -> dict:
     """A sandbox denial reached the user as a raw "Operation not permitted" or
-    DNS error with no hint why (fresh QA, 2026-10-03). Say what the tool may do."""
+    DNS error with no hint why (fresh QA, 2026-10-03). Say what the tool may do.
+    A file outside the grants looks absent to the tool, so the AI told the user
+    their file didn't exist: name the path and the fix."""
     text = " ".join(i.get("text", "") for i in result.get("content", []) if i.get("type") == "text")
-    if result.get("isError") or any(sign in text for sign in _DENIAL_SIGNS):
-        if any(sign in text for sign in _DENIAL_SIGNS):
-            folders = ", ".join(str(p) for p in item.allow_read) or "none of your folders"
-            result["content"].append({"type": "text", "text": (
-                f"[Legwork: {item.slug} runs sandboxed. It can read {folders} (read-only), write only in its own "
-                f"folder, and {'use' if item.allow_net else 'has no'} network. If it needs more, install it again "
-                "with allow_read for the folder (within the hub's --allow-read) or allow_net (the hub must be "
-                "started with --allow-net). It can't write to your folders: give it an output file name, and "
-                "Legwork copies what it makes to the outputs folder.]"
-            )})
+    folders = ", ".join(str(p) for p in item.allow_read)
+    outside = _paths_outside_grants(arguments or {}, item, workdir) if result.get("isError") or any(
+        sign in text for sign in _MISSING_SIGNS) else []
+    if outside:
+        result.setdefault("content", []).append({"type": "text", "text": (
+            f"[Legwork: {', '.join(outside[:3])} is outside the folders {item.slug} may read "
+            f"({folders or 'none'}), so to the tool it doesn't exist. The file may well be there. Install the tool "
+            "again with allow_read for its folder (within the hub's --allow-read), then call it again. If this was "
+            "an output path: tools can't write to your folders, so leave it out or give a bare file name, and "
+            "Legwork copies what the tool makes to the outputs folder.]"
+        )})
+    elif any(sign in text for sign in _DENIAL_SIGNS):
+        reads = f"It can read {folders} (read-only)" if folders else "It can read none of your folders"
+        result.setdefault("content", []).append({"type": "text", "text": (
+            f"[Legwork: {item.slug} runs sandboxed. {reads}, write only in its own "
+            f"folder, and {'use' if item.allow_net else 'has no'} network. If it needs more, install it again "
+            "with allow_read for the folder (within the hub's --allow-read) or allow_net (the hub must be "
+            "started with --allow-net). It can't write to your folders: give it an output file name, and "
+            "Legwork copies what it makes to the outputs folder.]"
+        )})
     return result
 
 

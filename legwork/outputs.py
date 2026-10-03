@@ -32,6 +32,7 @@ MAX_TOTAL_BYTES = 2 * 1024**3
 _SKIP_DIRS = {"venv", "node_modules", "src", "models", "__pycache__", "nltk_data", "gitleaks-bin", "bin", "Library"}
 _SKIP_FILES = {"wrapper.py", "legwork-install.sh"}
 _SKIP_SUFFIXES = ("-wal", "-shm", "-journal")  # SQLite's working files
+_SKIP_MARKS = ("TEMP_MPY_",)  # moviepy's temporary audio while it writes a video
 
 
 Snapshot = dict[str, tuple[int, int]]  # relative path -> (mtime_ns, size)
@@ -73,7 +74,8 @@ def _candidates(workdir: Path):
     for dirpath, dirnames, filenames in os.walk(workdir, followlinks=False):
         dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
         for name in filenames:
-            if name.startswith(".") or name.endswith(_SKIP_SUFFIXES) or (name in _SKIP_FILES and Path(dirpath) == workdir):
+            if (name.startswith(".") or name.endswith(_SKIP_SUFFIXES) or any(m in name for m in _SKIP_MARKS)
+                    or (name in _SKIP_FILES and Path(dirpath) == workdir)):
                 continue
             path = Path(dirpath) / name
             try:

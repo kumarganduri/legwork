@@ -13,5 +13,6 @@
   },
   "entrypoint": "Retrieve, list, and translate YouTube video transcripts using the youtube-transcript-api library",
   "install_command": "pip install youtube-transcript-api==1.2.4",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "needs_network": true
 }

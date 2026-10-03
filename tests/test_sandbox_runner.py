@@ -496,6 +496,9 @@ def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
         "~/.SSH", "~/LIBRARY", "~/Library/KEYCHAINS", "~/.Legwork.env",
         # Shell startup files export keys; AI client configs hold tokens (2026-10-03)
         "~/.zshrc", "~/.bashrc", "~/.profile", "~/.claude.json", "~/.claude", "~/.codex", "~/.cursor",
+        # Linux keyrings and browser profiles, other credential files (fresh QA, 2026-10-03)
+        "~/.local/share/keyrings", "~/.local", "~/.mozilla", "~/snap/firefox", "~/.pgpass", "~/.vault-token",
+        "~/.terraform.d", "~/.cargo/credentials.toml",
     ],
 )
 def test_grants_refuse_home_and_secret_folders_whether_or_not_they_exist(target):

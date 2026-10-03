@@ -59,7 +59,8 @@ def add_text_slide(pptx_path: str, title: str, bullets: List[str] | None = None,
         pptx_path: Path to the source PPTX file (read-only).
         title: Title for the new slide.
         bullets: Optional list of bullet point strings.
-        output_path: Optional path for the modified PPTX. Defaults to <pptx_path stem>_modified.pptx.
+        output_path: Optional path for the modified PPTX. Defaults to <pptx_path stem>_modified.pptx in the
+            tool's own folder (the input's folder is usually read-only).
 
     Returns:
         Absolute path to the saved modified PPTX file.
@@ -70,7 +71,7 @@ def add_text_slide(pptx_path: str, title: str, bullets: List[str] | None = None,
         raise FileNotFoundError(f"PPTX not found: {pptx_path}")
 
     if output_path is None:
-        base, ext = os.path.splitext(pptx_path)
+        base, ext = os.path.splitext(os.path.basename(pptx_path))
         output_path = f"{base}_modified{ext or '.pptx'}"
 
     prs = Presentation(pptx_path)

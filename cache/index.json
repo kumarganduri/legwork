@@ -30,7 +30,8 @@
   "language": "Python",
   "stars": 6907,
   "created_at": "2019-04-08T11:38:48Z",
-  "pushed_at": "2026-10-02T16:53:41Z"
+  "pushed_at": "2026-10-02T16:53:41Z",
+  "needs_network": false
  },
  {
   "repo": "ast-grep/ast-grep",
@@ -58,7 +59,8 @@
   "language": "Rust",
   "stars": 16108,
   "created_at": "2022-07-01T19:21:00Z",
-  "pushed_at": "2026-10-01T19:31:47Z"
+  "pushed_at": "2026-10-01T19:31:47Z",
+  "needs_network": false
  },
  {
   "repo": "astral-sh/ruff",
@@ -82,7 +84,8 @@
   "language": "Rust",
   "stars": 49886,
   "created_at": "2022-08-09T17:17:44Z",
-  "pushed_at": "2026-10-03T00:47:17Z"
+  "pushed_at": "2026-10-03T00:47:17Z",
+  "needs_network": false
  },
  {
   "repo": "collective/icalendar",
@@ -105,7 +108,8 @@
   "language": "Python",
   "stars": 1178,
   "created_at": "2011-08-17T14:16:35Z",
-  "pushed_at": "2026-10-02T18:33:16Z"
+  "pushed_at": "2026-10-02T18:33:16Z",
+  "needs_network": false
  },
  {
   "repo": "danielgatis/rembg",
@@ -121,7 +125,8 @@
   "language": "Python",
   "stars": 24954,
   "created_at": "2020-08-10T14:38:24Z",
-  "pushed_at": "2026-09-20T17:16:21Z"
+  "pushed_at": "2026-09-20T17:16:21Z",
+  "needs_network": false
  },
  {
   "repo": "duckdb/duckdb",
@@ -139,7 +144,8 @@
   "language": "C++",
   "stars": 41881,
   "created_at": "2018-06-26T15:04:45Z",
-  "pushed_at": "2026-10-02T22:25:09Z"
+  "pushed_at": "2026-10-02T22:25:09Z",
+  "needs_network": false
  },
  {
   "repo": "gitleaks/gitleaks",
@@ -172,7 +178,8 @@
   "language": "Go",
   "stars": 29631,
   "created_at": "2018-01-27T18:19:31Z",
-  "pushed_at": "2026-09-30T04:14:02Z"
+  "pushed_at": "2026-09-30T04:14:02Z",
+  "needs_network": false
  },
  {
   "repo": "hgrecco/pint",
@@ -188,7 +195,8 @@
   "language": "Python",
   "stars": 2808,
   "created_at": "2012-07-13T16:27:11Z",
-  "pushed_at": "2026-10-02T21:21:27Z"
+  "pushed_at": "2026-10-02T21:21:27Z",
+  "needs_network": false
  },
  {
   "repo": "jdepoix/youtube-transcript-api",
@@ -218,7 +226,8 @@
   "language": "Python",
   "stars": 8414,
   "created_at": "2018-04-20T13:55:04Z",
-  "pushed_at": "2026-09-10T14:20:32Z"
+  "pushed_at": "2026-09-10T14:20:32Z",
+  "needs_network": true
  },
  {
   "repo": "joke2k/faker",
@@ -240,7 +249,8 @@
   "language": "Python",
   "stars": 19421,
   "created_at": "2012-11-12T23:00:09Z",
-  "pushed_at": "2026-09-29T00:56:28Z"
+  "pushed_at": "2026-09-29T00:56:28Z",
+  "needs_network": false
  },
  {
   "repo": "jsvine/pdfplumber",
@@ -256,7 +266,8 @@
   "language": "Python",
   "stars": 10786,
   "created_at": "2015-08-24T03:14:48Z",
-  "pushed_at": "2026-08-06T00:46:50Z"
+  "pushed_at": "2026-08-06T00:46:50Z",
+  "needs_network": false
  },
  {
   "repo": "jupyter/nbconvert",
@@ -268,7 +279,8 @@
   "language": "Python",
   "stars": 1939,
   "created_at": "2015-04-09T06:58:23Z",
-  "pushed_at": "2026-09-14T15:30:42Z"
+  "pushed_at": "2026-09-14T15:30:42Z",
+  "needs_network": false
  },
  {
   "repo": "koalaman/shellcheck",
@@ -287,7 +299,8 @@
   "language": "Haskell",
   "stars": 40120,
   "created_at": "2012-11-17T03:15:11Z",
-  "pushed_at": "2026-10-02T00:32:34Z"
+  "pushed_at": "2026-10-02T00:32:34Z",
+  "needs_network": false
  },
  {
   "repo": "lincolnloop/python-qrcode",
@@ -299,7 +312,8 @@
   "language": "Python",
   "stars": 4948,
   "created_at": "2011-11-10T09:36:22Z",
-  "pushed_at": "2026-03-25T03:05:38Z"
+  "pushed_at": "2026-03-25T03:05:38Z",
+  "needs_network": false
  },
  {
   "repo": "lovell/sharp",
@@ -329,7 +343,8 @@
   "language": "JavaScript",
   "stars": 32737,
   "created_at": "2013-08-19T20:24:24Z",
-  "pushed_at": "2026-10-02T16:08:48Z"
+  "pushed_at": "2026-10-02T16:08:48Z",
+  "needs_network": false
  },
  {
   "repo": "matplotlib/matplotlib",
@@ -351,7 +366,8 @@
   "language": "Python",
   "stars": 23319,
   "created_at": "2011-02-19T03:17:12Z",
-  "pushed_at": "2026-10-03T02:47:06Z"
+  "pushed_at": "2026-10-03T02:47:06Z",
+  "needs_network": false
  },
  {
   "repo": "matthewwithanm/python-markdownify",
@@ -363,7 +379,8 @@
   "language": "Python",
   "stars": 2252,
   "created_at": "2012-06-29T16:30:23Z",
-  "pushed_at": "2026-06-30T20:26:41Z"
+  "pushed_at": "2026-06-30T20:26:41Z",
+  "needs_network": false
  },
  {
   "repo": "microsoft/markitdown",
@@ -381,9 +398,10 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 188129,
+  "stars": 188130,
   "created_at": "2024-11-13T19:56:40Z",
-  "pushed_at": "2026-10-03T02:35:06Z"
+  "pushed_at": "2026-10-03T02:35:06Z",
+  "needs_network": false
  },
  {
   "repo": "mikefarah/yq",
@@ -411,7 +429,8 @@
   "language": "Go",
   "stars": 16046,
   "created_at": "2015-09-26T22:14:44Z",
-  "pushed_at": "2026-10-01T03:57:01Z"
+  "pushed_at": "2026-10-01T03:57:01Z",
+  "needs_network": false
  },
  {
   "repo": "plotly/plotly.py",
@@ -438,7 +457,8 @@
   "language": "Python",
   "stars": 18821,
   "created_at": "2013-11-21T05:53:08Z",
-  "pushed_at": "2026-10-01T07:39:55Z"
+  "pushed_at": "2026-10-01T07:39:55Z",
+  "needs_network": false
  },
  {
   "repo": "prettier/prettier",
@@ -469,7 +489,8 @@
   "language": "JavaScript",
   "stars": 52314,
   "created_at": "2016-11-29T17:13:37Z",
-  "pushed_at": "2026-10-03T13:02:50Z"
+  "pushed_at": "2026-10-03T13:02:50Z",
+  "needs_network": false
  },
  {
   "repo": "py-pdf/pypdf",
@@ -490,7 +511,8 @@
   "language": "Python",
   "stars": 10241,
   "created_at": "2012-01-06T17:13:38Z",
-  "pushed_at": "2026-10-03T07:38:34Z"
+  "pushed_at": "2026-10-03T07:38:34Z",
+  "needs_network": false
  },
  {
   "repo": "python-jsonschema/jsonschema",
@@ -508,7 +530,8 @@
   "language": "Python",
   "stars": 4988,
   "created_at": "2011-12-30T03:37:43Z",
-  "pushed_at": "2026-09-29T01:52:27Z"
+  "pushed_at": "2026-09-29T01:52:27Z",
+  "needs_network": false
  },
  {
   "repo": "python-openxml/python-docx",
@@ -520,7 +543,8 @@
   "language": "Python",
   "stars": 5733,
   "created_at": "2013-10-15T14:50:41Z",
-  "pushed_at": "2026-08-01T14:59:42Z"
+  "pushed_at": "2026-08-01T14:59:42Z",
+  "needs_network": false
  },
  {
   "repo": "python-pillow/Pillow",
@@ -541,7 +565,8 @@
   "language": "Python",
   "stars": 13880,
   "created_at": "2012-07-24T21:38:39Z",
-  "pushed_at": "2026-10-03T10:35:09Z"
+  "pushed_at": "2026-10-03T10:35:09Z",
+  "needs_network": false
  },
  {
   "repo": "RapidAI/RapidOCR",
@@ -566,7 +591,8 @@
   "language": "Python",
   "stars": 8030,
   "created_at": "2021-01-04T08:02:09Z",
-  "pushed_at": "2026-10-03T02:56:58Z"
+  "pushed_at": "2026-10-03T02:56:58Z",
+  "needs_network": false
  },
  {
   "repo": "scanny/python-pptx",
@@ -578,7 +604,8 @@
   "language": "Python",
   "stars": 3549,
   "created_at": "2012-11-21T11:03:31Z",
-  "pushed_at": "2024-08-07T17:36:44Z"
+  "pushed_at": "2024-08-07T17:36:44Z",
+  "needs_network": false
  },
  {
   "repo": "simonw/sqlite-utils",
@@ -599,7 +626,8 @@
   "language": "Python",
   "stars": 2177,
   "created_at": "2018-07-14T03:21:46Z",
-  "pushed_at": "2026-09-22T18:35:44Z"
+  "pushed_at": "2026-09-22T18:35:44Z",
+  "needs_network": false
  },
  {
   "repo": "sqlfluff/sqlfluff",
@@ -616,7 +644,8 @@
   "language": "Python",
   "stars": 9915,
   "created_at": "2018-11-01T23:56:04Z",
-  "pushed_at": "2026-10-03T12:51:43Z"
+  "pushed_at": "2026-10-03T12:51:43Z",
+  "needs_network": false
  },
  {
   "repo": "svg/svgo",
@@ -637,7 +666,8 @@
   "language": "JavaScript",
   "stars": 22711,
   "created_at": "2012-08-22T10:41:43Z",
-  "pushed_at": "2026-08-27T14:58:51Z"
+  "pushed_at": "2026-08-27T14:58:51Z",
+  "needs_network": false
  },
  {
   "repo": "sympy/sympy",
@@ -655,7 +685,8 @@
   "language": "Python",
   "stars": 14985,
   "created_at": "2010-04-30T20:37:14Z",
-  "pushed_at": "2026-10-02T22:51:12Z"
+  "pushed_at": "2026-10-02T22:51:12Z",
+  "needs_network": false
  },
  {
   "repo": "SYSTRAN/faster-whisper",
@@ -676,7 +707,8 @@
   "language": "Python",
   "stars": 25681,
   "created_at": "2023-02-11T09:17:27Z",
-  "pushed_at": "2026-10-01T14:01:34Z"
+  "pushed_at": "2026-10-01T14:01:34Z",
+  "needs_network": false
  },
  {
   "repo": "textstat/textstat",
@@ -695,7 +727,8 @@
   "language": "Python",
   "stars": 1386,
   "created_at": "2014-06-18T10:54:08Z",
-  "pushed_at": "2026-10-02T09:01:39Z"
+  "pushed_at": "2026-10-02T09:01:39Z",
+  "needs_network": false
  },
  {
   "repo": "wireservice/csvkit",
@@ -707,7 +740,8 @@
   "language": "Python",
   "stars": 6414,
   "created_at": "2011-04-01T03:00:30Z",
-  "pushed_at": "2026-09-21T23:53:59Z"
+  "pushed_at": "2026-09-21T23:53:59Z",
+  "needs_network": false
  },
  {
   "repo": "xhtml2pdf/xhtml2pdf",
@@ -731,7 +765,8 @@
   "language": "Python",
   "stars": 2396,
   "created_at": "2011-05-16T13:45:29Z",
-  "pushed_at": "2026-09-28T22:13:45Z"
+  "pushed_at": "2026-09-28T22:13:45Z",
+  "needs_network": false
  },
  {
   "repo": "yt-dlp/yt-dlp",
@@ -749,9 +784,10 @@
   ],
   "license": "Unlicense",
   "language": "Python",
-  "stars": 195162,
+  "stars": 195164,
   "created_at": "2020-10-26T04:22:55Z",
-  "pushed_at": "2026-09-27T22:09:13Z"
+  "pushed_at": "2026-09-27T22:09:13Z",
+  "needs_network": true
  },
  {
   "repo": "Zulko/moviepy",
@@ -771,6 +807,7 @@
   "language": "Python",
   "stars": 14945,
   "created_at": "2013-08-12T09:39:28Z",
-  "pushed_at": "2026-08-26T06:17:08Z"
+  "pushed_at": "2026-08-26T06:17:08Z",
+  "needs_network": false
  }
 ]

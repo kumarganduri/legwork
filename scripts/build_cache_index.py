@@ -49,6 +49,7 @@ def main() -> int:
             "stars": info.get("stargazers_count", 0),
             "created_at": info.get("created_at", ""),
             "pushed_at": info.get("pushed_at", ""),
+            "needs_network": manifest.get("needs_network") is True,
         })
     (CACHE / "index.json").write_text(json.dumps(entries, indent=1, ensure_ascii=False) + "\n")
     write_readme_table(entries)

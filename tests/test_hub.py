@@ -456,3 +456,38 @@ def test_files_a_tool_makes_are_copied_to_the_outputs_folder(limits, tmp_path, m
     assert copied.read_text() == "made by the tool"
     assert str(copied) in text and "Legwork copied 1 file" in text
     h.close()
+
+
+def test_a_home_path_is_expanded_before_the_tool_sees_it():
+    """The tool's HOME is its own folder, so "~/Downloads/memo.m4a" read as
+    "No such file" (fresh QA, 2026-10-03)."""
+    home = str(Path.home())
+    args = hub._expand_home({"audio_path": "~/Downloads/memo.m4a", "paths": ["~/a.pdf", "x"], "n": 3, "q": "~user"})
+    assert args == {"audio_path": f"{home}/Downloads/memo.m4a", "paths": [f"{home}/a.pdf", "x"], "n": 3, "q": "~user"}
+
+
+def test_a_file_outside_the_grants_is_named_instead_of_reported_missing(tmp_path):
+    """A file outside the grants looks absent in the sandbox, and the AI told
+    the user their file didn't exist (fresh QA, 2026-10-03)."""
+    granted = Path.home() / "Downloads"
+    item = hub.Installed("jsvine/pdfplumber", allow_read=(granted,))
+    elsewhere = str(Path.home() / "Documents" / "plan.pdf")
+    failed = {"content": [{"type": "text", "text": f"File not found: {elsewhere}"}], "isError": True}
+    text = " ".join(c["text"] for c in hub._sandbox_hint(failed, item, {"path": elsewhere})["content"])
+    assert "is outside the folders jsvine/pdfplumber may read" in text and "allow_read" in text
+    inside = {"content": [{"type": "text", "text": "File not found"}], "isError": True}
+    hinted = hub._sandbox_hint(inside, item, {"path": str(granted / "plan.pdf")})
+    assert len(hinted["content"]) == 1  # really missing: no grant hint
+    ok = {"content": [{"type": "text", "text": "done"}], "isError": False}
+    assert len(hub._sandbox_hint(ok, item, {"path": elsewhere})["content"]) == 1
+
+
+def test_installing_an_internet_tool_without_network_says_so(limits, monkeypatch):
+    """It installed, then every call failed with a DNS error (fresh QA, 2026-10-03)."""
+    from legwork import cache_reader
+
+    monkeypatch.setattr(cache_reader, "fetch_index", lambda: [{"repo": "owner/repo", "needs_network": True}])
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve)
+    _, text = install(h)
+    assert "fetches from the internet" in text and "restart it" in text
+    h.close()

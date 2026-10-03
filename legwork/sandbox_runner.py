@@ -430,6 +430,11 @@ _SECRET_DIRS = (
     # (fresh QA, 2026-10-03).
     ".zshrc", ".zshenv", ".zprofile", ".bashrc", ".bash_profile", ".profile", ".envrc",
     ".claude.json", ".claude", ".codex", ".cursor", ".gemini", ".continue",
+    # Linux keyrings and browser profiles, and more tools' credential files
+    # (fresh QA, 2026-10-03).
+    ".local/share/keyrings", ".mozilla", ".thunderbird", ".pki", ".var/app", "snap",
+    ".pgpass", ".vault-token", ".terraform.d", ".cargo/credentials", ".cargo/credentials.toml",
+    ".gem/credentials", ".m2/settings.xml", ".gradle/gradle.properties", ".dbt", ".databrickscfg",
     "Library/Keychains", "Library/Cookies", "Library/Application Support", "Library/Messages",
     "Library/Mail", "Library/Safari", "Library/Containers", "Library/Group Containers",
 )
