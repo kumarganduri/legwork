@@ -126,7 +126,7 @@ def _client_entry(client: str, path: Path) -> tuple[str, str, str]:
     """Whether the config mentions Legwork, and a pinned old version. Never
     prints the file: other servers' tokens live there."""
     if not path.exists():
-        return (OK, client, "not installed here")
+        return (OK, client, f"no config at {path}")
     try:
         text = path.read_text(errors="replace")
     except OSError as exc:

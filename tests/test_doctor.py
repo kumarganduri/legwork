@@ -37,7 +37,7 @@ def test_client_configs_are_checked_without_printing_them(monkeypatch, tmp_path,
     current.write_text('{"mcpServers": {"legwork": {"args": ["legwork-mcp@latest", "hub"]}}}')
     missing = tmp_path / "absent.json"
     _, out = _run(monkeypatch, tmp_path, capsys, [("Desktop", pinned), ("Cursor", current), ("Codex", missing)])
-    assert "pinned to 0.7.1" in out and "Legwork entry found" in out and "not installed here" in out
+    assert "pinned to 0.7.1" in out and "Legwork entry found" in out and "no config at" in out
     assert "ghp_other_server_secret" not in out
 
 
