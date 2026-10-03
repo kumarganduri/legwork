@@ -4,7 +4,7 @@
 [![CI](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml/badge.svg)](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Your AI finds the open-source tool it needs on GitHub. Legwork installs it safely.**
+**Your AI finds the open-source tool it needs on GitHub. Legwork installs it in a sandbox.**
 
 https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
 
@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
 Add Legwork to Claude, Cursor, Codex, opencode or any [MCP](https://modelcontextprotocol.io)
 client once. When you ask for something your AI has no tool for, it
 searches GitHub, picks a repo, and asks you to approve installing it.
-Legwork then checks the code for malware, builds a working tool for it in a
+Legwork then checks the code for hidden payloads, builds a working tool for it in a
 sandbox, tests it, and hands it over. In your home folder it can only read
 the folders you allow.
 
@@ -21,10 +21,24 @@ the folders you allow.
 claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 ```
 
-Then just ask: *"Pull the risk table out of ~/Downloads/launch-plan.pdf."*
-Claude finds [pdfplumber](https://github.com/jsvine/pdfplumber), you
-approve the install, and it reads the table. Or build one tool yourself:
-`uvx legwork-mcp owner/repo`.
+Then just ask. Four to try first, all from the [public cache](cache/), so
+they need no API key:
+
+- *"Transcribe ~/Downloads/memo.m4a."* Any voice memo, mp3 or video;
+  offline, many languages.
+- *"Remove the background from ~/Downloads/photo.jpg."*
+- *"Pull the tables out of ~/Downloads/report.pdf."*
+- *"Make a QR code for https://github.com/kumarganduri/legwork."*
+
+Your AI finds the tool ([faster-whisper](https://github.com/SYSTRAN/faster-whisper),
+[rembg](https://github.com/danielgatis/rembg),
+[pdfplumber](https://github.com/jsvine/pdfplumber),
+[qrcode](https://github.com/lincolnloop/python-qrcode)), you approve the
+install, and about a minute later it does the job. Files a tool makes are
+copied to `~/Legwork/outputs/`. On macOS, the first time a tool reads
+Downloads, macOS asks whether `uvx` may access it; allow it once. If
+something doesn't work, `uvx legwork-mcp doctor` checks your setup. Or
+build one tool yourself: `uvx legwork-mcp owner/repo`.
 
 ## Why not just ask your AI to install it?
 
@@ -33,13 +47,13 @@ approve the install, and it reads the table. Or build one tool yourself:
   works with a self-test, and caches it so the next person doesn't pay for it.
 - **Whatever your AI installs runs with full access to your machine:** your
   SSH keys, your files, your environment variables. That's how the two
-  malware repos below would have got in. Legwork scans the code first, and
-  every tool it installs runs sandboxed: in your home folder it sees only
+  malware repos below would have got in. Legwork checks the code for
+  obfuscated payloads first, and every tool it installs runs sandboxed: in your home folder it sees only
   the folders you grant.
 - **It works across your tools:** the same install works in Claude Code,
   Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
 
-## Proof, not a pitch
+## What it did on real repos
 
 On 2026-09-26 we ran Legwork against **the 10 most-starred AI repos created
 on GitHub in the previous week**, taken exactly as search ranked them, with
@@ -49,14 +63,14 @@ nothing skipped for being hard:
 |---|---|
 | ✅ Built a working MCP server | **3** — an npm CLI, a Python library, a Go binary |
 | ↩️ Refused, with the right reason | **5** — two Android/macOS apps, a desktop app, a repo with no usage docs, a tool that needs its own API keys |
-| 🛑 Blocked as malware | **2** |
+| 🛑 Blocked before install (malware) | **2** |
 
 Two of those top-10 "AI tools", about 700 stars each and three days old
 at the time, carried the same byte-identical obfuscated dropper under different
 file names. Legwork's pre-install scan refused both in about a second.
 Nothing from them was installed or run. Stars are not a trust signal.
 
-The scanner has to stay quiet on ordinary code too. Run over the 150
+The tripwire has to stay quiet on ordinary code too. Run over the 150
 most-starred Python, JavaScript and TypeScript repos on GitHub
 (2026-10-01), it blocks one: lodash, for a vendored 2009 debugging script
 that really does run `eval(unescape(...))`.
@@ -118,7 +132,10 @@ is what makes it ask you before an install:
 with no API key**: speech-to-text, OCR, background removal, PDFs and
 Office files, video, YouTube transcripts, charts, DuckDB and CSV tools, maths
 and units, and linters and formatters. Each was built, reviewed by hand and
-tried with a real call before it was added. Others need a model key, and building takes 1–5 minutes. Put the key
+tried with a real call before it was added, and pins the version of the
+package it wraps (its dependencies resolve at install). The cache a
+release reads is the one tagged with that release, so a change to the cache
+reaches you only with an upgrade. Others need a model key, and building takes 1–5 minutes. Put the key
 in `~/.legwork.env` ([three lines](#model-providers), `chmod 600`) and the
 hub reads it when it needs to build, so the key never goes in your MCP
 config, where it would sit in plain text.
@@ -128,10 +145,12 @@ config, where it would sit in plain text.
 - **Tools that use the internet** (YouTube transcripts and downloads, web
   pages) need the hub started with `--allow-net`; without it they install,
   then can't connect.
-- **Files a tool makes** (a trimmed video, a chart) are saved in the tool's
-  own folder under `~/.legwork`, and the tool replies with the full path;
-  images also come back inline. Your granted folders are read-only, so a
-  tool can't write next to your files.
+- **Files a tool makes** (a trimmed video, a chart, a QR code) are copied
+  to `~/Legwork/outputs/<tool>/`, and the reply says where; images also
+  come back inline. Your granted folders stay read-only, so a tool can't
+  write next to your files. The copies are never executable, and on macOS
+  they get the same quarantine flag as downloads. `--outputs DIR` puts
+  them elsewhere, `--outputs off` turns copying off.
 - **GitHub allows 10 searches a minute without a token**, and each
   `find_tools` uses 2 or 3. Cached tools still show up when GitHub says no.
   For 30 a minute, add `GITHUB_TOKEN=<a GitHub token with no scopes>` to
@@ -313,8 +332,8 @@ without installing anything.
 
 ## Permissions: locked down unless you say so
 
-A served tool **sees nothing in your home folder and has no network**. Grant
-exactly what a tool needs when you add it to your client:
+A served tool **can't read your home folder and has no network** until you
+grant them. Grant exactly what a tool needs when you add it to your client:
 
 ```sh
 # Build it once (cached: no key needed), then let it read one folder (read-only):
@@ -388,12 +407,14 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
 - **Keep your key file in your home folder** (`~/.legwork.env`, the
   default). Sandboxed code can't read your home folder, but it can read
   most places outside it.
-- **Not yet:** a folder tools can save into directly (they save in their
-  own folder and tell you where), and `legwork serve` used on its own passes
-  along anything a tool prints by mistake, which can confuse a client (the
-  hub filters it out).
-- **The scanner is heuristic.** It catches the obfuscation patterns seen in
-  real payloads so far, and a determined author can get past it.
+- **Installs on Linux can reach services on this machine** (`localhost`
+  databases, dev servers): bubblewrap shares the host's network during
+  install. macOS blocks them. Unix sockets are blocked on both.
+- **Not yet:** `legwork serve` used on its own passes along anything a tool
+  prints by mistake, which can confuse a client (the hub filters it out).
+- **The scan is an obfuscation tripwire, not a malware scanner.** It
+  catches the hiding patterns seen in real payloads so far, and a
+  determined author can get past it. The sandbox is the protection.
 
 The sandbox is `sandbox-exec` on macOS and bubblewrap on Linux, with the
 same rules on both: the system read-only, your home directory hidden,
@@ -401,6 +422,10 @@ writes only in the build's own folder, no local sockets (SSH agent, Docker,
 display servers), only the system services builds need, and network only
 during install. If the sandbox isn't available, Legwork
 refuses to run. It never falls back to running unsandboxed.
+
+[THREAT_MODEL.md](THREAT_MODEL.md) has the full table of what a tool can
+reach in each phase, a comparison with Docker and VMs, and every escape
+found so far with the test that keeps it fixed.
 
 ## Commands
 
@@ -411,6 +436,7 @@ refuses to run. It never falls back to running unsandboxed.
 | `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key. `--allow-read PATH`, `--allow-net` grant access (see Permissions) |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
+| `legwork doctor` | Check this machine is ready: sandbox, cache, key, search limit, client configs. Read-only; prints no keys. Paste it into bug reports |
 | `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 
 Builds live in `~/.legwork` (override with `LEGWORK_HOME`). A failed build

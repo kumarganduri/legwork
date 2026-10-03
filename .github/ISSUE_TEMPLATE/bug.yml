@@ -1,0 +1,37 @@
+name: Something didn't work
+description: An install, a tool call, or the hub itself failed or misbehaved
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Found a way out of the sandbox, or a key leak? Please don't file it here:
+        use [Report a vulnerability](https://github.com/kumarganduri/legwork/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked for, which repo or tool, and what you saw instead. The exact error text helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `uvx legwork-mcp doctor`
+      description: It's read-only and never prints keys or your config files' contents.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: MCP client
+      options: [Claude Code, Claude Desktop, Cursor, Codex CLI, opencode, Goose, OpenClaw, Other, None (command line)]
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: attempts.log (for a failed build)
+      description: A failed build saves its full output to `attempts.log` in its build folder under `~/.legwork`. Check it for anything private before pasting.
+      render: text

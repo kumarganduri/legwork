@@ -48,7 +48,8 @@ uv run pytest
 
 Bump `version` in `pyproject.toml`, then push a matching tag (`v0.1.1`).
 The `publish` workflow tests, builds and publishes to PyPI with trusted
-publishing.
+publishing. [docs/RELEASING.md](docs/RELEASING.md) has the checklist and how
+to roll back a release or a cache entry.
 
 ## Security issues
 

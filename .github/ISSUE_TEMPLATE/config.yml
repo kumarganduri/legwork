@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security report (sandbox escape, key leak)
+    url: https://github.com/kumarganduri/legwork/security/advisories/new
+    about: Report privately, please. See SECURITY.md.

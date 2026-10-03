@@ -19,7 +19,9 @@ Use **[Report a vulnerability](https://github.com/kumarganduri/legwork/security/
 - **Anything that makes Legwork run code outside the sandbox.**
 
 Please include the Legwork version, your OS and version, and a minimal repo
-or command that reproduces it. You'll get a reply within a week.
+or command that reproduces it. You'll get a reply within a week. Fixed
+escapes are credited in the release notes (say if you'd rather not be) and
+listed, with their regression tests, in [THREAT_MODEL.md](THREAT_MODEL.md).
 
 ## Open an issue instead
 
@@ -36,6 +38,6 @@ These are documented in the [README](README.md#risks-stated-plainly) and
 aren't vulnerabilities by themselves: installs run with network on,
 prompt injection from a README isn't mitigated, abstract Unix sockets are
 reachable during install on Linux architectures other than x86-64 and ARM64,
-and the scan covers the
-repo's own Python and JavaScript/TypeScript source, not what installers
+installs on Linux can reach TCP services on `localhost`, and the scan covers
+the repo's own Python and JavaScript/TypeScript source, not what installers
 download.

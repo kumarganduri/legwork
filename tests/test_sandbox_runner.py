@@ -494,6 +494,8 @@ def test_a_granted_folder_is_readable_and_its_neighbours_are_not(tmp_path):
         "~/Library", "~/Library/Group Containers", "~/.legwork.env", "~/.zsh_history", "~/.npmrc",
         # Different letter case: the same folders on macOS's default filesystem
         "~/.SSH", "~/LIBRARY", "~/Library/KEYCHAINS", "~/.Legwork.env",
+        # Shell startup files export keys; AI client configs hold tokens (2026-10-03)
+        "~/.zshrc", "~/.bashrc", "~/.profile", "~/.claude.json", "~/.claude", "~/.codex", "~/.cursor",
     ],
 )
 def test_grants_refuse_home_and_secret_folders_whether_or_not_they_exist(target):
@@ -754,3 +756,11 @@ def test_installs_reach_the_internet_but_not_services_on_this_machine(tmp_path):
     assert result.stdout.split() == ["blocked", "blocked"]
     served = sandbox_runner._generate_profile(tmp_path, allow_network=True, local_network=True)
     assert 'remote ip "localhost:*"' not in served.text
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="the Data volume is macOS's")
+def test_your_home_folder_is_refused_through_the_data_volume():
+    """/System/Volumes/Data/Users/you is /Users/you on macOS (2026-10-03)."""
+    for target in (f"/System/Volumes/Data{Path.home()}", f"/System/Volumes/Data{Path.home()}/.ssh"):
+        with pytest.raises(sandbox_runner.SandboxGrantError, match="whole home folder|credentials"):
+            sandbox_runner.check_read_grants([target])
