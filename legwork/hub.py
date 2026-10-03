@@ -292,7 +292,7 @@ class Hub:
     def _call(self, item: Installed, tool: str, arguments: dict) -> dict:
         try:
             self._start(item)
-            return _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
+            return _sandbox_hint(_cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS)), item)
         except MCPClientError as exc:
             if item.client is not None:
                 item.client.close()
@@ -307,13 +307,20 @@ class Hub:
         except discovery.DiscoveryError as exc:
             raise HubError(str(exc)) from exc
 
-    def install_tool(self, repo: str, allow_read: list[str] | None = None, allow_net: bool = False) -> str:
+    def install_tool(self, repo: str, allow_read: list[str] | None = None, allow_net: bool | None = None) -> str:
         try:
             ref = parse_repo_url(repo)
         except InvalidRepoURLError as exc:
             raise HubError(str(exc)) from exc
-        grants, net = self._check_grants(allow_read or [], allow_net)
         slug = ref.slug
+        existing = self.installed.get(slug)
+        # Asking again without saying which folders or network keeps what was
+        # granted before; it used to silently drop it (fresh QA, 2026-10-03).
+        if allow_read is None:
+            allow_read = [str(p) for p in existing.allow_read] if existing else []
+        if allow_net is None:
+            allow_net = existing.allow_net if existing else False
+        grants, net = self._check_grants(allow_read, allow_net)
         with self._lock:
             job = self.jobs.get(slug)
             already_running = bool(job and job.state == "running")
@@ -424,10 +431,15 @@ class Hub:
     def _notify(self, method: str) -> None:
         self._write({"jsonrpc": "2.0", "method": method})
 
-    def handle(self, message: dict) -> dict | None:
+    def handle(self, message) -> dict | None:
+        # A batch array or a bare value got no reply at all (fresh QA, 2026-10-03).
+        if not isinstance(message, dict):
+            return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "invalid request: expected one JSON-RPC object"}}
         method, msg_id, params = message.get("method"), message.get("id"), message.get("params") or {}
         if msg_id is None:
             return None  # a notification: nothing to answer
+        if not isinstance(method, str) or not isinstance(params, dict):
+            return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32602, "message": "invalid params: expected a method name and an object of params"}}
         try:
             result = self._dispatch(method, params)
         except _MethodNotFound:
@@ -458,12 +470,13 @@ class Hub:
             if name == "find_tools":
                 return _text(self.find_tools(_arg(args, "query", str, "")))
             if name == "install_tool":
-                allow_read = _arg(args, "allow_read", list, [])
-                if not all(isinstance(p, str) for p in allow_read):
+                allow_read = args.get("allow_read")
+                if allow_read is not None and not (isinstance(allow_read, list) and all(isinstance(p, str) for p in allow_read)):
                     raise HubError("allow_read must be a list of folder paths")
-                return _text(self.install_tool(_arg(args, "repo", str, ""), allow_read, _arg(args, "allow_net", bool, False)))
+                allow_net = None if args.get("allow_net") is None else _arg(args, "allow_net", bool, False)
+                return _install_text(self.install_tool(_arg(args, "repo", str, ""), allow_read, allow_net))
             if name == "install_status":
-                return _text(self.install_status(_arg(args, "repo", str, "")))
+                return _install_text(self.install_status(_arg(args, "repo", str, "")))
             if name == "list_installed_tools":
                 return _text(self.list_installed_tools())
             if name == "use_tool":
@@ -493,7 +506,11 @@ MAX_TEXT_CHARS = 200_000
 SHUTDOWN_GRACE_SECONDS = 10
 
 
-MAX_BINARY_CHARS = 10_000_000  # base64 images/audio in one reply: a cut-out PNG is ~0.5 MB
+# Base64 images/audio in one reply. Model APIs reject images over about 5 MB;
+# a 4000x3000 PNG came back as 47.5 MB (fresh QA, 2026-10-03). A cut-out PNG
+# from rembg is ~0.5 MB.
+MAX_BINARY_CHARS = 5_000_000
+_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
 
 def _cap_text(result) -> dict:
@@ -518,11 +535,14 @@ def _cap_text(result) -> dict:
             if text or note:
                 out.append({"type": "text", "text": text + note})
         elif kind in ("image", "audio") and isinstance(item.get("data"), str):
-            if len(item["data"]) <= binary_left:
+            mime = str(item.get("mimeType") or "")
+            if (kind == "image" and mime not in _IMAGE_TYPES) or (kind == "audio" and not mime.startswith("audio/")):
+                out.append({"type": "text", "text": f"[Legwork left out a {kind} of type {mime or 'unknown'}: AI clients can't show it. Ask the tool for PNG or JPEG.]"})
+            elif len(item["data"]) <= binary_left:
                 binary_left -= len(item["data"])
                 out.append({k: item[k] for k in ("type", "data", "mimeType") if k in item})
             else:
-                out.append({"type": "text", "text": f"[Legwork left out a {len(item['data']) * 3 // 4:,}-byte {kind}: over this reply's size limit.]"})
+                out.append({"type": "text", "text": f"[Legwork left out a {len(item['data']) * 3 // 4:,}-byte {kind}: over this reply's size limit (about {MAX_BINARY_CHARS * 3 // 4 // 1_000_000} MB). Ask the tool for a smaller one, e.g. resized or as JPEG.]"})
         elif kind == "resource" and isinstance(item.get("resource"), dict):
             resource = dict(item["resource"])
             if isinstance(resource.get("text"), str):
@@ -590,6 +610,34 @@ def _arg(args: dict, key: str, kind: type, default):
 _JSON_NAMES = {str: "string", list: "list", dict: "object", bool: "boolean"}
 
 
+_DENIAL_SIGNS = (
+    "Operation not permitted", "Permission denied", "Read-only file system",
+    "nodename nor servname", "Name or service not known", "Temporary failure in name resolution",
+)
+
+
+def _sandbox_hint(result: dict, item: Installed) -> dict:
+    """A sandbox denial reached the user as a raw "Operation not permitted" or
+    DNS error with no hint why (fresh QA, 2026-10-03). Say what the tool may do."""
+    text = " ".join(i.get("text", "") for i in result.get("content", []) if i.get("type") == "text")
+    if result.get("isError") or any(sign in text for sign in _DENIAL_SIGNS):
+        if any(sign in text for sign in _DENIAL_SIGNS):
+            folders = ", ".join(str(p) for p in item.allow_read) or "none of your folders"
+            result["content"].append({"type": "text", "text": (
+                f"[Legwork: {item.slug} runs sandboxed. It can read {folders} (read-only), write only in its own "
+                f"folder, and {'use' if item.allow_net else 'has no'} network. If it needs more, install it again "
+                "with allow_read for the folder (within the hub's --allow-read) or allow_net (the hub must be "
+                "started with --allow-net). To save a file, give it a relative output path; the result is in the "
+                "tool's own folder.]"
+            )})
+    return result
+
+
+def _install_text(text: str) -> dict:
+    """A failed install is an error result (it came back as isError: false)."""
+    return _text(text, error=text.startswith("Installing ") and " failed: " in text.split("\n", 1)[0])
+
+
 def _text(text: str, error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": text}], "isError": error}
 
@@ -624,7 +672,7 @@ def _default_serve_command(slug: str, allow_read: tuple[Path, ...], allow_net: b
 def _child_env() -> dict[str, str]:
     # The served tool's sandbox builds its own minimal environment anyway;
     # the model key has no business reaching even the `legwork serve` step.
-    return {k: v for k, v in os.environ.items() if k != "LEGWORK_LLM_API_KEY"}
+    return {k: v for k, v in os.environ.items() if k not in ("LEGWORK_LLM_API_KEY", "GITHUB_TOKEN")}
 
 
 def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False) -> int:

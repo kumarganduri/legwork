@@ -382,3 +382,53 @@ def test_closing_the_hub_stops_installs_still_running(monkeypatch):
     h, _ = make_hub()
     h.close()
     assert stopped
+
+
+def test_images_clients_cant_show_are_described_instead():
+    """A BMP was relayed as an image with type application/octet-stream (fresh QA, 2026-10-03)."""
+    r = hub._cap_text({"content": [{"type": "image", "data": "aaaa", "mimeType": "application/octet-stream"}, {"type": "image", "data": "bbbb", "mimeType": "image/png"}]})
+    assert r["content"][0]["type"] == "text" and "PNG or JPEG" in r["content"][0]["text"]
+    assert r["content"][1]["type"] == "image"
+
+
+def test_the_github_token_isnt_passed_to_served_tools(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_should_not_leak")
+    assert "GITHUB_TOKEN" not in hub._child_env()
+
+
+def test_rpc_edge_cases_get_proper_errors():
+    h, _ = make_hub()
+    assert h.handle([{"jsonrpc": "2.0", "id": 1, "method": "ping"}])["error"]["code"] == -32600
+    assert h.handle(42)["error"]["code"] == -32600
+    assert h.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": [1]})["error"]["code"] == -32602
+
+
+def test_reinstalling_without_grants_keeps_the_ones_given_before(limits):
+    """It used to silently drop them (fresh QA, 2026-10-03)."""
+    h, _ = make_hub([limits])
+    install(h, allow_read=[str(limits)])
+    with patch("legwork.hub.builder.build", side_effect=fake_build):
+        call(h, "install_tool", {"repo": "owner/repo"})
+    assert h.installed["owner/repo"].allow_read == (limits.resolve(),)
+    h.close()
+
+
+def test_a_failed_install_is_an_error_result():
+    h, _ = make_hub()
+    failed = builder.BuildOutcome(ok=False, ref=RepoRef("owner", "broken"), error="no working wrapper")
+    with patch("legwork.hub.builder.build", return_value=failed), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5):
+        result, text = call(h, "install_tool", {"repo": "owner/broken"})
+        for _ in range(50):
+            if not text.startswith("Still installing"):
+                break
+            time.sleep(0.1)
+            result, text = call(h, "install_status", {"repo": "owner/broken"})
+    assert "failed" in text and result["isError"] is True
+
+
+def test_sandbox_denials_come_with_a_hint():
+    item = hub.Installed("owner/repo", (Path("/data"),), False)
+    out = hub._sandbox_hint({"content": [{"type": "text", "text": "Error: [Errno 1] Operation not permitted: '/data/out.mp4'"}], "isError": True}, item)
+    assert "runs sandboxed" in out["content"][-1]["text"] and "/data" in out["content"][-1]["text"]
+    fine = hub._sandbox_hint({"content": [{"type": "text", "text": "ok"}], "isError": False}, item)
+    assert len(fine["content"]) == 1
