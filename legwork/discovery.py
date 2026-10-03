@@ -51,7 +51,13 @@ _FILLER = frozenset(
     "a an and any app application best can cli command create do for from generate get github good i in "
     "into library make me need offline something thing turn want help file files find search look "
     "license line maintained my of on open open-source or package popular program read repo "
-    "repository some source stars that the this to tool tools use using which with".split()
+    "repository some source stars that the this to tool tools use using which with "
+    # "Pull the tables out of report.pdf" (README wording, fresh QA 2026-10-03)
+    "pull out please just all via".split()
+)
+_FILE_EXT_RE = re.compile(
+    r"^[\w~-]+\.(pdf|docx?|xlsx?|pptx?|csv|tsv|json|ya?ml|xml|html?|md|txt|ics|ipynb|svg|png|jpe?g|gif|webp|heic|tiff?"
+    r"|m4a|mp3|wav|flac|ogg|opus|aac|mp4|mov|mkv|webm|avi|zip|epub|sqlite|db)[.,!?]?$"
 )
 MAX_TERMS = 4  # every word must match, so long queries find little or nothing
 MIN_RESULTS = 3  # fewer than this and the last word is dropped, down to two words
@@ -162,6 +168,9 @@ def search_terms(query: str) -> str:
     # Tokens with a colon are search qualifiers (site:, stars:, user:): dropped,
     # so a query can't undo the star floor or narrow results to one account.
     raw = [t for t in query.lower().split() if ":" not in t]
+    # A path or file name says what kind of file, not what to search for:
+    # "~/Downloads/report.pdf" is "pdf" (fresh QA, 2026-10-03).
+    raw = [_FILE_EXT_RE.sub(r"\1", t.rsplit("/", 1)[-1]) for t in raw]
     words = [w for w in re.findall(r"[\w.+#-]+", " ".join(raw)) if w.strip(".-")]
     kept = [w for w in words if w not in _FILLER]
     return " ".join((kept or words)[:MAX_TERMS])
@@ -242,7 +251,12 @@ def cache_matches(terms: list[str], index: list[dict], limit: int = MAX_CACHE_MA
     for entry, fields in parsed:
         weights = [max((weight for weight, ws in fields if any(_word_matches(t, w) for w in ws)), default=0) for t in terms]
         matched = sum(1 for w in weights if w)
-        if matched >= (1 if len(terms) <= 2 else math.ceil(0.6 * len(terms))):
+        # Most of the query, weighted by how rare each word is, and at least one
+        # word in the repo's name or Legwork's own reviewed description. One
+        # common word lifted unrelated tools: "speech to text" gave shellcheck,
+        # "make qr code" gave ruff (fresh QA, 2026-10-03).
+        share = sum(idf[t] for w, t in zip(weights, terms) if w) / sum(idf.values())
+        if share >= 0.5 and 2 in weights:
             scored.append((matched, sum(w * idf[t] for w, t in zip(weights, terms)), entry.get("stars", 0), entry))
     scored.sort(key=lambda x: (-x[0], -x[1], -x[2]))
     return [
@@ -256,7 +270,10 @@ def cache_matches(terms: list[str], index: list[dict], limit: int = MAX_CACHE_MA
 
 
 def _word_matches(term: str, word: str) -> bool:
-    return word.startswith(_stem(term)) or (term.startswith(word) and len(word) >= 3)
+    """`word` is a form of `term`: "transcription" for "transcribe", "pdf"
+    for "pdfs". The other way round only for near-whole words: "for" matched
+    "forecast" and lifted gitleaks for "weather forecast" (fresh QA, 2026-10-03)."""
+    return word.startswith(_stem(term)) or (term.startswith(word) and len(word) >= 4 and len(term) - len(word) <= 2)
 
 
 def describe(found: Found) -> str:

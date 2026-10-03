@@ -3,7 +3,7 @@
   "commit_sha": "4549614bc0bba15231f9fc20cb7146c91a8758aa",
   "synthesis_date": "2026-10-01T19:27:43+00:00",
   "wrapper_language": "python",
-  "source_license": "AGPL-3.0",
+  "source_license": "GPL-3.0",
   "license_flag": "copyleft: AGPL-3.0; confirm redistribution is OK",
   "llm_model": "gpt-5",
   "smoke_test": {

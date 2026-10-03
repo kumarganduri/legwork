@@ -3,7 +3,7 @@
   "commit_sha": "53286b80749c9587418b5d6725b2813ab413b6e3",
   "synthesis_date": "2026-10-01T19:24:15+00:00",
   "wrapper_language": "python",
-  "source_license": "unrecognized (LICENSE)",
+  "source_license": "MIT-CMU",
   "license_flag": "unrecognized: a human should read the license file",
   "llm_model": "gpt-5",
   "smoke_test": {

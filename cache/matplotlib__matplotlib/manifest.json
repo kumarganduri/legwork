@@ -3,7 +3,7 @@
   "commit_sha": "44f2e0033a77d9f32f34b06573c104282a1bdc3c",
   "synthesis_date": "2026-10-01T19:23:21+00:00",
   "wrapper_language": "python",
-  "source_license": "none",
+  "source_license": "Matplotlib (PSF-style)",
   "license_flag": "missing: no license file, so redistribution terms are unknown",
   "llm_model": "gpt-5",
   "smoke_test": {

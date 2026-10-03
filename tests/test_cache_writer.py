@@ -218,6 +218,11 @@ AGPL = "GNU AFFERO GENERAL PUBLIC LICENSE\n Version 3, 19 November 2007\n"
         ({}, "none", "missing"),
         ({"LICENSE": "All rights reserved. Ask me first."}, "unrecognized (LICENSE)", "unrecognized"),
         ({"LICENSE-MIT": MIT, "LICENSE-GPL": GPL3}, "GPL-3.0 OR MIT", "copyleft"),
+        # The GPL-3.0 names the Affero license in section 13 (fresh QA, 2026-10-03)
+        ({"LICENSE": GPL3 + "13. Use with the GNU Affero General Public License.\n"}, "GPL-3.0", "copyleft"),
+        ({"LICENSE": "Redistribution and use in source and binary forms ... The name of the author may not be used "
+          "to endorse or promote products derived from this software."}, "BSD-3-Clause", None),
+        ({"LICENSE": "Pillow is licensed under the open source MIT-CMU License:"}, "MIT-CMU", None),
     ],
 )
 def test_detect_license(tmp_path, files, license_id, flag_starts):
@@ -227,6 +232,14 @@ def test_detect_license(tmp_path, files, license_id, flag_starts):
     assert info.id == license_id
     assert (info.flag or "").startswith(flag_starts or "")
     assert (info.flag is None) == (flag_starts is None)
+
+
+def test_a_license_kept_in_a_license_folder_is_found(tmp_path):
+    """matplotlib: LICENSE/LICENSE, beside the licenses of code it bundles."""
+    (tmp_path / "LICENSE").mkdir()
+    (tmp_path / "LICENSE" / "LICENSE").write_text("License agreement for matplotlib versions 1.3.0 and later")
+    (tmp_path / "LICENSE" / "LICENSE_QT4_EDITOR").write_text(GPL3)
+    assert cache_writer.detect_license(tmp_path).id == "Matplotlib (PSF-style)"
 
 
 def test_copyleft_is_flagged_in_manifest_and_pr_but_still_written(tmp_path):

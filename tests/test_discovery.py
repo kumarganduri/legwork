@@ -116,6 +116,26 @@ def test_the_cache_index_lists_exactly_the_cache_folders():
         assert manifest["source_repo_url"].lower() == f"https://github.com/{e['repo']}".lower()
 
 
+def test_the_index_and_cache_readme_match_the_manifests():
+    """The index kept faster-whisper's old English-only description after the
+    wrapper changed, and the README table showed unpinned installs (fresh QA,
+    2026-10-03). Run scripts/build_cache_index.py after changing an entry."""
+    import json
+    from pathlib import Path
+
+    import importlib.util
+
+    cache = Path(__file__).resolve().parents[1] / "cache"
+    spec = importlib.util.spec_from_file_location("bci", cache.parent / "scripts" / "build_cache_index.py")
+    bci = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bci)
+    readme = (cache / "README.md").read_text()
+    for e in json.loads((cache / "index.json").read_text()):
+        manifest = json.loads((cache / e["folder"] / "manifest.json").read_text())
+        assert e["what"] == " ".join(manifest["entrypoint"].split()), e["repo"]
+        assert f"| {bci.install_summary(manifest['install_command'])} |" in readme, e["repo"]
+
+
 def test_odd_index_entries_are_cleaned_or_skipped_and_never_break_search(monkeypatch):
     """A null description, stars as a string or a missing date made every
     find_tools call fail (Codex and pre-launch review, 2026-10-03)."""
@@ -149,6 +169,13 @@ def test_odd_index_entries_are_cleaned_or_skipped_and_never_break_search(monkeyp
         ("read pdf tables", "jsvine/pdfplumber"),
         ("query csv with sql", "duckdb/duckdb"),
         ("download youtube video", "yt-dlp/yt-dlp"),
+        # The README's own "try these first" wording (fresh QA, 2026-10-03)
+        ("transcribe voice memo", "SYSTRAN/faster-whisper"),
+        ("transcribe m4a audio", "SYSTRAN/faster-whisper"),
+        ("voice memo to text", "SYSTRAN/faster-whisper"),
+        ("pull the tables out of report.pdf", "jsvine/pdfplumber"),
+        ("make a qr code", "lincolnloop/python-qrcode"),
+        ("text readability", "textstat/textstat"),
     ],
 )
 def test_the_right_cached_tool_ranks_first_for_common_needs(need, first):
@@ -161,6 +188,22 @@ def test_the_right_cached_tool_ranks_first_for_common_needs(need, first):
 
     index = json.loads((Path(__file__).resolve().parents[1] / "cache" / "index.json").read_text())
     assert cache_matches(search_terms(need).split(), index)[0].slug == first
+
+
+@pytest.mark.parametrize("need", ["weather forecast", "speech to text", "make qr code", "translate text", "csv to json", "speech synthesis"])
+def test_unrelated_cached_tools_are_not_lifted(need):
+    """One shared word ("for" in "forecast", "code", "text") put gitleaks,
+    shellcheck or ruff at the top (fresh QA, 2026-10-03)."""
+    import json
+    from pathlib import Path
+
+    from legwork.discovery import cache_matches
+
+    index = json.loads((Path(__file__).resolve().parents[1] / "cache" / "index.json").read_text())
+    unrelated = {"SYSTRAN/faster-whisper"} if need == "speech synthesis" else set()
+    unrelated |= {"gitleaks/gitleaks", "ast-grep/ast-grep", "Zulko/moviepy", "koalaman/shellcheck", "python-pillow/Pillow",
+                 "prettier/prettier", "astral-sh/ruff", "adbar/trafilatura"}
+    assert not unrelated & {c.slug for c in cache_matches(search_terms(need).split(), index)}
 
 
 def test_cached_matches_survive_a_github_search_failure(monkeypatch):

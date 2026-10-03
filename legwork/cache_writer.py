@@ -81,6 +81,8 @@ _LICENSE_SIGNATURES: list[tuple[str, str]] = [
     ("permission is hereby granted, free of charge", "MIT"),
     ("redistribution and use in source and binary forms", "BSD"),
     ("permission to use, copy, modify, and/or distribute this software for any purpose", "ISC"),
+    ("mit-cmu license", "MIT-CMU"),
+    ("license agreement for matplotlib", "Matplotlib (PSF-style)"),
     ("this is free and unencumbered software released into the public domain", "Unlicense"),
 ]
 _COPYLEFT = ("AGPL-3.0", "GPL-3.0", "GPL-2.0", "GPL")
@@ -123,15 +125,27 @@ def detect_license(repo_root: Path) -> LicenseInfo:
     """Read the repo's top-level LICENSE/COPYING file(s). Offline, so what's
     recorded is the license of the exact commit the wrapper was built from."""
     files = sorted(p for p in repo_root.iterdir() if p.is_file() and _LICENSE_FILE_RE.match(p.name))
+    # matplotlib keeps its license at LICENSE/LICENSE, next to the licenses
+    # of code it bundles; only the project's own counts.
+    folder = repo_root / "LICENSE"
+    if not files and folder.is_dir() and not folder.is_symlink():
+        files = sorted(p for p in folder.iterdir() if p.is_file() and p.name.upper() in ("LICENSE", "LICENSE.TXT", "LICENSE.MD"))
     if not files:
         return LicenseInfo("none", "missing: no license file, so redistribution terms are unknown")
 
     ids = []
     for path in files:
         text = " ".join(path.read_text(errors="replace")[:64 * 1024].lower().split())
-        found = next((spdx for signature, spdx in _LICENSE_SIGNATURES if signature in text), None)
+        # The title decides first: the GPL-3.0's own text names the Affero
+        # license, so matching anywhere called every GPL-3.0 repo AGPL
+        # (fresh QA, 2026-10-03).
+        head = text[:1500]
+        in_head = sorted((head.find(sig), i, spdx) for i, (sig, spdx) in enumerate(_LICENSE_SIGNATURES) if sig in head)
+        found = in_head[0][2] if in_head else next((spdx for sig, spdx in _LICENSE_SIGNATURES if sig in text), None)
         if found == "BSD":
-            found = "BSD-3-Clause" if "neither the name" in text else "BSD-2-Clause"
+            # The third clause, in either common wording ("Neither the name of
+            # ..." or "The name of the author may not be used ...")
+            found = "BSD-3-Clause" if "neither the name" in text or "to endorse or promote products" in text else "BSD-2-Clause"
         ids.append(found or f"unrecognized ({path.name})")
     license_id = " OR ".join(dict.fromkeys(ids))
 

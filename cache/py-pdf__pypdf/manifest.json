@@ -3,7 +3,7 @@
   "commit_sha": "0d43fad5bdaea3d487ae63b29b47f870fc3f9eb6",
   "synthesis_date": "2026-10-01T18:47:46+00:00",
   "wrapper_language": "python",
-  "source_license": "BSD-2-Clause",
+  "source_license": "BSD-3-Clause",
   "license_flag": null,
   "llm_model": "gpt-5",
   "smoke_test": {
