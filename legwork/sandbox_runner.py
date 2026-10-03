@@ -317,6 +317,7 @@ _BPF_LD_W_ABS, _BPF_JEQ_K, _BPF_JGE_K, _BPF_RET_K = 0x20, 0x15, 0x35, 0x06
 _SECCOMP_RET_ALLOW = 0x7FFF0000
 _SECCOMP_RET_ERRNO = 0x00050000
 _EAFNOSUPPORT, _ENOSYS = 97, 38
+_IO_URING_FIRST, _IO_URING_LAST = 425, 427  # io_uring_setup, _enter, _register
 _AF_UNIX = 1
 # machine -> (AUDIT_ARCH value, socket syscall number)
 _SECCOMP_ARCHES = {
@@ -339,18 +340,25 @@ def no_unix_sockets_filter(machine: str | None = None) -> bytes | None:
         return None
     audit_arch, socket_nr = arch
     deny = _SECCOMP_RET_ERRNO | _EAFNOSUPPORT
+    # io_uring can open sockets without calling socket(), so the AF_UNIX check
+    # never sees them (pre-launch review, 2026-10-03). Its three calls
+    # (io_uring_setup/enter/register, 425-427 on x86-64 and ARM64 alike) get
+    # ENOSYS, what older kernels say, and programs fall back to ordinary I/O.
     return b"".join(
         [
             _bpf(_BPF_LD_W_ABS, 0, 0, 4),  # 0: A = arch
             _bpf(_BPF_JEQ_K, 1, 0, audit_arch),  # 1: native -> 3
             _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | _ENOSYS),  # 2: other ABIs refused
             _bpf(_BPF_LD_W_ABS, 0, 0, 0),  # 3: A = syscall number
-            _bpf(_BPF_JGE_K, 3, 0, 0x40000000),  # 4: x32 calls -> 8
-            _bpf(_BPF_JEQ_K, 0, 3, socket_nr),  # 5: socket() ? 6 : 9
-            _bpf(_BPF_LD_W_ABS, 0, 0, 16),  # 6: A = domain (args[0], low word)
-            _bpf(_BPF_JEQ_K, 0, 1, _AF_UNIX),  # 7: AF_UNIX ? 8 : 9
-            _bpf(_BPF_RET_K, 0, 0, deny),  # 8: refused
-            _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),  # 9: allowed
+            _bpf(_BPF_JGE_K, 5, 0, 0x40000000),  # 4: x32 calls -> 10
+            _bpf(_BPF_JGE_K, 0, 1, _IO_URING_FIRST),  # 5: >= 425 ? 6 : 7
+            _bpf(_BPF_JGE_K, 0, 4, _IO_URING_LAST + 1),  # 6: >= 428 ? 7 : 11 (io_uring)
+            _bpf(_BPF_JEQ_K, 0, 4, socket_nr),  # 7: socket() ? 8 : 12
+            _bpf(_BPF_LD_W_ABS, 0, 0, 16),  # 8: A = domain (args[0], low word)
+            _bpf(_BPF_JEQ_K, 0, 2, _AF_UNIX),  # 9: AF_UNIX ? 10 : 12
+            _bpf(_BPF_RET_K, 0, 0, deny),  # 10: refused
+            _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | _ENOSYS),  # 11: io_uring: "not on this kernel"
+            _bpf(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),  # 12: allowed
         ]
     )
 
@@ -512,7 +520,11 @@ class MacProfile:
 
 
 def _generate_profile(
-    workdir: Path, allow_network: bool, extra_writable: tuple[Path, ...] = (), read_only: tuple[Path, ...] = ()
+    workdir: Path,
+    allow_network: bool,
+    extra_writable: tuple[Path, ...] = (),
+    read_only: tuple[Path, ...] = (),
+    local_network: bool = False,
 ) -> MacProfile:
     real_workdir = str(workdir.resolve())
     home = str(Path.home().resolve())
@@ -599,6 +611,13 @@ def _generate_profile(
             '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
             '(allow network* (subpath (param "WORKDIR")))',
         ]
+        if not local_network:
+            # Installs reached services on this Mac (a database, a browser's
+            # debug port, a notebook) over 127.0.0.1 and ::1 (pre-launch
+            # review, 2026-10-03). Later rules win, so this narrows the allow
+            # above to the internet. Served tools given --allow-net keep
+            # localhost: some drive their own helper processes over it.
+            lines.append('(deny network-outbound (remote ip "localhost:*"))')
     return MacProfile("\n".join(lines), params)
 
 
@@ -863,7 +882,7 @@ def exec_serve(
     _check_backend_available()
     profile = None
     if platform.system() == "Darwin":  # inline: no file in the writable workdir to tamper with
-        profile = _generate_profile(workdir, allow_network=allow_network, read_only=allow_read)
+        profile = _generate_profile(workdir, allow_network=allow_network, read_only=allow_read, local_network=True)
     seccomp_fd = None
     if platform.system() == "Linux" and allow_network:
         program = no_unix_sockets_filter()

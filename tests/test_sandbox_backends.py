@@ -157,6 +157,16 @@ def test_filter_refuses_only_unix_sockets(machine, arch, socket_nr):
     assert _run_bpf(prog, 0x40000003, 102) == ERRNO | 38  # 32-bit ABI: refused
 
 
+@pytest.mark.parametrize(("machine", "arch"), [("x86_64", 0xC000003E), ("aarch64", 0xC00000B7)])
+def test_filter_turns_io_uring_off(machine, arch):
+    """io_uring opens sockets without socket(), past the AF_UNIX check
+    (pre-launch review, 2026-10-03). Programs see ENOSYS and fall back."""
+    prog = no_unix_sockets_filter(machine)
+    for nr in (425, 426, 427):
+        assert _run_bpf(prog, arch, nr) == ERRNO | 38
+    assert _run_bpf(prog, arch, 424) == ALLOW and _run_bpf(prog, arch, 428) == ALLOW
+
+
 def test_filter_refuses_x32_syscalls():
     assert _run_bpf(no_unix_sockets_filter("x86_64"), 0xC000003E, 0x40000000 | 41, arg0=1) == ERRNO | 97
 

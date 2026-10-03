@@ -727,3 +727,30 @@ def _catch(fn):
     except Exception as exc:  # noqa: BLE001
         return exc
     return None
+
+
+@macos_only
+def test_installs_reach_the_internet_but_not_services_on_this_machine(tmp_path):
+    """Installs could connect to 127.0.0.1 and ::1: a database, a browser's
+    debug port (pre-launch review, 2026-10-03)."""
+    v4 = socket.socket()
+    v4.bind(("127.0.0.1", 0))
+    v4.listen(1)
+    v6 = socket.socket(socket.AF_INET6)
+    v6.bind(("::1", 0))
+    v6.listen(1)
+    probe = (
+        "import socket\n"
+        f"for fam, addr in ((socket.AF_INET, ('127.0.0.1', {v4.getsockname()[1]})), (socket.AF_INET6, ('::1', {v6.getsockname()[1]}))):\n"
+        "    s = socket.socket(fam); s.settimeout(3)\n"
+        "    try:\n        s.connect(addr); print('REACHED')\n"
+        "    except OSError:\n        print('blocked')\n"
+    )
+    try:
+        result = install([SYSTEM_PYTHON, "-c", probe], tmp_path, timeout=30)
+    finally:
+        v4.close()
+        v6.close()
+    assert result.stdout.split() == ["blocked", "blocked"]
+    served = sandbox_runner._generate_profile(tmp_path, allow_network=True, local_network=True)
+    assert 'remote ip "localhost:*"' not in served.text

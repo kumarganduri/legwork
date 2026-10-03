@@ -56,7 +56,9 @@ def test_install_from_the_cache_and_read_only_what_was_granted(tmp_path, monkeyp
 
         result = h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                            "params": {"name": "pdfplumber__extract_tables", "arguments": {"path": str(granted / "plan.pdf")}}})["result"]
-        assert not result["isError"] and "Offline sync conflicts" in result["content"][0]["text"], result
+        text = "\n".join(c.get("text", "") for c in result["content"])
+        assert not result["isError"] and "Offline sync conflicts" in text, result
+        assert text.startswith("[Output of jsvine/pdfplumber")  # marked as untrusted data
 
         # Byte-identical files; only the grant differs.
         outside = h.use_tool("jsvine/pdfplumber", "extract_tables", {"path": str(other / "plan.pdf")})
