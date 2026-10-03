@@ -5,13 +5,13 @@
   "wrapper_language": "python",
   "source_license": "MIT",
   "license_flag": null,
-  "llm_model": "gpt-5",
+  "llm_model": "gpt-5, rewritten by hand",
   "smoke_test": {
     "result": "passed",
     "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
     "ran_at": "2026-10-01T19:14:27+00:00"
   },
-  "entrypoint": "Offline speech-to-text transcription using Faster-Whisper with a pre-downloaded tiny.en CTranslate2 model",
-  "install_command": "pip install \"faster-whisper\" \"av>=10.0.0\" numpy huggingface_hub\npython - << 'PY'\nimport os\nfrom huggingface_hub import snapshot_download\nos.makedirs(\"./models\", exist_ok=True)\nsnapshot_download(\n    repo_id=\"Systran/faster-whisper-tiny.en\",\n    local_dir=\"./models/faster-whisper-tiny.en\",\n    local_dir_use_symlinks=False,\n    ignore_patterns=[\"*.md\", \"*.png\", \"*.jpg\", \"*.jpeg\", \"*.pdf\"],\n)\nprint(\"Model downloaded to ./models/faster-whisper-tiny.en\")\nPY",
+  "entrypoint": "Offline speech-to-text for any audio or video file (m4a, mp3, wav, mp4\u2026) with faster-whisper's multilingual base model, downloaded during install",
+  "install_command": "pip install \"faster-whisper==1.2.1\" \"av==15.1.0\" \"huggingface_hub>=0.23,<3\"\npython - <<'PY'\nfrom huggingface_hub import snapshot_download\nsnapshot_download(repo_id=\"Systran/faster-whisper-base\", local_dir=\"./models/faster-whisper-base\")\nPY",
   "mcp_sdk": "mcp<2"
 }
