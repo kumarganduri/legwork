@@ -23,6 +23,9 @@ def _no_live_cache(monkeypatch):
     everyone. Tests that cover the cache point LEGWORK_CACHE_URL at a
     local folder themselves."""
     monkeypatch.setenv("LEGWORK_CACHE_URL", "off")
+    from legwork import cache_reader
+
+    monkeypatch.setattr(cache_reader, "_revoked_cache", None)
 
 
 @pytest.fixture(autouse=True)

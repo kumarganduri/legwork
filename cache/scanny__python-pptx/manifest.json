@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:47:03+00:00"
   },
   "entrypoint": "Create, update, and extract text from PowerPoint (.pptx) files using the python-pptx library",
-  "install_command": "pip install python-pptx",
+  "install_command": "pip install python-pptx==1.0.2",
   "mcp_sdk": "mcp<2"
 }

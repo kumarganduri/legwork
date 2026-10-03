@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:51:36+00:00"
   },
   "entrypoint": "Retrieve, list, and translate YouTube video transcripts using the youtube-transcript-api library",
-  "install_command": "pip install youtube-transcript-api",
+  "install_command": "pip install youtube-transcript-api==1.2.4",
   "mcp_sdk": "mcp<2"
 }

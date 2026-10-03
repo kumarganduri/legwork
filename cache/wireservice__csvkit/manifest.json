@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:30:38+00:00"
   },
   "entrypoint": "Run csvkit CLI tools (csvcut, csvstat, in2csv, etc.) via a generic subprocess wrapper",
-  "install_command": "pip install csvkit",
+  "install_command": "pip install csvkit==2.2.0",
   "mcp_sdk": "mcp<2"
 }

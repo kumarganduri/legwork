@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:58:36+00:00"
   },
   "entrypoint": "Extract main text and metadata from HTML strings or local HTML files using Trafilatura",
-  "install_command": "pip install trafilatura",
+  "install_command": "pip install trafilatura==2.3.0",
   "mcp_sdk": "mcp<2"
 }

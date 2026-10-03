@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:49:20+00:00"
   },
   "entrypoint": "Convert HTML (string or local .html file) to a PDF using xhtml2pdf’s Python API",
-  "install_command": "pip install xhtml2pdf",
+  "install_command": "pip install xhtml2pdf==0.2.21",
   "mcp_sdk": "mcp<2"
 }

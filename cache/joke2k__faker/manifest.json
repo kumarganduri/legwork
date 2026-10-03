@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:58:54+00:00"
   },
   "entrypoint": "Generate arbitrary fake data fields by provider name via the Faker Python API, with optional locales, seeding, repeats, and custom providers",
-  "install_command": "pip install Faker",
+  "install_command": "pip install Faker==40.40.0",
   "mcp_sdk": "mcp<2"
 }

@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:30:37+00:00"
   },
   "entrypoint": "Run SQLite queries and modify tables using the sqlite-utils Python library",
-  "install_command": "pip install sqlite-utils",
+  "install_command": "pip install sqlite-utils==4.2.1",
   "mcp_sdk": "mcp<2"
 }

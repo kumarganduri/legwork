@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:55:37+00:00"
   },
   "entrypoint": "Trim and transcode local video files using MoviePy (FFmpeg pre-downloaded for offline use)",
-  "install_command": "pip install moviepy\nmkdir -p .imageio\nIMAGEIO_USERDIR=./.imageio python -c \"import imageio_ffmpeg,sys; sys.stdout.write(imageio_ffmpeg.get_ffmpeg_exe())\"",
+  "install_command": "pip install moviepy==2.2.1\nmkdir -p .imageio\nIMAGEIO_USERDIR=./.imageio python -c \"import imageio_ffmpeg,sys; sys.stdout.write(imageio_ffmpeg.get_ffmpeg_exe())\"",
   "mcp_sdk": "mcp<2"
 }

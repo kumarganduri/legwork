@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:57:12+00:00"
   },
   "entrypoint": "Optimize SVG files using the local svgo CLI (minify a file or an SVG string)",
-  "install_command": "npm install svgo",
+  "install_command": "npm install svgo@4.1.0",
   "mcp_sdk": "mcp<2"
 }

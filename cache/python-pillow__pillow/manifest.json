@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:24:17+00:00"
   },
   "entrypoint": "Perform common image operations (inspect, resize, rotate, convert, crop, grayscale, overlay text) via Pillow's Python API",
-  "install_command": "pip install pillow",
+  "install_command": "pip install pillow==12.3.0",
   "mcp_sdk": "mcp<2"
 }

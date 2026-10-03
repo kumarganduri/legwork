@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:29:33+00:00"
   },
   "entrypoint": "Execute SQL queries with DuckDB (in-memory or file-backed) and return results",
-  "install_command": "pip install duckdb",
+  "install_command": "pip install duckdb==1.5.6",
   "mcp_sdk": "mcp<2"
 }

@@ -12,6 +12,6 @@
     "ran_at": "2026-09-27T12:41:34+00:00"
   },
   "entrypoint": "Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins",
-  "install_command": "pip install \"markitdown[all]\"",
+  "install_command": "pip install \"markitdown[all]==0.1.8\"",
   "mcp_sdk": "mcp<2"
 }

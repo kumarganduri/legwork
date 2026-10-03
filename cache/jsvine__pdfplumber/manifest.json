@@ -12,6 +12,6 @@
     "ran_at": "2026-09-27T14:33:21+00:00"
   },
   "entrypoint": "Extract text, tables, and low-level page objects from local PDFs using pdfplumber’s Python API",
-  "install_command": "pip install pdfplumber",
+  "install_command": "pip install pdfplumber==0.11.10",
   "mcp_sdk": "mcp<2"
 }

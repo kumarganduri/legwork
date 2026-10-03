@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:57:10+00:00"
   },
   "entrypoint": "Convert HTML (string or file) to Markdown using the python-markdownify library",
-  "install_command": "pip install markdownify",
+  "install_command": "pip install markdownify==1.2.3",
   "mcp_sdk": "mcp<2"
 }

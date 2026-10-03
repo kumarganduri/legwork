@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:32:00+00:00"
   },
   "entrypoint": "Validate JSON data against JSON Schema using the jsonschema Python library",
-  "install_command": "pip install \"jsonschema[format]\"",
+  "install_command": "pip install \"jsonschema[format]==4.26.0\"",
   "mcp_sdk": "mcp<2"
 }

@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:46:44+00:00"
   },
   "entrypoint": "Create, read, and modify .docx files using python-docx (create new documents, extract paragraphs, and append text into a new copy)",
-  "install_command": "pip install python-docx",
+  "install_command": "pip install python-docx==1.2.0",
   "mcp_sdk": "mcp<2"
 }

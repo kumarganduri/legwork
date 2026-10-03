@@ -54,6 +54,33 @@ def test_no_entry_means_none(tmp_path):
     assert cache_reader.fetch(REF) is None
 
 
+def test_a_revoked_entry_is_neither_installed_nor_listed(tmp_path, monkeypatch):
+    """A release's cache can't change after it ships; revoked.json can pull an entry."""
+    write_entry(tmp_path / "cache")
+    (tmp_path / "cache" / "index.json").write_text(json.dumps([{"repo": "owner/repo"}, {"repo": "other/tool"}]))
+    assert cache_reader.fetch(REF) is not None
+    (tmp_path / "cache" / "revoked.json").write_text(json.dumps({"Owner/Repo": "upstream compromised, 2026-10-10"}))
+    monkeypatch.setattr(cache_reader, "_revoked_cache", None)
+    assert cache_reader.fetch(REF) is None
+    assert [e["repo"] for e in cache_reader.fetch_index()] == ["other/tool"]
+
+
+def test_a_release_reads_revocations_from_main(monkeypatch):
+    monkeypatch.setattr(cache_reader, "default_cache_url", lambda: "https://raw.githubusercontent.com/kumarganduri/legwork/v0.7.9/cache")
+    monkeypatch.delenv("LEGWORK_CACHE_URL")
+    with patch("legwork.cache_reader._read", return_value='{"owner/repo": "bad"}') as read:
+        assert cache_reader._revoked(cache_reader.default_cache_url()) == {"owner/repo"}
+    assert read.call_args.args == (cache_reader.DEFAULT_CACHE_URL, "revoked.json")
+
+
+def test_unreadable_revocations_revoke_nothing(monkeypatch):
+    with patch("legwork.cache_reader._read", side_effect=CacheUnavailableError("offline")):
+        assert cache_reader._revoked("https://cache.example/cache") == frozenset()
+    monkeypatch.setattr(cache_reader, "_revoked_cache", None)
+    with patch("legwork.cache_reader._read", return_value='["not", "an", "object"]'):
+        assert cache_reader._revoked("https://cache.example/cache") == frozenset()
+
+
 def test_off_means_none_even_with_an_entry(tmp_path, monkeypatch):
     write_entry(tmp_path / "cache")
     monkeypatch.setenv("LEGWORK_CACHE_URL", "off")
@@ -112,6 +139,16 @@ def test_http_cache_trouble_is_unavailable_not_fatal(monkeypatch, error):
 
 def test_default_cache_is_the_legwork_repo():
     assert cache_reader.DEFAULT_CACHE_URL == "https://raw.githubusercontent.com/kumarganduri/legwork/main/cache"
+
+
+def test_a_released_version_reads_the_cache_at_its_own_tag(monkeypatch):
+    """Live main reached every user with no release (pre-launch review, 2026-10-03)."""
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.7.9")
+    assert cache_reader.default_cache_url() == "https://raw.githubusercontent.com/kumarganduri/legwork/v0.7.9/cache"
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "0.8.0.dev3+g1234")
+    assert cache_reader.default_cache_url().endswith("/main/cache")
 
 
 # --- run_cached -------------------------------------------------------------------

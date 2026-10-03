@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:13:56+00:00"
   },
   "entrypoint": "Remove image backgrounds from local images using rembg’s Python API (models cached under ./models)",
-  "install_command": "pip install \"rembg[cpu,cli]\"\nREMBG_HOME=./models python - <<'PY'\nimport os\nos.makedirs(\"./models\", exist_ok=True)\nfrom PIL import Image\nfrom rembg import new_session, remove\n# Pre-download a small, fast model to ensure offline operation\nsession = new_session(\"u2net\")\n# Trigger a load by processing a tiny image\nimg = Image.new(\"RGBA\", (8, 8), (255, 255, 255, 255))\nout = remove(img, session=session)\nout.save(\"._rembg_warmup.png\")\nprint(\"rembg warm-up done\")\nPY",
+  "install_command": "pip install \"rembg[cpu,cli]==2.0.85\"\nREMBG_HOME=./models python - <<'PY'\nimport os\nos.makedirs(\"./models\", exist_ok=True)\nfrom PIL import Image\nfrom rembg import new_session, remove\n# Pre-download a small, fast model to ensure offline operation\nsession = new_session(\"u2net\")\n# Trigger a load by processing a tiny image\nimg = Image.new(\"RGBA\", (8, 8), (255, 255, 255, 255))\nout = remove(img, session=session)\nout.save(\"._rembg_warmup.png\")\nprint(\"rembg warm-up done\")\nPY",
   "mcp_sdk": "mcp<2"
 }

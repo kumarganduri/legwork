@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:00:55+00:00"
   },
   "entrypoint": "Parse and generate iCalendar (.ics) files: list events from ICS text or file, and create/append events to ICS files",
-  "install_command": "pip install icalendar",
+  "install_command": "pip install icalendar==7.3.0",
   "mcp_sdk": "mcp<2"
 }

@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:33:14+00:00"
   },
   "entrypoint": "Run Prettier’s CLI to format code (format from string via stdin or operate on files) using ./node_modules/.bin/prettier",
-  "install_command": "npm install prettier",
+  "install_command": "npm install prettier@3.9.9",
   "mcp_sdk": "mcp<2"
 }

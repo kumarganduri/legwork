@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:31:43+00:00"
   },
   "entrypoint": "Generate interactive Plotly bar charts as HTML from x/y data using plotly.graph_objects",
-  "install_command": "pip install plotly",
+  "install_command": "pip install plotly==7.1.0",
   "mcp_sdk": "mcp<2"
 }

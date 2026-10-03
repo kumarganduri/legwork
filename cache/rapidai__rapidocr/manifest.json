@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:21:27+00:00"
   },
   "entrypoint": "Offline OCR on local images using RapidOCR (ONNX Runtime), with optional visualization output",
-  "install_command": "pip install rapidocr onnxruntime\npython - << 'PY'\n# Pre-initialize RapidOCR to ensure any required assets/models are prepared while network is available.\ntry:\n    from rapidocr import RapidOCR\n    _ = RapidOCR()\n    print(\"RapidOCR initialized successfully during install.\")\nexcept Exception as e:\n    # Not fatal for installation; some environments bundle models and won't need downloads at this step.\n    print(\"RapidOCR pre-initialization warning:\", e)\nPY",
+  "install_command": "pip install rapidocr==3.9.2 onnxruntime==1.30.0\npython - << 'PY'\n# Pre-initialize RapidOCR to ensure any required assets/models are prepared while network is available.\ntry:\n    from rapidocr import RapidOCR\n    _ = RapidOCR()\n    print(\"RapidOCR initialized successfully during install.\")\nexcept Exception as e:\n    # Not fatal for installation; some environments bundle models and won't need downloads at this step.\n    print(\"RapidOCR pre-initialization warning:\", e)\nPY",
   "mcp_sdk": "mcp<2"
 }

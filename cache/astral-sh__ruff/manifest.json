@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:32:54+00:00"
   },
   "entrypoint": "Ruff CLI to lint (check) and format Python code",
-  "install_command": "pip install ruff",
+  "install_command": "pip install ruff==0.16.10",
   "mcp_sdk": "mcp<2"
 }

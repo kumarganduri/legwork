@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:22:03+00:00"
   },
   "entrypoint": "Use yt-dlp to download media or extract info from URLs via its Python API",
-  "install_command": "pip install \"yt-dlp[default]\"",
+  "install_command": "pip install \"yt-dlp[default]==2026.8.19\"",
   "mcp_sdk": "mcp<2"
 }

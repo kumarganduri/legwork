@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:35:00+00:00"
   },
   "entrypoint": "Lint SQL strings using the sqlfluff CLI (and report the installed sqlfluff version)",
-  "install_command": "pip install sqlfluff",
+  "install_command": "pip install sqlfluff==4.4.0",
   "mcp_sdk": "mcp<2"
 }

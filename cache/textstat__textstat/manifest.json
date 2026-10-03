@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:22:44+00:00"
   },
   "entrypoint": "Compute readability metrics and text statistics from text using the textstat Python library",
-  "install_command": "pip install textstat\npython -c \"import nltk; nltk.download('cmudict', download_dir='./nltk_data', quiet=True, raise_on_error=True)\"",
+  "install_command": "pip install textstat==0.7.13\npython -c \"import nltk; nltk.download('cmudict', download_dir='./nltk_data', quiet=True, raise_on_error=True)\"",
   "mcp_sdk": "mcp<2"
 }

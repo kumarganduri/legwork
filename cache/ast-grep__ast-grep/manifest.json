@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:36:35+00:00"
   },
   "entrypoint": "Run the ast-grep CLI for AST-based code search and rewrite",
-  "install_command": "pip install ast-grep-cli",
+  "install_command": "pip install ast-grep-cli==0.45.3",
   "mcp_sdk": "mcp<2"
 }

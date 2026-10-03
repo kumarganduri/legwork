@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:55:27+00:00"
   },
   "entrypoint": "Generate QR codes as PNG or SVG and ASCII art from text using the python-qrcode library",
-  "install_command": "pip install \"qrcode[pil]\"",
+  "install_command": "pip install \"qrcode[pil]==8.2\"",
   "mcp_sdk": "mcp<2"
 }

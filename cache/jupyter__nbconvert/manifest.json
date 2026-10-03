@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:51:40+00:00"
   },
   "entrypoint": "Convert Jupyter .ipynb notebooks to static formats (e.g., HTML, Markdown) via nbconvert’s Python API",
-  "install_command": "pip install nbconvert",
+  "install_command": "pip install nbconvert==7.17.1",
   "mcp_sdk": "mcp<2"
 }

@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T19:25:00+00:00"
   },
   "entrypoint": "Image resizing/format conversion and metadata via the Node sharp library invoked from Python",
-  "install_command": "npm install sharp",
+  "install_command": "npm install sharp@0.35.5",
   "mcp_sdk": "mcp<2"
 }

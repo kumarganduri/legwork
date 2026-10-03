@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:38:44+00:00"
   },
   "entrypoint": "Symbolic math operations via SymPy’s Python API (simplify, differentiate, integrate, solve, series, LaTeX)",
-  "install_command": "pip install sympy",
+  "install_command": "pip install sympy==1.14.0",
   "mcp_sdk": "mcp<2"
 }

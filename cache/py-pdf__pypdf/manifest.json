@@ -12,6 +12,6 @@
     "ran_at": "2026-10-01T18:47:48+00:00"
   },
   "entrypoint": "PDF text extraction, metadata reading, splitting, and merging using pypdf",
-  "install_command": "pip install pypdf[crypto]",
+  "install_command": "pip install pypdf[crypto]==6.19.0",
   "mcp_sdk": "mcp<2"
 }
