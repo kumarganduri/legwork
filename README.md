@@ -114,8 +114,8 @@ is what makes it ask you before an install:
   already has an MCP server, and a warning on very new repos (the malware
   we caught was three days old). Descriptions are marked as untrusted text.
 
-**41 popular tools are in the [public cache](cache/) and install in about a
-minute with no API key**: speech-to-text, OCR, background removal, PDFs and
+**41 tools are in the [public cache](cache/) and install in about a minute
+with no API key**: speech-to-text, OCR, background removal, PDFs and
 Office files, video, YouTube transcripts, charts, DuckDB and CSV tools, maths
 and units, and linters and formatters. Each was built, reviewed by hand and
 tried with a real call before it was added. Others need a model key, and building takes 1–5 minutes. Put the key
@@ -124,6 +124,18 @@ hub reads it when it needs to build, so the key never goes in your MCP
 config, where it would sit in plain text.
 
 `legwork find "extract tables pdf"` runs the same search from your terminal.
+
+- **Tools that use the internet** (YouTube transcripts and downloads, web
+  pages) need the hub started with `--allow-net`; without it they install,
+  then can't connect.
+- **Files a tool makes** (a trimmed video, a chart) are saved in the tool's
+  own folder under `~/.legwork`, and the tool replies with the full path;
+  images also come back inline. Your granted folders are read-only, so a
+  tool can't write next to your files.
+- **GitHub allows 10 searches a minute without a token**, and each
+  `find_tools` uses 2 or 3. Cached tools still show up when GitHub says no.
+  For 30 a minute, add `GITHUB_TOKEN=<a GitHub token with no scopes>` to
+  `~/.legwork.env`.
 
 ### Other MCP clients
 
@@ -195,22 +207,32 @@ If anything's missing, Legwork stops and prints these instructions.
 x86-64 and ARM64; Fedora; Debian. **Windows:** not supported natively.
 WSL2 should behave like Ubuntu (install bubblewrap) but hasn't been tested.
 
+A repo in the [public cache](cache/) needs no model and no API key:
+
+```sh
+uvx legwork-mcp jsvine/pdfplumber
+```
+
+It installs and tests the cached wrapper in about a minute, then prints the
+line to connect it:
+
+```
+Installed the cached MCP wrapper for jsvine/pdfplumber; it passed its self-test here.
+  What it wraps: Extract text, tables, and low-level page objects from local PDFs using pdfplumber's Python API
+
+Connect it to Claude Code:
+  claude mcp add pdfplumber -- ~/.local/bin/uvx legwork-mcp serve jsvine/pdfplumber
+```
+
+For any other repo, Legwork has a model write the wrapper (1–3 minutes,
+1–3 model calls on your own key; see [Model providers](#model-providers)):
+
 ```sh
 export LEGWORK_LLM_ENDPOINT=https://api.openai.com/v1
 export LEGWORK_LLM_API_KEY=...        # your own key; never a CLI flag
 export LEGWORK_LLM_MODEL=gpt-5
 
-uvx legwork-mcp 2akouwu/reverify
-```
-
-A build takes 1–3 minutes and ends with the line to connect it:
-
-```
-Built an MCP wrapper for 2akouwu/reverify on attempt 2 of 3.
-  What it wraps: Verify claims about binaries using Reverify's deterministic tools (wraps `reverify verify --json`)
-
-Connect it to Claude Code:
-  claude mcp add reverify -- ~/.local/bin/uvx legwork-mcp serve 2akouwu/reverify
+uvx legwork-mcp owner/repo
 ```
 
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
@@ -219,8 +241,6 @@ the app is quit**: the running app writes its settings back on exit and
 drops edits it didn't make. Tested with Claude Code, Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
 For a permanent `legwork` command: `uv tool install legwork-mcp`.
 
-**Repos already in the [public cache](cache/) need no model call and no API
-key.** `uvx legwork-mcp 2akouwu/reverify` works as is.
 
 ## Model providers
 
@@ -297,7 +317,8 @@ A served tool **sees nothing in your home folder and has no network**. Grant
 exactly what a tool needs when you add it to your client:
 
 ```sh
-# Let markitdown read one folder (read-only):
+# Build it once (cached: no key needed), then let it read one folder (read-only):
+uvx legwork-mcp microsoft/markitdown
 claude mcp add markitdown -- uvx legwork-mcp serve microsoft/markitdown --allow-read ~/Downloads
 
 # A tool that fetches web pages:
@@ -364,6 +385,13 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
   the sandbox (no home folder, no writes outside its own folder) but keeps
   the install step's network access until you log out. Linux's sandbox
   stops these too.
+- **Keep your key file in your home folder** (`~/.legwork.env`, the
+  default). Sandboxed code can't read your home folder, but it can read
+  most places outside it.
+- **Not yet:** a folder tools can save into directly (they save in their
+  own folder and tell you where), and `legwork serve` used on its own passes
+  along anything a tool prints by mistake, which can confuse a client (the
+  hub filters it out).
 - **The scanner is heuristic.** It catches the obfuscation patterns seen in
   real payloads so far, and a determined author can get past it.
 
