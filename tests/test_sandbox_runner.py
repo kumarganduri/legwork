@@ -351,7 +351,7 @@ def test_exec_serve_runs_bwrap_without_network(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with patch("legwork.sandbox_runner.os.execve", side_effect=fake_execve), pytest.raises(SystemExit):
         sandbox_runner.exec_serve(["/bin/echo", "hi"], tmp_path)
-    assert captured["args"][0] == "bwrap"
+    assert os.path.isabs(captured["args"][0]) and captured["args"][0].endswith("/bwrap")  # never looked up in the tool's PATH
     assert "--unshare-all" in captured["args"] and "--share-net" not in captured["args"]
     assert captured["args"][-3:] == ["--", "/bin/echo", "hi"]
     assert "LEGWORK_LLM_API_KEY" not in captured["env"]
