@@ -33,10 +33,11 @@ Add it to `cache/revoked.json` on main, with the reason and date:
 { "owner/repo": "upstream release 1.2.3 compromised, 2026-10-10" }
 ```
 
-Every release reads this file from main, so within about ten minutes no
-installed version will install that entry from the cache or list it as
-cached. It can only remove entries. Then remove or fix the entry itself
-with a normal PR. It isn't retroactive: a tool someone already installed
+0.7.9 and later read this file from main, so within about ten minutes
+they stop installing that entry from the cache or listing it as cached. It
+can only remove entries. 0.7.8 and earlier read the whole cache from main
+and don't know this file, so also delete the entry's folder on main (a
+normal PR) to pull it from them. It isn't retroactive: a tool someone already installed
 stays installed until they remove it, so say so in the advisory.
 
 **The whole cache.** Users can turn it off with `LEGWORK_CACHE_URL=off` in

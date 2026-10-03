@@ -220,7 +220,8 @@ class Hub:
         try:
             grants = sandbox_runner.check_read_grants(allow_read)
         except sandbox_runner.SandboxGrantError as exc:
-            raise HubError(str(exc)) from exc
+            # The AI passed allow_read, not the CLI flag (fresh QA, 2026-10-03)
+            raise HubError(str(exc).replace("--allow-read ", "allow_read ", 1)) from exc
         for path in grants:
             if not any(path.is_relative_to(limit) for limit in self.limit_read):
                 allowed = ", ".join(str(p) for p in self.limit_read) or "no folders"
@@ -394,11 +395,9 @@ class Hub:
             job.finished.set()
 
     def _ready_message(self, item: Installed, how: str) -> str:
-        grants = ", ".join(str(p) for p in item.allow_read) or "no folders"
+        grants = ", ".join(str(p) for p in item.allow_read) or "none of your folders"
         prefix = self._prefix(item.slug)
-        tools = "\n".join(
-            f"  - {t['name']}: {' '.join((t.get('description') or '').split())[:120]}" for t in item.tools
-        ) or "  (none listed)"
+        tools = "\n".join(f"  - {t['name']}: {_first_sentence(t.get('description') or '')}" for t in item.tools) or "  (none listed)"
         example = item.tools[0]["name"] if item.tools else "TOOL"
         net_note = ""
         if not item.allow_net and _needs_network(item.slug):
@@ -430,7 +429,8 @@ class Hub:
             return self._ready_message(self.installed[slug], "installed")
         recent = "\n".join(f"  {line}" for line in job.log[-6:]) or "  starting"
         if job.state == "failed":
-            return f"Installing {slug} failed: {job.error}\nLast steps:\n{recent}"
+            steps = f"\nLast steps:\n{recent}" if job.log else ""
+            return f"Installing {slug} failed: {job.error}{steps}"
         return f"Still installing {slug} (builds take 1-5 minutes). Latest steps:\n{recent}\nCall install_status again; it waits for progress."
 
     def list_installed_tools(self) -> str:
@@ -682,6 +682,15 @@ _DENIAL_SIGNS = (
     "Operation not permitted", "Permission denied", "Read-only file system",
     "nodename nor servname", "Name or service not known", "Temporary failure in name resolution",
 )
+
+
+def _first_sentence(text: str, limit: int = 160) -> str:
+    """A tool's summary for the install reply. A hard cut at 120 characters
+    ended mid-list ("m4a (voice memos), mp3, wav, flac,"; fresh QA, 2026-10-03)."""
+    text = " ".join(text.split())
+    end = re.search(r"(?<=[.!?])\s", text)
+    first = text[: end.start()] if end else text
+    return first if len(first) <= limit else first[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
 def _needs_network(slug: str) -> bool:

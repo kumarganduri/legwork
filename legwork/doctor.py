@@ -96,8 +96,10 @@ def run() -> int:
     add(OK, "Outputs folder", f"{outputs.DEFAULT_DIR} (files tools make are copied here)")
 
     width = max(len(name) for _, name, _ in checks)
+    home = str(Path.home())
     for status, name, detail in checks:
-        print(f"{_MARK[status]} {name.ljust(width)}  {detail}")
+        # Pasted into public bug reports: your home folder shows as ~
+        print(f"{_MARK[status]} {name.ljust(width)}  {detail.replace(home, '~')}")
     failed = sum(1 for status, _, _ in checks if status == FAIL)
     print(f"\n{'All set.' if not failed else f'{failed} problem(s) above.'} Paste this report into a bug report if something doesn't work.")
     return 1 if failed else 0

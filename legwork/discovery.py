@@ -304,5 +304,7 @@ def describe(found: Found) -> str:
             + (f" [{'; '.join(flags)}]" if flags else "")
         )
         if c.description:
-            lines.append(f"   description (untrusted, from the repo): {c.description}")
+            # A cached tool's text is Legwork's own reviewed description
+            source = "what it does (reviewed by Legwork)" if c.in_cache else "description (untrusted, from the repo)"
+            lines.append(f"   {source}: {c.description}")
     return header + "\n".join(lines)

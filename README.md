@@ -38,7 +38,8 @@ install, and about a minute later it does the job. Files a tool makes are
 copied to `~/Legwork/outputs/`. On macOS, the first time a tool reads
 Downloads, macOS asks whether `uvx` may access it; allow it once. If
 something doesn't work, `uvx legwork-mcp doctor` checks your setup. Or
-build one tool yourself: `uvx legwork-mcp owner/repo`.
+build one tool yourself: `uvx legwork-mcp owner/repo` (a model key for repos
+not in the cache).
 
 ## Why not just ask your AI to install it?
 
@@ -94,7 +95,8 @@ claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 ```
 
 For Claude Desktop or Cursor, add this to the MCP config (for Claude
-Desktop, while the app is quit):
+Desktop, while the app is quit), with your own user name in the path: a
+folder that doesn't exist stops the hub from starting.
 
 ```json
 { "mcpServers": { "legwork": { "command": "uvx",
@@ -152,7 +154,7 @@ config, where it would sit in plain text.
   they get the same quarantine flag as downloads. `--outputs DIR` puts
   them elsewhere, `--outputs off` turns copying off.
 - **GitHub allows 10 searches a minute without a token**, and each
-  `find_tools` uses 2 or 3. Cached tools still show up when GitHub says no.
+  `find_tools` uses 2 to 4. Cached tools still show up when GitHub says no.
   For 30 a minute, add `GITHUB_TOKEN=<a GitHub token with no scopes>` to
   `~/.legwork.env`.
 
@@ -187,9 +189,11 @@ legwork-mcp` and use the full path that `which legwork` prints, plus
 
 ## Quick start
 
-You need **macOS or Linux**, [uv](https://docs.astral.sh/uv/), and any
-OpenAI-compatible chat-completions endpoint. Legwork itself is free; the
-only cost is your own model usage, which is 1–3 calls per build.
+You need **macOS or Linux** and [uv](https://docs.astral.sh/uv/). Tools in
+the [public cache](cache/) need nothing else. For any other repo you also
+need a model key for an OpenAI-compatible chat-completions endpoint (see
+[Model providers](#model-providers)). Legwork itself is free; the only cost
+is your own model usage, which is 1–3 calls per build.
 
 <details>
 <summary><b>Linux:</b> install bubblewrap (and one step on Ubuntu 24.04+)</summary>
@@ -243,7 +247,7 @@ Connect it to Claude Code:
   claude mcp add pdfplumber -- ~/.local/bin/uvx legwork-mcp serve jsvine/pdfplumber
 ```
 
-For any other repo, Legwork has a model write the wrapper (1–3 minutes,
+For any other repo, Legwork has a model write the wrapper (1–5 minutes,
 1–3 model calls on your own key; see [Model providers](#model-providers)):
 
 ```sh
@@ -257,8 +261,16 @@ uvx legwork-mcp owner/repo
 It also prints an `mcpServers` block for Claude Desktop, Cursor and other
 clients. For Claude Desktop, add it to `claude_desktop_config.json` **while
 the app is quit**: the running app writes its settings back on exit and
-drops edits it didn't make. Tested with Claude Code, Claude Desktop, Cursor, opencode, Codex CLI, Goose and OpenClaw.
-For a permanent `legwork` command: `uv tool install legwork-mcp`.
+drops edits it didn't make. For a permanent `legwork` command: `uv tool
+install legwork-mcp`.
+
+**Upgrading:** `uvx` keeps using the version it first downloaded. To get
+fixes (and the cache that ships with them), use `uvx legwork-mcp@latest`
+once, or `uv cache clean legwork-mcp`. `legwork doctor` warns when a client
+is pinned to an old version.
+
+**The name:** the package is `legwork-mcp`. `pip install legwork` and
+`uvx legwork` install an unrelated astronomy package.
 
 
 ## Model providers
@@ -345,15 +357,25 @@ uvx legwork-mcp serve owner/repo --allow-net
 ```
 
 `--allow-read` is repeatable and always read-only. Some folders can't be
-granted even on request: `/`, your whole home folder, places credentials
-live (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, keychains, browser
-cookies, `~/.npmrc`, `~/.legwork.env`, shell history), and any folder that
-contains one of those (such as `~/Library`). With `--allow-net`, the tool
-still can't reach local sockets such as your SSH agent or Docker.
+granted even on request: `/`, your whole home folder, and a list of known
+credential locations (`~/.ssh`, `~/.aws`, `~/.config`, `~/.gnupg`, macOS
+keychains and browser data, Linux keyrings and Firefox profiles,
+`~/.npmrc`, `~/.pgpass`, `~/.legwork.env`, shell history and startup files,
+AI clients' configs), and any folder that contains one of those (such as
+`~/Library`). It's a list, so it can miss a place your setup keeps secrets.
+
+**A granted folder is readable in full**, including any `.env` file or key
+inside it: grant `~/Downloads`, not your code folder. A tool with a folder
+*and* `--allow-net` could send what it reads to the internet, so grant both
+only to a tool that needs both. With `--allow-net`, the tool can reach
+services on this machine (`localhost`) but not local sockets such as your
+SSH agent or Docker.
 
 Outside your home folder, tools can read system locations such as `/usr`,
-`/opt`, `/etc`, `/tmp` and `/Users/Shared`, because Python and the libraries
-they need live there. Don't keep secrets in those places.
+`/opt`, `/etc`, `/tmp`, macOS's per-user temporary folder, `/Users/Shared`
+and external drives under `/Volumes`, because Python and the libraries they
+need live there. Don't keep secrets in those places. (On Linux, `/tmp` is a
+private empty one.)
 
 On macOS, the first time a tool reads a protected folder (Downloads,
 Documents, Desktop), macOS itself asks whether `uvx` may access it. That's

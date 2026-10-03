@@ -18,12 +18,12 @@ default with no network and none of your files.
 | Your home folder | ✗ | ✗ | only folders you grant, read-only | same |
 | Secret folders (`~/.ssh`, `~/.aws`, keychains, shell startup files, AI client configs, `~/.legwork.env`) | ✗ | ✗ | ✗, can't be granted | ✗ |
 | System folders (`/usr`, `/opt`, `/etc`) | read | read | read | read |
-| `/tmp` | macOS: read; Linux: an empty private one | same | same | same |
+| `/tmp`, macOS's per-user temp folder, `/Volumes` (external drives) | macOS: read; Linux: an empty private `/tmp` | same | same | same |
 | Writing files | its own folder only | its own folder only | its own folder only | its own folder only |
 | The internet | ✓ | ✗ | ✗ | ✓ |
 | Services on this machine over TCP (`localhost`: databases, dev servers, debug ports) | macOS: ✗; **Linux: ✓** (see below) | ✗ | ✗ | ✓ |
 | Unix sockets (SSH agent, Docker, password managers, X11) | ✗ | ✗ | ✗ | ✗ |
-| macOS system services (clipboard, opening or scripting apps) | ✗ (13 services builds need are allowed) | ✗ | ✗ | ✗ |
+| macOS system services (clipboard, opening or scripting apps) | ✗ (the 13 that builds and tools need are allowed) | same | same | same |
 | Your environment variables, model key, GitHub token | ✗ (it gets `PATH`, `HOME` and `TMPDIR` pointing into its own folder) | ✗ | ✗ | ✗ |
 | Other processes | only the ones it started | same | same | same |
 | What your AI sees | the install's result | the self-test's result | the tool's replies, labelled as untrusted and size-capped | same |
@@ -33,6 +33,11 @@ default with no network and none of your files.
 `~/Legwork/outputs/<tool>/`, outside the sandbox: never through a link,
 never a hard-linked file, never executable, and on macOS marked with the
 quarantine flag that downloaded files get.
+
+**A granted folder is readable in full**, including any `.env` file or key
+inside it, and a tool with both a folder and network could upload what it
+reads. The refused places are a list of known credential locations, so it
+can miss one your setup uses.
 
 **Every grant is yours.** The folders and network you start the hub with
 are a ceiling: an install can ask for those or less, and your client
