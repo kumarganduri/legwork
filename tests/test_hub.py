@@ -257,6 +257,7 @@ def test_a_narrower_restart_doesnt_erase_installs_it_skips(limits, tmp_path):
         ("install_tool", {"repo": None}),
         ("install_tool", {"repo": "owner/repo", "allow_read": [None]}),
         ("use_tool", {"repo": "owner/repo", "tool": "x", "arguments": "not an object"}),
+        ("install_tool", {"repo": "owner/repo", "allow_net": "false"}),  # a string must not switch network on
     ],
 )
 def test_malformed_arguments_get_an_error_reply_not_silence(tool, args):
@@ -314,3 +315,70 @@ def test_a_request_sent_just_before_the_client_closes_still_gets_its_reply(tmp_p
         env={**os.environ, "LEGWORK_HOME": str(tmp_path / "home")},
     )
     assert json.loads(out.stdout.splitlines()[0])["id"] == 1
+
+
+def test_the_reply_budget_covers_the_whole_reply(monkeypatch):
+    """Per-item caps let ten 200 KB blocks and embedded resource text through
+    (Codex and pre-launch review, 2026-10-03)."""
+    monkeypatch.setattr(hub, "MAX_TEXT_CHARS", 100)
+    many = hub._cap_text({"content": [{"type": "text", "text": "x" * 60} for _ in range(10)]})
+    assert sum(len(i["text"].split("\n\n[Legwork")[0]) for i in many["content"]) == 100
+    assert sum("Ask the tool for less" in i["text"] for i in many["content"]) == 1
+    embedded = hub._cap_text({"content": [{"type": "resource", "resource": {"uri": "x:", "text": "y" * 500}}]})
+    assert len(embedded["content"][0]["resource"]["text"]) < 400
+    assert hub._cap_text("not a dict")["isError"] is True
+    extra = hub._cap_text({"content": [], "_meta": {"x": "y" * 10}, "isError": False})
+    assert set(extra) == {"content", "isError"}
+
+
+def test_structured_results_are_kept_when_the_text_is_only_a_summary():
+    kept = hub._cap_text({"content": [{"type": "text", "text": "Query returned 1 row"}], "structuredContent": {"rows": [{"value": 42}]}})
+    assert any('"value": 42' in i["text"] for i in kept["content"])
+    # FastMCP's own duplicates are dropped: an object, and a list sent one element per block
+    obj = hub._cap_text({"content": [{"type": "text", "text": '{"a": 1}'}], "structuredContent": {"a": 1}})
+    assert len(obj["content"]) == 1
+    lst = hub._cap_text({"content": [{"type": "text", "text": '{"n": 1}'}, {"type": "text", "text": '{"n": 2}'}], "structuredContent": {"result": [{"n": 1}, {"n": 2}]}})
+    assert len(lst["content"]) == 2
+
+
+def test_oversized_images_are_replaced_with_a_note(monkeypatch):
+    monkeypatch.setattr(hub, "MAX_BINARY_CHARS", 10)
+    r = hub._cap_text({"content": [{"type": "image", "data": "a" * 8, "mimeType": "image/png"}, {"type": "image", "data": "b" * 8, "mimeType": "image/png"}]})
+    assert r["content"][0]["type"] == "image" and r["content"][1]["type"] == "text" and "size limit" in r["content"][1]["text"]
+
+
+def test_a_served_tools_malformed_tool_list_cant_break_the_hub(limits, monkeypatch):
+    """A nameless entry used to crash the hub's own tools/list, hiding
+    find_tools and install_tool too (pre-launch review, 2026-10-03)."""
+    monkeypatch.setenv("FAKE_MCP_JUNK_TOOLS", "1")
+    h, _ = make_hub([limits])
+    install(h)
+    names = [t["name"] for t in h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]]
+    assert "find_tools" in names and "repo__echo" in names and "repo__bad_schema" in names
+    assert not any("no name" in str(n) for n in names)
+    h.close()
+
+
+def test_two_repos_with_the_same_name_route_to_the_right_one(limits):
+    """a/foo and b/foo shared the prefix foo__, so calls reached whichever was
+    found first, with its grants (pre-launch review, 2026-10-03)."""
+    h, _ = make_hub([limits])
+    install(h, "alice/repo")
+    install(h, "bob/repo")
+    names = [t["name"] for t in h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]]
+    assert "repo__echo" in names and "bob-repo__echo" in names
+    item, tool = h._route("bob-repo__echo")
+    assert item.slug == "bob/repo" and tool == "echo"
+    assert h._route("repo__echo")[0].slug == "alice/repo"
+    assert hub._short_name("x/foo__bar") == "foo_bar"  # never contains the separator
+    h.close()
+
+
+def test_closing_the_hub_stops_installs_still_running(monkeypatch):
+    """Each install runs in its own session, so on macOS one left behind kept
+    running with network after the hub exited (pre-launch review, 2026-10-03)."""
+    stopped = []
+    monkeypatch.setattr(hub.sandbox_runner, "stop_all", lambda: stopped.append(True))
+    h, _ = make_hub()
+    h.close()
+    assert stopped

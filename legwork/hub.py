@@ -139,6 +139,7 @@ class Installed:
     allow_net: bool = False
     client: StdioMCPClient | None = None
     tools: list[dict] = field(default_factory=list)
+    starting: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
 
 @dataclass
@@ -150,8 +151,12 @@ class Job:
     finished: threading.Event = field(default_factory=threading.Event)
 
 
-def _short_name(slug: str) -> str:
-    return re.sub(r"[^a-zA-Z0-9_-]+", "-", slug.split("/", 1)[1]).strip("-").lower() or "tool"
+def _short_name(slug: str, with_owner: bool = False) -> str:
+    """The prefix of a repo's exported tools. Never contains "__", the
+    separator before the tool name, so routing can't be ambiguous."""
+    name = slug.replace("/", "-") if with_owner else slug.split("/", 1)[1]
+    name = re.sub(r"[^a-zA-Z0-9_-]+", "-", name).lower()
+    return re.sub(r"_{2,}", "_", name).strip("-_") or "tool"
 
 
 class Hub:
@@ -168,7 +173,7 @@ class Hub:
         self._serve_command = serve_command or _default_serve_command
         self.installed: dict[str, Installed] = {}
         self.jobs: dict[str, Job] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # re-entrant: _save and _items take it inside install
         self._state_path = local_store.legwork_home() / "hub.json"
         self._restore()
 
@@ -201,7 +206,7 @@ class Hub:
             except (OSError, ValueError):
                 on_disk = []
             merged = {e["repo"]: e for e in on_disk if isinstance(e, dict) and "repo" in e}
-            for i in self.installed.values():
+            for i in self._items():
                 merged[i.slug] = {"repo": i.slug, "allow_read": [str(p) for p in i.allow_read], "allow_net": i.allow_net}
             tmp = self._state_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps({"installed": list(merged.values())}, indent=2) + "\n")
@@ -224,22 +229,45 @@ class Hub:
 
     # --- installed tools ------------------------------------------------------
 
+    def _items(self) -> list[Installed]:
+        """A snapshot: install threads add entries while other threads list them."""
+        with self._lock:
+            return list(self.installed.values())
+
+    def _prefixes(self) -> dict[str, str]:
+        """slug -> tool prefix. The first repo installed keeps its short name;
+        a later one with the same name (a/foo, b/foo) gets its owner added, so
+        a call can't reach the other repo, with its different grants
+        (pre-launch review, 2026-10-03)."""
+        taken: dict[str, str] = {}
+        for item in self._items():
+            prefix = _short_name(item.slug)
+            if prefix in taken.values():
+                prefix = _short_name(item.slug, with_owner=True)
+            taken[item.slug] = prefix
+        return taken
+
+    def _prefix(self, slug: str) -> str:
+        return self._prefixes().get(slug) or _short_name(slug)
+
     def _start(self, item: Installed) -> None:
-        if item.client is not None and item.client.alive():
-            return
-        client = StdioMCPClient(self._serve_command(item.slug, item.allow_read, item.allow_net), _child_env())
-        try:
-            client.initialize(client_name="legwork-hub", timeout=120)
-            item.tools = client.list_tools(timeout=60)
-        except MCPClientError:
-            client.close()
-            raise
-        item.client = client
+        with item.starting:  # two first calls at once used to start two servers
+            if item.client is not None and item.client.alive():
+                return
+            client = StdioMCPClient(self._serve_command(item.slug, item.allow_read, item.allow_net), _child_env())
+            try:
+                client.initialize(client_name="legwork-hub", timeout=120)
+                item.tools = client.list_tools(timeout=60)
+            except Exception as exc:  # noqa: BLE001 — a misbehaving tool must not leak its process
+                client.close()
+                raise exc if isinstance(exc, MCPClientError) else MCPClientError(f"{item.slug} didn't start: {exc}") from exc
+            item.client = client
 
     def _exported(self) -> list[dict]:
         tools = []
-        for item in self.installed.values():
-            prefix = _short_name(item.slug)
+        prefixes = self._prefixes()
+        for item in self._items():
+            prefix = prefixes.get(item.slug, _short_name(item.slug))
             for t in item.tools:
                 name = f"{prefix}__{t['name']}"[:64]
                 description = f"[{item.slug}, installed by Legwork] {t.get('description', '')}".strip()
@@ -252,10 +280,13 @@ class Hub:
         return tools
 
     def _route(self, exported_name: str) -> tuple[Installed, str] | None:
-        for item in self.installed.values():
-            prefix = _short_name(item.slug) + "__"
-            if exported_name.startswith(prefix):
-                return item, exported_name[len(prefix):]
+        prefix, sep, tool = exported_name.partition("__")
+        if not sep:
+            return None
+        prefixes = self._prefixes()
+        for item in self._items():
+            if prefixes.get(item.slug) == prefix:
+                return item, tool
         return None
 
     def _call(self, item: Installed, tool: str, arguments: dict) -> dict:
@@ -285,13 +316,19 @@ class Hub:
         slug = ref.slug
         with self._lock:
             job = self.jobs.get(slug)
-            if job and job.state == "running":
-                return self.install_status(slug)
-            existing = self.installed.get(slug)
-            if existing and existing.allow_read == grants and existing.allow_net == net:
-                return self._ready_message(existing, "already installed")
-            job = Job(slug)
-            self.jobs[slug] = job
+            already_running = bool(job and job.state == "running")
+            existing = None if already_running else self.installed.get(slug)
+            if existing is None or existing.allow_read != grants or existing.allow_net != net:
+                existing = None
+            if not already_running and existing is None:
+                job = Job(slug)
+                self.jobs[slug] = job
+        # Waiting happens outside the lock: install_status can wait 45 s, and
+        # holding the lock meanwhile stalled every other install and save.
+        if already_running:
+            return self.install_status(slug)
+        if existing is not None:
+            return self._ready_message(existing, "already installed")
         threading.Thread(target=self._install, args=(job, ref, grants, net), daemon=True).start()
         return self.install_status(slug)  # waits up to INSTALL_WAIT_SECONDS
 
@@ -324,7 +361,7 @@ class Hub:
 
     def _ready_message(self, item: Installed, how: str) -> str:
         grants = ", ".join(str(p) for p in item.allow_read) or "no folders"
-        prefix = _short_name(item.slug)
+        prefix = self._prefix(item.slug)
         tools = "\n".join(
             f"  - {t['name']}: {' '.join((t.get('description') or '').split())[:120]}" for t in item.tools
         ) or "  (none listed)"
@@ -355,12 +392,13 @@ class Hub:
     def list_installed_tools(self) -> str:
         if not self.installed:
             return "Nothing installed yet. Use find_tools, then install_tool."
-        for item in self.installed.values():
+        items = self._items()
+        for item in items:
             try:
                 self._start(item)
             except MCPClientError:
                 pass
-        return "\n\n".join(self._ready_message(i, "installed") for i in self.installed.values())
+        return "\n\n".join(self._ready_message(i, "installed") for i in items)
 
     def use_tool(self, repo: str, tool: str, arguments: dict | None = None) -> dict:
         slug = self._slug(repo)
@@ -369,8 +407,7 @@ class Hub:
             raise HubError(f"{slug} isn't installed. Call install_tool first.")
         # Accept the exported name too: Claude tried use_tool with
         # "pdfplumber__extract_tables" before the plain name (2026-09-28).
-        prefix = _short_name(slug) + "__"
-        tool = tool.removeprefix(prefix)
+        tool = tool.removeprefix(self._prefix(slug) + "__")
         known = [t["name"] for t in item.tools]
         if known and tool not in known:
             raise HubError(f"{slug} has no tool {tool!r}. Its tools: {', '.join(known)}")
@@ -424,7 +461,7 @@ class Hub:
                 allow_read = _arg(args, "allow_read", list, [])
                 if not all(isinstance(p, str) for p in allow_read):
                     raise HubError("allow_read must be a list of folder paths")
-                return _text(self.install_tool(_arg(args, "repo", str, ""), allow_read, bool(args.get("allow_net"))))
+                return _text(self.install_tool(_arg(args, "repo", str, ""), allow_read, _arg(args, "allow_net", bool, False)))
             if name == "install_status":
                 return _text(self.install_status(_arg(args, "repo", str, "")))
             if name == "list_installed_tools":
@@ -439,7 +476,8 @@ class Hub:
             return _text(str(exc), error=True)
 
     def close(self) -> None:
-        for item in self.installed.values():
+        sandbox_runner.stop_all()  # installs still running in this process
+        for item in self._items():
             if item.client:
                 item.client.close()
 
@@ -455,23 +493,86 @@ MAX_TEXT_CHARS = 200_000
 SHUTDOWN_GRACE_SECONDS = 10
 
 
-def _cap_text(result: dict) -> dict:
-    """Relay a tool result as text, capped. structuredContent is dropped: Python
-    MCP servers put the same data in the text content, and relayed alongside
-    it, a duckdb `select *` was capped at 200 KB of text but sent 37.6 MB of
-    structuredContent anyway (QA re-verification, 2026-10-02). A result with
-    only structured content gets it as JSON text instead."""
-    structured = result.pop("structuredContent", None)
-    if structured is not None and not result.get("content"):
-        result["content"] = [{"type": "text", "text": json.dumps(structured, ensure_ascii=False)}]
-    for item in result.get("content") or []:
-        text = item.get("text") if isinstance(item, dict) and item.get("type") == "text" else None
-        if isinstance(text, str) and len(text) > MAX_TEXT_CHARS:
-            item["text"] = (
-                text[:MAX_TEXT_CHARS] + f"\n\n[Legwork cut this reply from {len(text):,} to {MAX_TEXT_CHARS:,} "
-                "characters. Ask the tool for less: a LIMIT, a page range, or specific fields.]"
-            )
-    return result
+MAX_BINARY_CHARS = 10_000_000  # base64 images/audio in one reply: a cut-out PNG is ~0.5 MB
+
+
+def _cap_text(result) -> dict:
+    """Relay a served tool's result within one budget per reply: text
+    (including embedded resource text) up to MAX_TEXT_CHARS in total, and
+    images, audio and blobs up to MAX_BINARY_CHARS. Only `content` and
+    `isError` pass through. structuredContent is dropped when the text already
+    carries it (Python MCP servers send both) and turned into JSON text when
+    it doesn't. Per-item caps let ten 200 KB blocks, embedded resources and a
+    37.6 MB structuredContent through (QA and pre-launch review, 2026-10-02/03)."""
+    if not isinstance(result, dict):
+        return _text("The tool returned a malformed result.", error=True)
+    content = [i for i in (result.get("content") or []) if isinstance(i, dict)] if isinstance(result.get("content"), list) else []
+    structured = result.get("structuredContent")
+    if structured is not None and not (any(_same_data(i, structured) for i in content) or _same_list(content, structured)):
+        content.append({"type": "text", "text": json.dumps(structured, ensure_ascii=False, default=str)})
+    text_left, binary_left, out = MAX_TEXT_CHARS, MAX_BINARY_CHARS, []
+    for item in content:
+        kind = item.get("type")
+        if kind == "text" and isinstance(item.get("text"), str):
+            text, text_left, note = _take(item["text"], text_left)
+            if text or note:
+                out.append({"type": "text", "text": text + note})
+        elif kind in ("image", "audio") and isinstance(item.get("data"), str):
+            if len(item["data"]) <= binary_left:
+                binary_left -= len(item["data"])
+                out.append({k: item[k] for k in ("type", "data", "mimeType") if k in item})
+            else:
+                out.append({"type": "text", "text": f"[Legwork left out a {len(item['data']) * 3 // 4:,}-byte {kind}: over this reply's size limit.]"})
+        elif kind == "resource" and isinstance(item.get("resource"), dict):
+            resource = dict(item["resource"])
+            if isinstance(resource.get("text"), str):
+                resource["text"], text_left, note = _take(resource["text"], text_left)
+                resource["text"] += note
+            if isinstance(resource.get("blob"), str):
+                if len(resource["blob"]) <= binary_left:
+                    binary_left -= len(resource["blob"])
+                else:
+                    resource.pop("blob")
+                    resource["text"] = resource.get("text", "") + "[Legwork left out this resource's data: over the size limit.]"
+            out.append({"type": "resource", "resource": resource})
+        elif kind == "resource_link":
+            out.append({k: v for k, v in item.items() if k in ("type", "uri", "name", "description", "mimeType")})
+    return {"content": out, "isError": bool(result.get("isError"))}
+
+
+def _take(text: str, left: int) -> tuple[str, int, str]:
+    """(kept text, budget left, note): the cut note appears once, where the budget runs out."""
+    if len(text) <= left:
+        return text, left - len(text), ""
+    note = (
+        f"\n\n[Legwork cut this reply at {MAX_TEXT_CHARS:,} characters ({len(text):,} in this part). "
+        "Ask the tool for less: a LIMIT, a page range, or specific fields.]"
+    ) if left > 0 else ""
+    return text[:left], 0, note
+
+
+def _same_list(content: list[dict], structured) -> bool:
+    """FastMCP sends a list return as one text block per element, with
+    {"result": [...]} as the structured copy."""
+    if not (isinstance(structured, dict) and set(structured) == {"result"} and isinstance(structured["result"], list)):
+        return False
+    texts = [i.get("text") for i in content if i.get("type") == "text"]
+    try:
+        return len(texts) == len(structured["result"]) and [json.loads(t) for t in texts] == structured["result"]
+    except (TypeError, ValueError):
+        return False
+
+
+def _same_data(item: dict, structured) -> bool:
+    """The text item is the structured result serialized (FastMCP wraps a
+    non-object return as {"result": value} in structuredContent)."""
+    if item.get("type") != "text" or not isinstance(item.get("text"), str):
+        return False
+    try:
+        parsed = json.loads(item["text"])
+    except ValueError:
+        return False
+    return parsed == structured or (isinstance(structured, dict) and set(structured) == {"result"} and parsed == structured["result"])
 
 
 def _arg(args: dict, key: str, kind: type, default):

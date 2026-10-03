@@ -107,7 +107,16 @@ class StdioMCPClient:
         reply = self.request("tools/list", timeout=timeout)
         if "error" in reply:
             raise MCPClientError(f"tools/list failed: {reply['error']}")
-        return reply["result"]["tools"]
+        tools = (reply.get("result") or {}).get("tools") if isinstance(reply.get("result"), dict) else None
+        if not isinstance(tools, list):
+            raise MCPClientError("tools/list returned no list of tools")
+        # A served tool is untrusted code: a nameless or malformed entry used to
+        # crash the hub's own tools/list (pre-launch review, 2026-10-03).
+        return [
+            {**t, "inputSchema": t["inputSchema"] if isinstance(t.get("inputSchema"), dict) else {"type": "object"}}
+            for t in tools
+            if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]
+        ]
 
     def call_tool(self, name: str, arguments: dict, timeout: float = 300) -> dict:
         reply = self.request("tools/call", {"name": name, "arguments": arguments}, timeout=timeout)
