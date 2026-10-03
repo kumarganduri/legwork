@@ -595,7 +595,7 @@ def test_the_profile_never_touches_disk(tmp_path):
     before the next launch (pre-launch QA, 2026-10-02): it's passed inline."""
     profile = sandbox_runner._generate_profile(tmp_path, allow_network=False, read_only=(tmp_path,))
     argv = sandbox_runner._sandboxed_argv(["true"], tmp_path, False, profile)
-    assert argv[:3] == ["sandbox-exec", "-p", profile.text]
+    assert argv[0] == "/usr/bin/sandbox-exec" and argv[1:3] == ["-p", profile.text]
     assert str(tmp_path.resolve()) not in profile.text
     assert f"GRANT_0={tmp_path.resolve()}" in argv
 
@@ -640,3 +640,90 @@ def test_your_home_folder_is_refused_in_any_letter_case(monkeypatch, tmp_path):
     for spelling in (str(home).upper(), str(tmp_path / "USERS"), str(home).replace("me", "ME")):
         with pytest.raises(sandbox_runner.SandboxGrantError, match="whole home folder"):
             sandbox_runner.check_read_grants([spelling])
+
+
+def test_the_sandbox_launcher_is_never_looked_up_in_the_tools_path(tmp_path):
+    """The child's PATH starts with folders the tool can write (.venv/bin);
+    the launcher must come from Legwork's own lookup (pre-launch review, 2026-10-03)."""
+    profile = sandbox_runner._generate_profile(tmp_path, allow_network=False) if platform.system() == "Darwin" else None
+    argv = sandbox_runner._sandboxed_argv(["true"], tmp_path, False, profile)
+    assert os.path.isabs(argv[0]) and not argv[0].startswith(str(tmp_path))
+
+
+def test_legworks_own_files_in_the_workdir_are_written_without_following_links(tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep me")
+    work = tmp_path / "work"
+    (work / ".legwork-bin").mkdir(parents=True)
+    (work / ".legwork-bin" / "mktemp").symlink_to(outside)
+    sandbox_runner._write_owned_file(work / ".legwork-bin", "mktemp", "shim", 0o755)
+    assert outside.read_text() == "keep me"
+    assert (work / ".legwork-bin" / "mktemp").read_text() == "shim"
+    linked_dir = tmp_path / "work2"
+    linked_dir.mkdir()
+    (linked_dir / ".legwork-bin").symlink_to(tmp_path)
+    sandbox_runner._write_owned_file(linked_dir / ".legwork-bin", "mktemp", "shim", 0o755)
+    assert not (tmp_path / "mktemp").exists()
+
+
+def test_a_child_that_leaves_the_session_and_keeps_stdout_cant_stall_the_wait(tmp_path):
+    """A child that moved to its own process group and kept stdout open made
+    the post-timeout cleanup wait indefinitely (Codex and pre-launch review, 2026-10-03)."""
+    import time
+
+    detached = "import os, sys, time\nif os.fork() == 0:\n    os.setpgid(0, 0); time.sleep(30)\nprint('parent done')\n"
+    started = time.monotonic()
+    result = invoke([SYSTEM_PYTHON, "-c", detached], tmp_path, timeout=20)
+    assert "parent done" in result.stdout
+    assert time.monotonic() - started < 10  # didn't wait for the detached child
+
+    hang = "import os, time\nif os.fork() == 0:\n    os.setpgid(0, 0); time.sleep(30)\ntime.sleep(30)\n"
+    started = time.monotonic()
+    with pytest.raises(TimeoutExceeded):
+        invoke([SYSTEM_PYTHON, "-c", hang], tmp_path, timeout=1)
+    assert time.monotonic() - started < 10
+
+
+def test_a_launcher_planted_by_install_code_is_never_run(tmp_path):
+    """End to end: install code writes .venv/bin/sandbox-exec (and bwrap); the
+    next sandboxed step, with that folder first on its PATH, must still run
+    sandboxed (pre-launch review, 2026-10-03)."""
+    marker = Path(f"/private/tmp/legwork-launcher-escape-{os.getpid()}" if platform.system() == "Darwin" else f"/tmp/legwork-launcher-escape-{os.getpid()}")
+    plant = (
+        "mkdir -p .venv/bin\n"
+        "for n in sandbox-exec bwrap; do\n"
+        f"  printf '#!/bin/sh\\necho escaped > {marker}\\n' > .venv/bin/$n; chmod +x .venv/bin/$n\n"
+        "done\n"
+    )
+    install(["/bin/sh", "-c", plant], tmp_path, timeout=60)
+    assert (tmp_path / ".venv" / "bin" / "sandbox-exec").read_text().startswith("#!/bin/sh\necho escaped")
+    path = f"{tmp_path / '.venv' / 'bin'}:{sandbox_runner.MINIMAL_PATH}"
+    try:
+        invoke(["/bin/sh", "-c", "true"], tmp_path, extra_env={"PATH": path})
+        assert not marker.exists(), "the planted launcher ran outside the sandbox"
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def test_stop_all_stops_a_running_install(tmp_path):
+    import threading
+    import time
+
+    errors = []
+    worker = threading.Thread(target=lambda: errors.append(_catch(lambda: install(["/bin/sh", "-c", "sleep 60"], tmp_path, timeout=120))))
+    worker.start()
+    deadline = time.monotonic() + 10
+    while not sandbox_runner._RUNNING and time.monotonic() < deadline:
+        time.sleep(0.05)
+    started = time.monotonic()
+    sandbox_runner.stop_all()
+    worker.join(15)
+    assert not worker.is_alive() and time.monotonic() - started < 10
+
+
+def _catch(fn):
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001
+        return exc
+    return None

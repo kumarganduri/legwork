@@ -92,7 +92,9 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -262,7 +264,7 @@ def _bwrap_args(
     exactly those hidden places, so they're unreachable in both phases."""
     real_workdir = str(workdir.resolve())
     args = [
-        "bwrap",
+        _launcher("bwrap"),
         "--unshare-all",
         *(["--die-with-parent"] if die_with_parent else []),
         "--new-session",
@@ -353,6 +355,19 @@ def no_unix_sockets_filter(machine: str | None = None) -> bytes | None:
     )
 
 
+@functools.lru_cache(maxsize=None)
+def _launcher(name: str) -> str:
+    """The sandbox launcher's absolute path, found with Legwork's own PATH.
+    Launched by bare name, it was looked up in the child's PATH, which puts
+    the tool's writable folders first: install code could plant a fake
+    sandbox-exec in .venv/bin and the next step ran it unsandboxed
+    (pre-launch review, 2026-10-03)."""
+    found = shutil.which(name, path="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin") or shutil.which(name)
+    # Not found: an absolute path anyway, so it fails to start rather than
+    # being searched for in the child's PATH. Real runs check availability first.
+    return os.path.realpath(found) if found else f"/usr/bin/{name}"
+
+
 def _sandboxed_argv(
     command: list[str],
     workdir: Path,
@@ -369,7 +384,7 @@ def _sandboxed_argv(
         # sandboxed code to rewrite before the next launch (pre-launch QA,
         # 2026-10-02).
         params = [arg for name, value in profile.params.items() for arg in ("-D", f"{name}={value}")]
-        return ["sandbox-exec", "-p", profile.text, *params, *command]
+        return [_launcher("sandbox-exec"), "-p", profile.text, *params, *command]
     seccomp = ["--seccomp", str(seccomp_fd)] if seccomp_fd is not None else []
     return [*_bwrap_args(workdir, allow_network, extra_writable, read_only, die_with_parent), *seccomp, "--", *command]
 
@@ -443,8 +458,10 @@ def _within(path: Path, root: Path) -> bool:
     filesystem does: ~/.SSH is ~/.ssh, and /USERS/me is your home, so an
     exact comparison let both through (pre-launch QA, 2026-10-02). On a
     case-sensitive filesystem this only refuses a few more look-alikes."""
-    path_parts = [p.casefold() for p in path.parts]
-    root_parts = [p.casefold() for p in root.parts]
+    # NFC first: macOS stores names decomposed (NFD), so an accented home
+    # folder could otherwise be spelled two ways (pre-launch review, 2026-10-03).
+    path_parts = [unicodedata.normalize("NFC", p).casefold() for p in path.parts]
+    root_parts = [unicodedata.normalize("NFC", p).casefold() for p in root.parts]
     return path_parts[: len(root_parts)] == root_parts
 
 
@@ -602,12 +619,37 @@ def _build_env(workdir: Path, extra_env: dict[str, str] | None) -> dict[str, str
         env.update(extra_env)
     if platform.system() == "Darwin":  # GNU mktemp honours TMPDIR itself
         shim_dir = real_workdir / ".legwork-bin"
-        shim_dir.mkdir(exist_ok=True)
-        shim = shim_dir / "mktemp"
-        shim.write_text(_MKTEMP_SHIM)
-        shim.chmod(0o755)
+        _write_owned_file(shim_dir, "mktemp", _MKTEMP_SHIM, 0o755)
         env["PATH"] = f"{shim_dir}:{env['PATH']}"
     return env
+
+
+def _write_owned_file(directory: Path, name: str, text: str, mode: int) -> None:
+    """Write a file Legwork owns inside a workdir that sandboxed code can also
+    write, without following links it may have planted there: this runs
+    outside the sandbox, so a symlinked .legwork-bin/mktemp let a tool have
+    Legwork overwrite and chmod 755 any file of yours (pre-launch review,
+    2026-10-03). The folder is opened without following links and the file is
+    created relative to it, so neither can be swapped for a link in between."""
+    if directory.is_symlink() or (directory.exists() and not directory.is_dir()):
+        directory.unlink()
+    directory.mkdir(exist_ok=True)
+    dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        try:
+            os.unlink(name, dir_fd=dir_fd)  # whatever is there now: file, link or fifo
+        except FileNotFoundError:
+            pass
+        except IsADirectoryError:
+            shutil.rmtree(directory / name)
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode, dir_fd=dir_fd)
+        try:
+            os.fchmod(fd, mode)
+            os.write(fd, text.encode())
+        finally:
+            os.close(fd)
+    finally:
+        os.close(dir_fd)
 
 
 def _run_sandboxed(
@@ -640,27 +682,38 @@ def _run_sandboxed(
         # npm step could end the hub's input and install code could read the
         # client's messages (pre-launch QA, 2026-10-02). Its own session, so
         # anything it left running (`nohup ... &`) is killed when it's done.
+        # Output goes to temp files, not pipes, and we wait on the process, not
+        # on end-of-output: a child that left the session and kept a pipe open
+        # made the wait (and the timeout's cleanup) block indefinitely
+        # (pre-launch review, 2026-10-03).
+        out = stack.enter_context(tempfile.TemporaryFile())
+        err = stack.enter_context(tempfile.TemporaryFile())
         proc = subprocess.Popen(
             full_command,
             pass_fds=(seccomp_fd,) if seccomp_fd is not None else (),
             cwd=workdir,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=out,
+            stderr=err,
             env=_build_env(workdir, extra_env),
             start_new_session=True,
         )
+        with _RUNNING_LOCK:
+            _RUNNING.add(proc)
         try:
-            stdout, stderr = proc.communicate(timeout=timeout)
+            proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             _kill_session(proc)
-            proc.communicate()
+            proc.kill()
+            proc.wait()
             raise timeout_error(
                 f"{' '.join(command)!r} exceeded {timeout}s inside the sandbox"
             ) from exc
         finally:
             _kill_session(proc)
+            with _RUNNING_LOCK:
+                _RUNNING.discard(proc)
+        stdout, stderr = _read_back(out), _read_back(err)
     duration = time.monotonic() - started
 
     return ExecutionResult(
@@ -670,6 +723,31 @@ def _run_sandboxed(
         stderr=stderr,
         duration_seconds=duration,
     )
+
+
+_MAX_CAPTURE_BYTES = 20 * 1024 * 1024  # an install's log; more is noise
+_RUNNING: set[subprocess.Popen] = set()
+_RUNNING_LOCK = threading.Lock()
+
+
+def stop_all() -> None:
+    """Stop every install and self-test still running. The hub calls this on
+    exit: each runs in its own session, so on macOS an install left behind
+    kept running, with network, after the hub was gone (pre-launch review,
+    2026-10-03). Linux's --die-with-parent already covered it."""
+    with _RUNNING_LOCK:
+        running = list(_RUNNING)
+    for proc in running:
+        _kill_session(proc)
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _read_back(f) -> str:
+    f.seek(0)
+    return f.read(_MAX_CAPTURE_BYTES).decode("utf-8", errors="replace")
 
 
 def _kill_session(proc: subprocess.Popen) -> None:

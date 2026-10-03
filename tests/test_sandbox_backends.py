@@ -32,7 +32,9 @@ def _pairs(args, flag):
 
 def test_system_is_read_only_and_only_the_workdir_is_writable():
     args = _args()
-    assert args[:2] == ["bwrap", "--unshare-all"]
+    # Absolute: looked up by bare name, the launcher came from the child's
+    # PATH, which starts with folders the tool can write (pre-launch review).
+    assert args[0].startswith("/") and args[0].endswith("/bwrap") and args[1] == "--unshare-all"
     assert ["--ro-bind", "/", "/"] == args[args.index("--ro-bind") : args.index("--ro-bind") + 3]
     workdir = str(Path("/home/me/.legwork/wrappers/x/builds/1/attempt-1").resolve())
     assert _pairs(args, "--bind") == [workdir]
