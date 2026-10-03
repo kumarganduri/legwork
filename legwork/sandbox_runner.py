@@ -418,6 +418,10 @@ _SECRET_DIRS = (
     ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".azure", ".password-store",
     ".netrc", ".legwork", ".legwork.env", ".git-credentials", ".npmrc", ".pypirc", ".gitconfig",
     ".zsh_history", ".bash_history", ".python_history", ".psql_history", ".mysql_history",
+    # Shell startup files often export keys; AI clients' configs hold tokens
+    # (fresh QA, 2026-10-03).
+    ".zshrc", ".zshenv", ".zprofile", ".bashrc", ".bash_profile", ".profile", ".envrc",
+    ".claude.json", ".claude", ".codex", ".cursor", ".gemini", ".continue",
     "Library/Keychains", "Library/Cookies", "Library/Application Support", "Library/Messages",
     "Library/Mail", "Library/Safari", "Library/Containers", "Library/Group Containers",
 )
@@ -431,7 +435,7 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
     home = Path.home().resolve()
     granted = []
     for raw in paths:
-        path = Path(raw).expanduser().resolve()
+        path = _without_data_volume(Path(raw).expanduser().resolve())
         # Refusals come before the existence check: a secret folder is refused
         # as such whether or not it exists here.
         if path == Path("/") or _within(home, path):
@@ -451,6 +455,16 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
             raise SandboxGrantError(f"--allow-read {raw}: no such file or folder")
         granted.append(path)
     return tuple(granted)
+
+
+def _without_data_volume(path: Path) -> Path:
+    """macOS also reaches your files through the data volume:
+    /System/Volumes/Data/Users/you is /Users/you, so the checks compare the
+    short form (fresh QA, 2026-10-03)."""
+    data = Path("/System/Volumes/Data")
+    if platform.system() == "Darwin" and _within(path, data) and path != data:
+        return Path("/", *path.parts[len(data.parts):])
+    return path
 
 
 def _within(path: Path, root: Path) -> bool:
