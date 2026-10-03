@@ -136,3 +136,46 @@ def test_odd_index_entries_are_cleaned_or_skipped_and_never_break_search(monkeyp
     matches = discovery.cache_matches(["pdf", "tables"], index)
     text = discovery.describe(discovery.Found("pdf tables", matches))
     assert "owner/tables" in text and "update date unknown" in text
+
+
+@pytest.mark.parametrize(
+    ("need", "first"),
+    [
+        ("transcribe audio", "SYSTRAN/faster-whisper"),
+        ("ocr image text", "RapidAI/RapidOCR"),
+        ("find secrets in code", "gitleaks/gitleaks"),
+        ("html to markdown", "matthewwithanm/python-markdownify"),
+        ("remove image background", "danielgatis/rembg"),
+        ("read pdf tables", "jsvine/pdfplumber"),
+        ("query csv with sql", "duckdb/duckdb"),
+        ("download youtube video", "yt-dlp/yt-dlp"),
+    ],
+)
+def test_the_right_cached_tool_ranks_first_for_common_needs(need, first):
+    """Against the real cache index (fresh QA, 2026-10-03: four of these ranked a
+    more popular but wrong tool first)."""
+    import json
+    from pathlib import Path
+
+    from legwork.discovery import cache_matches
+
+    index = json.loads((Path(__file__).resolve().parents[1] / "cache" / "index.json").read_text())
+    assert cache_matches(search_terms(need).split(), index)[0].slug == first
+
+
+def test_cached_matches_survive_a_github_search_failure(monkeypatch):
+    """Rate-limited or offline, find_tools threw away the locally matched
+    cached tools and returned nothing (fresh QA, 2026-10-03)."""
+    from legwork import discovery
+
+    monkeypatch.setattr(discovery.cache_reader, "fetch_index", lambda: INDEX)
+
+    def limited(*a, **k):
+        raise discovery.DiscoveryError("GitHub's search limit was reached")
+
+    monkeypatch.setattr(discovery, "_search", limited)
+    found = discovery.find("speech to text transcribe")
+    assert [c.slug for c in found.candidates] == ["SYSTRAN/faster-whisper"]
+    assert "search limit" in discovery.describe(found) and "Legwork cache only" in discovery.describe(found)
+    with pytest.raises(discovery.DiscoveryError):
+        discovery.find("something nobody caches zzzz")

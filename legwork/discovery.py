@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from legwork import cache_reader
+from legwork import cache_reader, llm_client
 from legwork.repo_fetcher import RepoRef
 
 SEARCH_URL = "https://api.github.com/search/repositories"
@@ -89,7 +89,7 @@ class Candidate:
 
 def _get_json(url: str) -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "legwork"}
-    token = os.environ.get("GITHUB_TOKEN")  # optional: raises GitHub's search limit
+    token = llm_client.github_token()  # optional: raises GitHub's search limit
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
@@ -98,8 +98,9 @@ def _get_json(url: str) -> dict:
     except urllib.error.HTTPError as exc:
         if exc.code in (403, 429):
             raise DiscoveryError(
-                "GitHub's search limit was reached (10 searches a minute without a token). "
-                "Wait a minute, or set GITHUB_TOKEN."
+                "GitHub's search limit was reached: without a token GitHub allows 10 searches a minute, "
+                "and each find uses 2 or 3. Wait a minute, or add GITHUB_TOKEN=<a GitHub token with no "
+                "scopes> to ~/.legwork.env for 30 a minute."
             ) from exc
         raise DiscoveryError(f"GitHub search failed (HTTP {exc.code})") from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
@@ -170,6 +171,7 @@ def search_terms(query: str) -> str:
 class Found:
     terms: str  # what was actually searched, after cleanup and narrowing
     candidates: list[Candidate]
+    note: str = ""  # shown above the results, e.g. when GitHub search was unavailable
 
 
 def find(query: str, limit: int = MAX_CANDIDATES) -> Found:
@@ -177,23 +179,30 @@ def find(query: str, limit: int = MAX_CANDIDATES) -> Found:
     terms = search_terms(query).split()
     if not terms:
         raise DiscoveryError("describe what you need in a few words, e.g. 'extract tables pdf'")
-    by_stars = _search(" ".join(terms), sort="stars")
-    while len(by_stars) < MIN_RESULTS and len(terms) > 2:
-        terms = terms[:-1]
-        by_stars = _search(" ".join(terms), sort="stars")
-    # READMEs only for relevance: they use more word forms ("Table extraction"
-    # finds pdfplumber), but sorted by stars they surface awesome-lists.
-    by_relevance = _search(" ".join(terms), sort=None, in_readme=True)
-    merged: dict[str, dict] = {}
-    for item in by_stars[:limit] + by_relevance[:4]:
-        merged.setdefault(item["full_name"].lower(), item)
-    index = cache_reader.fetch_index()
-    cached_slugs = {e["repo"].lower() for e in index}
     # Cached tools that fit the need go first: they install in about a minute
     # with no API key and were reviewed. GitHub's ranking often misses them:
     # "speech to text transcribe" didn't list faster-whisper, so a client with
     # no key picked openai/whisper and gave up (QA, Claude Code, 2026-10-02).
+    # They're matched locally, so they survive GitHub's search limit and
+    # outages too (fresh QA, 2026-10-03).
+    index = cache_reader.fetch_index()
+    cached_slugs = {e["repo"].lower() for e in index}
     lifted = cache_matches(search_terms(query).split(), index)
+    try:
+        by_stars = _search(" ".join(terms), sort="stars")
+        while len(by_stars) < MIN_RESULTS and len(terms) > 2:
+            terms = terms[:-1]
+            by_stars = _search(" ".join(terms), sort="stars")
+        # READMEs only for relevance: they use more word forms ("Table extraction"
+        # finds pdfplumber), but sorted by stars they surface awesome-lists.
+        by_relevance = _search(" ".join(terms), sort=None, in_readme=True)
+    except DiscoveryError as exc:
+        if not lifted:
+            raise
+        return Found(" ".join(terms), lifted, note=f"GitHub search is unavailable ({exc}); showing matching tools from the Legwork cache only.")
+    merged: dict[str, dict] = {}
+    for item in by_stars[:limit] + by_relevance[:4]:
+        merged.setdefault(item["full_name"].lower(), item)
     lifted_slugs = {c.slug.lower() for c in lifted}
     others = sorted((_candidate(i) for i in merged.values() if i["full_name"].lower() not in lifted_slugs), key=lambda c: -c.stars)
     others = others[: max(limit - len(lifted), 3)]
@@ -216,26 +225,43 @@ def cache_matches(terms: list[str], index: list[dict], limit: int = MAX_CACHE_MA
     if not terms:
         return []
     scored = []
+    # Where a word matches says how much it means: the repo's name or what
+    # Legwork's wrapper does (2), GitHub's description and topics (1). Rare
+    # words count more than common ones (IDF): unweighted, "find secrets in
+    # code" ranked prettier above gitleaks and "transcribe audio" ranked
+    # yt-dlp first (fresh QA, 2026-10-03).
+    parsed = []
     for entry in index:
-        text = " ".join([entry["repo"], entry.get("what", ""), entry.get("about", ""), *map(str, entry.get("topics") or [])])
-        words = re.findall(r"[a-z0-9]+", text.lower())
-        score = sum(1 for t in terms if any(w.startswith(_stem(t)) or (t.startswith(w) and len(w) >= 3) for w in words))
-        if score >= (1 if len(terms) <= 2 else math.ceil(0.6 * len(terms))):
-            scored.append((score, entry.get("stars", 0), entry))
-    scored.sort(key=lambda x: (-x[0], -x[1]))
+        fields = (
+            (2, f"{entry['repo']} {entry.get('what', '')}"),
+            (1, " ".join([entry.get("about", ""), *map(str, entry.get("topics") or [])])),
+        )
+        parsed.append((entry, [(weight, re.findall(r"[a-z0-9]+", text.lower())) for weight, text in fields]))
+    df = {t: sum(1 for _, fs in parsed if any(_word_matches(t, w) for _, ws in fs for w in ws)) for t in terms}
+    idf = {t: math.log((len(parsed) + 1) / (df[t] + 1)) + 1 for t in terms}
+    for entry, fields in parsed:
+        weights = [max((weight for weight, ws in fields if any(_word_matches(t, w) for w in ws)), default=0) for t in terms]
+        matched = sum(1 for w in weights if w)
+        if matched >= (1 if len(terms) <= 2 else math.ceil(0.6 * len(terms))):
+            scored.append((matched, sum(w * idf[t] for w, t in zip(weights, terms)), entry.get("stars", 0), entry))
+    scored.sort(key=lambda x: (-x[0], -x[1], -x[2]))
     return [
         Candidate(
             slug=e["repo"], stars=int(e.get("stars") or 0), description=" ".join(e.get("what", "").split())[:160],
             license=e.get("license") or "none", language=e.get("language") or "-", pushed_at=e.get("pushed_at") or "",
             created_at=e.get("created_at") or "", topics=[], in_cache=True,
         )
-        for _, _, e in scored[:limit]
+        for _, _, _, e in scored[:limit]
     ]
+
+
+def _word_matches(term: str, word: str) -> bool:
+    return word.startswith(_stem(term)) or (term.startswith(word) and len(word) >= 3)
 
 
 def describe(found: Found) -> str:
     """A compact, model-readable list. Descriptions are marked untrusted."""
-    header = f"Searched GitHub for: {found.terms}\n\n"
+    header = f"Searched GitHub for: {found.terms}\n" + (f"{found.note}\n" if found.note else "") + "\n"
     candidates = found.candidates
     if not candidates:
         return header + (

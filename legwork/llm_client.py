@@ -122,9 +122,9 @@ def env_file_path() -> Path:
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
-    """LEGWORK_LLM_* lines of a shell-style file (`export NAME=value` or
-    `NAME=value`, optionally quoted). Nothing is executed. Like ssh with a
-    private key, it refuses a file other users can read."""
+    """LEGWORK_LLM_* and GITHUB_TOKEN lines of a shell-style file (`export
+    NAME=value` or `NAME=value`, optionally quoted). Nothing is executed. Like
+    ssh with a private key, it refuses a file other users can read."""
     if os.name == "posix" and path.stat().st_mode & 0o077:
         raise LLMAuthError(f"{path} can be read by other users. Make it private first: chmod 600 {path}")
     found = {}
@@ -134,7 +134,7 @@ def _read_env_file(path: Path) -> dict[str, str]:
             line = line[len("export "):].lstrip()
         name, sep, value = line.partition("=")
         name, value = name.strip(), value.strip()
-        if not sep or not name.startswith("LEGWORK_LLM_"):
+        if not sep or not (name.startswith("LEGWORK_LLM_") or name == "GITHUB_TOKEN"):
             continue
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
             value = value[1:-1]
@@ -240,3 +240,16 @@ def complete(
                 raise
             time.sleep(INFRA_RETRY_BASE_DELAY_SECONDS * (2**transient))
             transient += 1
+
+
+def github_token() -> str | None:
+    """GITHUB_TOKEN from the environment, else from the key file. Desktop
+    clients start the hub without your shell's variables, so the key file is
+    the easy place for it. Raises nothing: a bad or absent file means none."""
+    if os.environ.get("GITHUB_TOKEN"):
+        return os.environ["GITHUB_TOKEN"]
+    path = env_file_path()
+    try:
+        return _read_env_file(path).get("GITHUB_TOKEN") if path.exists() else None
+    except (LLMAuthError, OSError, UnicodeDecodeError):
+        return None
