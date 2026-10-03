@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from legwork import builder, discovery, local_store, sandbox_runner
+from legwork import builder, discovery, local_store, outputs, sandbox_runner
 from legwork.mcp_stdio import MCPClientError, StdioMCPClient
 from legwork.repo_fetcher import InvalidRepoURLError, parse_repo_url
 
@@ -166,8 +166,10 @@ class Hub:
         allow_net: bool = False,
         write: Callable[[dict], None] | None = None,
         serve_command: Callable[[str, tuple[Path, ...], bool], list[str]] | None = None,
+        outputs_dir: Path | None = None,
     ):
         self.limit_read = allow_read
+        self.outputs_dir = outputs_dir  # where files tools make are copied; None: not copied
         self.limit_net = allow_net
         self._write = write or _write_stdout
         self._serve_command = serve_command or _default_serve_command
@@ -293,12 +295,33 @@ class Hub:
     def _call(self, item: Installed, tool: str, arguments: dict) -> dict:
         try:
             self._start(item)
-            return _mark_untrusted(_sandbox_hint(_cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS)), item), item)
+            workdir = self._workdir(item) if self.outputs_dir is not None else None
+            before = outputs.snapshot(workdir) if workdir else {}
+            result = _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
+            if workdir:
+                self._copy_outputs(item, workdir, before, result)
+            return _mark_untrusted(_sandbox_hint(result, item), item)
         except MCPClientError as exc:
             if item.client is not None:
                 item.client.close()
                 item.client = None
             raise HubError(f"{item.slug}: {exc}") from exc
+
+    def _workdir(self, item: Installed) -> Path | None:
+        try:
+            return Path(local_store.load_current(parse_repo_url(item.slug)).attempt_dir)
+        except (local_store.NoBuildError, InvalidRepoURLError, OSError):
+            return None
+
+    def _copy_outputs(self, item: Installed, workdir: Path, before: outputs.Snapshot, result: dict) -> None:
+        """Copy files the call made to the outputs folder and say where (see outputs.py)."""
+        copies = outputs.collect(workdir, before, self.outputs_dir, self._prefix(item.slug))
+        if copies:
+            listed = "\n".join(f"  {c}" for c in copies)
+            result.setdefault("content", []).append({"type": "text", "text": (
+                f"[Legwork copied {len(copies)} file{'s' if len(copies) != 1 else ''} the tool made to where you can open "
+                f"{'them' if len(copies) != 1 else 'it'}:\n{listed}]"
+            )})
 
     # --- tools ----------------------------------------------------------------
 
@@ -658,8 +681,8 @@ def _sandbox_hint(result: dict, item: Installed) -> dict:
                 f"[Legwork: {item.slug} runs sandboxed. It can read {folders} (read-only), write only in its own "
                 f"folder, and {'use' if item.allow_net else 'has no'} network. If it needs more, install it again "
                 "with allow_read for the folder (within the hub's --allow-read) or allow_net (the hub must be "
-                "started with --allow-net). To save a file, give it a relative output path; the result is in the "
-                "tool's own folder.]"
+                "started with --allow-net). It can't write to your folders: give it an output file name, and "
+                "Legwork copies what it makes to the outputs folder.]"
             )})
     return result
 
@@ -706,9 +729,9 @@ def _child_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in ("LEGWORK_LLM_API_KEY", "GITHUB_TOKEN")}
 
 
-def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False) -> int:
+def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False, outputs_dir: Path | None = None) -> int:
     """Serve MCP over stdio until the client closes stdin."""
-    hub = Hub(allow_read, allow_net)
+    hub = Hub(allow_read, allow_net, outputs_dir=outputs_dir)
     workers: list[threading.Thread] = []
     try:
         for line in sys.stdin:

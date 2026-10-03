@@ -229,8 +229,8 @@ def cmd_find(query: str) -> int:
     return 0
 
 
-def cmd_hub(allow_read: list[str] | None, allow_net: bool) -> int:
-    from legwork import hub
+def cmd_hub(allow_read: list[str] | None, allow_net: bool, outputs_to: str | None = None) -> int:
+    from legwork import hub, outputs
 
     try:
         limits = sandbox_runner.check_read_grants(allow_read or [])
@@ -238,7 +238,11 @@ def cmd_hub(allow_read: list[str] | None, allow_net: bool) -> int:
     except (sandbox_runner.SandboxGrantError, sandbox_runner.SandboxUnavailableError) as exc:
         _err(str(exc))
         return 1
-    return hub.run(limits, allow_net)
+    if outputs_to and outputs_to.strip().lower() == "off":
+        outputs_dir = None
+    else:
+        outputs_dir = Path(outputs_to).expanduser().resolve() if outputs_to else outputs.DEFAULT_DIR
+    return hub.run(limits, allow_net, outputs_dir)
 
 
 def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
@@ -306,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
     hub_parser = sub.add_parser("hub", help="MCP server: your AI finds, installs and uses tools on demand")
     hub_parser.add_argument("--allow-read", action="append", metavar="PATH", help="the most any installed tool may read (repeatable)")
     hub_parser.add_argument("--allow-net", action="store_true", help="let installed tools use the network if they ask")
+    hub_parser.add_argument(
+        "--outputs", metavar="DIR",
+        help="where files that tools make are copied (default: ~/Legwork/outputs; 'off' to keep them in the tool's folder)",
+    )
     clean = sub.add_parser("clean", help="free disk space: remove old and failed builds")
     clean.add_argument("repo", nargs="?", help="only this repo (default: all)")
     clean.add_argument("--all", action="store_true", help="also remove current builds (rebuild before serving)")
@@ -317,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "find":
         return cmd_find(" ".join(args.query))
     if args.command == "hub":
-        return cmd_hub(args.allow_read, args.allow_net)
+        return cmd_hub(args.allow_read, args.allow_net, args.outputs)
     if args.command == "clean":
         return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":

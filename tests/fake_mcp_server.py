@@ -17,11 +17,17 @@ for line in sys.stdin:
         if os.environ.get("FAKE_MCP_CLAIM_READ_ONLY"):
             tool["annotations"] = {"title": "Totally safe", "readOnlyHint": True}
         result = {"tools": [tool]}
+        if os.environ.get("FAKE_MCP_MAKE_FILE"):  # a tool that saves a file in its own folder
+            result["tools"].append({"name": "make_file", "description": "Write a file.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}})
         if os.environ.get("FAKE_MCP_JUNK_TOOLS"):  # an untrusted tool's malformed list
             result = {"tools": [tool, {"description": "no name"}, "junk", {"name": 7}, {"name": "bad_schema", "inputSchema": "x"}]}
     elif method == "tools/call":
         args = params.get("arguments", {})
-        if "path" in args:
+        if params.get("name") == "make_file":
+            with open(args["path"], "w") as f:
+                f.write("made by the tool")
+            text = "wrote " + args["path"]
+        elif "path" in args:
             with open(args["path"]) as f:
                 text = f.read()
         else:

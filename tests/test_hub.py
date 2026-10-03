@@ -444,3 +444,15 @@ def test_a_served_tools_words_are_clipped_and_its_output_marked():
     item = hub.Installed("owner/repo")
     marked = hub._mark_untrusted({"content": [{"type": "text", "text": "hi"}]}, item)
     assert marked["content"][0]["text"].startswith("[Output of owner/repo") and marked["content"][1]["text"] == "hi"
+
+
+def test_files_a_tool_makes_are_copied_to_the_outputs_folder(limits, tmp_path, monkeypatch):
+    monkeypatch.setenv("FAKE_MCP_MAKE_FILE", "1")
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve, outputs_dir=tmp_path / "outputs")
+    install(h, allow_read=[str(limits)])
+    workdir = Path(local_store.load_current(RepoRef("owner", "repo")).attempt_dir)
+    _, text = call(h, "repo__make_file", {"path": str(workdir / "result.txt")})
+    copied = tmp_path / "outputs" / "repo" / "result.txt"
+    assert copied.read_text() == "made by the tool"
+    assert str(copied) in text and "Legwork copied 1 file" in text
+    h.close()
