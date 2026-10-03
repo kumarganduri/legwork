@@ -135,7 +135,8 @@ acts), and the clients marked "asks" use those labels.
 | Client | Tested | Add Legwork | Before an install |
 |---|---|---|---|
 | Claude Code | ✅ | `claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
-| Claude Desktop, Cursor | ✅ | JSON above | asks (Cursor: unless auto-run is on) |
+| Claude Desktop | ✅ | JSON above | asks |
+| Cursor | ✅ | JSON above | its default Auto-review mode lets an AI decide, and ran installs without asking in our test; to approve every install, set Settings → Agents → Approvals & Execution to Allowlist and leave `install_tool` off the list |
 | opencode | ✅ 1.18 | JSON above | asks only with the `permission` line above |
 | Codex CLI | ✅ 0.159 | `codex mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
 | Goose | ✅ 1.52 | `goose session --with-extension "uvx legwork-mcp hub --allow-read ~/Downloads"` | asks with `GOOSE_MODE=smart_approve`; the default mode doesn't |
