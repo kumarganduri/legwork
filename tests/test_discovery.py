@@ -114,3 +114,25 @@ def test_the_cache_index_lists_exactly_the_cache_folders():
     for e in index:
         manifest = json.loads((cache / e["folder"] / "manifest.json").read_text())
         assert manifest["source_repo_url"].lower() == f"https://github.com/{e['repo']}".lower()
+
+
+def test_odd_index_entries_are_cleaned_or_skipped_and_never_break_search(monkeypatch):
+    """A null description, stars as a string or a missing date made every
+    find_tools call fail (Codex and pre-launch review, 2026-10-03)."""
+    import json as _json
+
+    from legwork import cache_reader, discovery
+
+    raw = [
+        {"repo": "owner/pdf", "what": None, "stars": "100", "topics": "pdf"},
+        {"repo": "owner/tables", "what": "extract pdf tables", "created_at": "", "pushed_at": "not a date"},
+        {"repo": 42}, "junk", {"repo": "no-slash"},
+    ]
+    monkeypatch.setattr(cache_reader, "_read", lambda base, rel: _json.dumps(raw))
+    monkeypatch.setenv("LEGWORK_CACHE_URL", "https://example.invalid/cache")
+    index = cache_reader.fetch_index()
+    assert [e["repo"] for e in index] == ["owner/pdf", "owner/tables"]
+    assert index[0]["what"] == "" and index[0]["stars"] == 0 and index[0]["topics"] == []
+    matches = discovery.cache_matches(["pdf", "tables"], index)
+    text = discovery.describe(discovery.Found("pdf tables", matches))
+    assert "owner/tables" in text and "update date unknown" in text

@@ -75,12 +75,16 @@ class Candidate:
     in_cache: bool = False
     has_own_mcp: bool = False
 
-    def days_since(self, iso: str) -> int:
-        return (datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00"))).days
+    def days_since(self, iso: str) -> int | None:
+        try:
+            return (datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00"))).days
+        except (ValueError, TypeError, AttributeError):
+            return None  # missing or malformed date
 
     @property
     def is_new(self) -> bool:
-        return self.days_since(self.created_at) < NEW_REPO_DAYS
+        age = self.days_since(self.created_at)
+        return age is not None and age < NEW_REPO_DAYS
 
 
 def _get_json(url: str) -> dict:
@@ -253,7 +257,8 @@ def describe(found: Found) -> str:
         updated = c.days_since(c.pushed_at) if c.pushed_at else None
         lines.append(
             f"{i}. {c.slug} ({c.stars:,} stars, {c.language}, license {c.license}, "
-            f"updated {updated} days ago)" + (f" [{'; '.join(flags)}]" if flags else "")
+            + (f"updated {updated} days ago)" if updated is not None else "update date unknown)")
+            + (f" [{'; '.join(flags)}]" if flags else "")
         )
         if c.description:
             lines.append(f"   description (untrusted, from the repo): {c.description}")

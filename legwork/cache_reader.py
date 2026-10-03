@@ -108,4 +108,22 @@ def fetch_index() -> list[dict]:
         entries = json.loads(raw) if raw else []
     except (CacheUnavailableError, ValueError):
         return []
-    return [e for e in entries if isinstance(e, dict) and isinstance(e.get("repo"), str)] if isinstance(entries, list) else []
+    if not isinstance(entries, list):
+        return []
+    return [clean for e in entries if (clean := _clean_index_entry(e)) is not None]
+
+
+def _clean_index_entry(entry) -> dict | None:
+    """An index entry with every field the right type, or None. One odd entry
+    (a null description, stars as a string, a missing date) used to make every
+    find_tools call fail (Codex and pre-launch review, 2026-10-03)."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("repo"), str) or entry["repo"].count("/") != 1:
+        return None
+    text = lambda key: entry.get(key) if isinstance(entry.get(key), str) else ""  # noqa: E731
+    stars = entry.get("stars")
+    return {
+        "repo": entry["repo"], "what": text("what"), "about": text("about"), "license": text("license") or "none",
+        "language": text("language") or "-", "created_at": text("created_at"), "pushed_at": text("pushed_at"),
+        "stars": stars if isinstance(stars, int) and not isinstance(stars, bool) else 0,
+        "topics": [t for t in entry.get("topics") or [] if isinstance(t, str)] if isinstance(entry.get("topics"), list) else [],
+    }
