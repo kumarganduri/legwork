@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.kumarganduri/legwork",
+  "title": "Legwork",
+  "description": "Lets your AI find open-source tools on GitHub and install them as sandboxed MCP tools.",
+  "repository": {
+    "url": "https://github.com/kumarganduri/legwork",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/kumarganduri/legwork",
+  "version": "0.7.9",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "legwork-mcp",
+      "version": "0.7.9",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "hub"
+        },
+        {
+          "type": "named",
+          "name": "--allow-read",
+          "valueHint": "folder",
+          "isRepeated": true,
+          "description": "A folder installed tools may read (read-only). Repeatable. Without it they read none of your files."
+        },
+        {
+          "type": "named",
+          "name": "--allow-net",
+          "description": "Let installed tools use the internet. Off by default."
+        }
+      ]
+    }
+  ]
+}
