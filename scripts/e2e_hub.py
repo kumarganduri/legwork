@@ -36,6 +36,10 @@ def main() -> int:
     docs.mkdir()
     shutil.copy(FIXTURE, docs / "launch-plan.pdf")
     env = dict(os.environ, LEGWORK_HOME=str(work / "home"), LEGWORK_ENV_FILE=str(work / "no-key"))
+    # The cache in this commit, not the one at this version's release tag: on
+    # the release commit that tag doesn't exist yet, so the hub found no cache
+    # (0.7.9's CI, 2026-10-05). LEGWORK_CACHE_URL set outside still wins.
+    env.setdefault("LEGWORK_CACHE_URL", str(Path(__file__).resolve().parents[1] / "cache"))
     for name in ("LEGWORK_LLM_ENDPOINT", "LEGWORK_LLM_API_KEY", "LEGWORK_LLM_MODEL"):
         env.pop(name, None)
     legwork = shutil.which("legwork") or sys.exit("legwork isn't on PATH (run under `uv run`)")
