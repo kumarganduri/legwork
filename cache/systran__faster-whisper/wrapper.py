@@ -56,7 +56,7 @@ def transcribe_audio(
 
     Returns:
       {"text", "language", "language_probability", "duration_seconds", "segments": [{start, end, text}]},
-      plus "warning" when the language detection is unsure or most of a long file came back empty.
+      with "warning" first when the language detection is unsure or most of a long file came back empty.
     """
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"No such file: {audio_path}")
@@ -72,32 +72,34 @@ def transcribe_audio(
         if word_timestamps and getattr(seg, "words", None):
             item["words"] = [{"start": round(float(w.start), 2), "end": round(float(w.end), 2), "word": w.word} for w in seg.words]
         segments.append(item)
-    result: Dict[str, Any] = {
-        "text": " ".join(s["text"] for s in segments).strip(),
-        "language": getattr(info, "language", None),
-        "language_probability": round(float(getattr(info, "language_probability", 0.0) or 0.0), 3),
-        "duration_seconds": round(float(getattr(info, "duration", 0.0) or 0.0), 2),
-        "segments": segments,
-    }
+    duration = round(float(getattr(info, "duration", 0.0) or 0.0), 2)
+    probability = round(float(getattr(info, "language_probability", 0.0) or 0.0), 3)
     # Telugu was detected as Malayalam (47%) and most of the recording came back
     # empty, with nothing in the reply to say why (Claude Desktop, 2026-10-06).
+    # Facts, not instructions, and first, so a long transcript can't push them
+    # past the hub's reply limit.
     warnings: List[str] = []
-    if language is None and result["language_probability"] < 0.7:
-        top = [f"{code} {p:.0%}" for code, p in (getattr(info, "all_language_probs", None) or [])[:3]]
+    if language is None and probability < 0.7:
+        guesses = list(getattr(info, "all_language_probs", None) or [])[:3]
+        named = ", ".join(f"{code} {p:.0%}" for code, p in guesses) or getattr(info, "language", None) or "no clear candidate"
         warnings.append(
-            f"Unsure which language this is ({', '.join(top) or result['language']}), so the text may be wrong "
-            "or missing. If the user knows the language, call again with language set (e.g. 'te' for Telugu). "
-            "The built-in base model is small: it does best in English and other widely spoken languages."
+            f"Language detection was unsure ({named}), so the transcript may be wrong or incomplete. Setting the "
+            "language argument to the language actually spoken usually fixes this. The built-in base model is small "
+            "and does best in English and other widely spoken languages."
         )
     covered = sum(s["end"] - s["start"] for s in segments)
-    if result["duration_seconds"] > 60 and covered < 0.3 * result["duration_seconds"]:
+    if duration > 60 and covered < 0.3 * duration:
         warnings.append(
-            f"Speech was found in only {covered:.0f} of {result['duration_seconds']:.0f} seconds. If the recording "
-            "is speech throughout, the model likely couldn't follow the language: say so rather than presenting "
-            "this as a full transcript."
+            f"Speech was detected in only {covered:.0f} of {duration:.0f} seconds, so this may not be a full transcript."
         )
-    if warnings:
-        result["warning"] = " ".join(warnings)
+    result: Dict[str, Any] = {"warning": " ".join(warnings)} if warnings else {}
+    result.update({
+        "text": " ".join(s["text"] for s in segments).strip(),
+        "language": getattr(info, "language", None),
+        "language_probability": probability,
+        "duration_seconds": duration,
+        "segments": segments,
+    })
     return result
 
 

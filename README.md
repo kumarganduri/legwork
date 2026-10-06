@@ -34,7 +34,8 @@ they need no API key:
 - *"Use Legwork to make a QR code for https://github.com/kumarganduri/legwork."*
 
 Saying "use Legwork" matters in Claude Desktop: without it, Claude may reach
-for its own cloud code sandbox, which can't see the files on your computer.
+for its own cloud code sandbox, which can't see the files on your computer
+unless you attach them.
 
 Your AI finds the tool ([faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [rembg](https://github.com/danielgatis/rembg),

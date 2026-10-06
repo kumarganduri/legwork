@@ -55,9 +55,10 @@ TOOL_TIMEOUT_SECONDS = 300
 INSTRUCTIONS = """\
 Legwork finds open-source tools on GitHub and installs them for you in a sandbox,
 on the user's own computer. Use it when the user needs something you can't do with
-your current tools, and for work on their local files (~/Downloads/..., /Users/...):
-a cloud code sandbox can't see those files, but a tool installed through Legwork can
-read the folders the user allowed.
+your current tools, including work on files on their computer that you can't reach:
+a cloud code sandbox can't see ~/Downloads/..., /Users/... or /home/... unless the
+user attached the file, but a tool installed through Legwork can read the folders the
+user allowed. If you can already read and process the file yourself, do that.
 1. find_tools with a few keywords (e.g. "extract tables pdf").
 2. Pick one candidate. Prefer established, maintained, licensed repos; be wary of
    repos marked NEW; prefer ones already in the Legwork cache.
@@ -88,11 +89,12 @@ STATIC_TOOLS = [
     _tool(
         "find_tools",
         "Find a tool that runs on the user's own computer for a job you have no tool for, especially "
-        "work on their local files (paths like ~/Downloads/memo.m4a or /Users/...): transcribe audio, "
-        "pull tables from a PDF, remove an image background, convert documents, trim video. A cloud "
-        "code sandbox can't see the user's files; a tool installed through Legwork runs on their "
-        "machine and reads the folders they allowed. Searches GitHub and the Legwork cache, with facts "
-        "to choose by (stars, license, freshness, cached, already has an MCP server). Installs nothing.",
+        "work on their local files (paths like ~/Downloads/memo.m4a, /Users/..., /home/...): transcribe "
+        "audio, pull tables from a PDF, remove an image background, convert documents, trim video. A cloud "
+        "code sandbox can't see the user's files unless they attached them; a tool installed through "
+        "Legwork runs on their machine and reads the folders they allowed. Searches GitHub and the Legwork "
+        "cache, with facts to choose by (stars, license, freshness, cached, already has an MCP server). "
+        "Installs nothing.",
         {"query": {"type": "string", "description": (
             "2-3 keywords, e.g. 'extract tables pdf'. Every word must match on GitHub, so "
             "leave out filler; if the results look off, try fewer or different words."
