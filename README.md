@@ -26,11 +26,15 @@ claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 Then just ask. Four to try first, all from the [public cache](cache/), so
 they need no API key:
 
-- *"Transcribe ~/Downloads/memo.m4a."* Any voice memo, mp3 or video;
-  offline, many languages.
-- *"Remove the background from ~/Downloads/photo.jpg."*
-- *"Pull the tables out of ~/Downloads/report.pdf."*
-- *"Make a QR code for https://github.com/kumarganduri/legwork."*
+- *"Use Legwork to transcribe ~/Downloads/memo.m4a."* Any voice memo, mp3 or
+  video, offline. Best in English and other widely spoken languages; its
+  small built-in model is unreliable for languages like Telugu.
+- *"Use Legwork to remove the background from ~/Downloads/photo.jpg."*
+- *"Use Legwork to pull the tables out of ~/Downloads/report.pdf."*
+- *"Use Legwork to make a QR code for https://github.com/kumarganduri/legwork."*
+
+Saying "use Legwork" matters in Claude Desktop: without it, Claude may reach
+for its own cloud code sandbox, which can't see the files on your computer.
 
 Your AI finds the tool ([faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [rembg](https://github.com/danielgatis/rembg),
