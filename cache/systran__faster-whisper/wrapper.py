@@ -55,7 +55,8 @@ def transcribe_audio(
       word_timestamps: Also return per-word timings.
 
     Returns:
-      {"text", "language", "language_probability", "duration_seconds", "segments": [{start, end, text}]}
+      {"text", "language", "language_probability", "duration_seconds", "segments": [{start, end, text}]},
+      plus "warning" when the language detection is unsure or most of a long file came back empty.
     """
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"No such file: {audio_path}")
@@ -71,13 +72,33 @@ def transcribe_audio(
         if word_timestamps and getattr(seg, "words", None):
             item["words"] = [{"start": round(float(w.start), 2), "end": round(float(w.end), 2), "word": w.word} for w in seg.words]
         segments.append(item)
-    return {
+    result: Dict[str, Any] = {
         "text": " ".join(s["text"] for s in segments).strip(),
         "language": getattr(info, "language", None),
         "language_probability": round(float(getattr(info, "language_probability", 0.0) or 0.0), 3),
         "duration_seconds": round(float(getattr(info, "duration", 0.0) or 0.0), 2),
         "segments": segments,
     }
+    # Telugu was detected as Malayalam (47%) and most of the recording came back
+    # empty, with nothing in the reply to say why (Claude Desktop, 2026-10-06).
+    warnings: List[str] = []
+    if language is None and result["language_probability"] < 0.7:
+        top = [f"{code} {p:.0%}" for code, p in (getattr(info, "all_language_probs", None) or [])[:3]]
+        warnings.append(
+            f"Unsure which language this is ({', '.join(top) or result['language']}), so the text may be wrong "
+            "or missing. If the user knows the language, call again with language set (e.g. 'te' for Telugu). "
+            "The built-in base model is small: it does best in English and other widely spoken languages."
+        )
+    covered = sum(s["end"] - s["start"] for s in segments)
+    if result["duration_seconds"] > 60 and covered < 0.3 * result["duration_seconds"]:
+        warnings.append(
+            f"Speech was found in only {covered:.0f} of {result['duration_seconds']:.0f} seconds. If the recording "
+            "is speech throughout, the model likely couldn't follow the language: say so rather than presenting "
+            "this as a full transcript."
+        )
+    if warnings:
+        result["warning"] = " ".join(warnings)
+    return result
 
 
 @mcp.tool()

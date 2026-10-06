@@ -28,9 +28,9 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 6907,
+  "stars": 6921,
   "created_at": "2019-04-08T11:38:48Z",
-  "pushed_at": "2026-10-02T16:53:41Z",
+  "pushed_at": "2026-10-06T16:34:33Z",
   "needs_network": false
  },
  {
@@ -57,9 +57,9 @@
   ],
   "license": "MIT",
   "language": "Rust",
-  "stars": 16108,
+  "stars": 16128,
   "created_at": "2022-07-01T19:21:00Z",
-  "pushed_at": "2026-10-01T19:31:47Z",
+  "pushed_at": "2026-10-06T10:46:51Z",
   "needs_network": false
  },
  {
@@ -82,9 +82,9 @@
   ],
   "license": "MIT",
   "language": "Rust",
-  "stars": 49886,
+  "stars": 49929,
   "created_at": "2022-08-09T17:17:44Z",
-  "pushed_at": "2026-10-03T00:47:17Z",
+  "pushed_at": "2026-10-06T17:49:13Z",
   "needs_network": false
  },
  {
@@ -106,9 +106,9 @@
   ],
   "license": "BSD-2-Clause",
   "language": "Python",
-  "stars": 1178,
+  "stars": 1180,
   "created_at": "2011-08-17T14:16:35Z",
-  "pushed_at": "2026-10-02T18:33:16Z",
+  "pushed_at": "2026-10-06T16:08:26Z",
   "needs_network": false
  },
  {
@@ -123,7 +123,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 24954,
+  "stars": 24976,
   "created_at": "2020-08-10T14:38:24Z",
   "pushed_at": "2026-09-20T17:16:21Z",
   "needs_network": false
@@ -142,9 +142,9 @@
   ],
   "license": "MIT",
   "language": "C++",
-  "stars": 41881,
+  "stars": 41945,
   "created_at": "2018-06-26T15:04:45Z",
-  "pushed_at": "2026-10-02T22:25:09Z",
+  "pushed_at": "2026-10-06T14:23:45Z",
   "needs_network": false
  },
  {
@@ -176,7 +176,7 @@
   ],
   "license": "MIT",
   "language": "Go",
-  "stars": 29631,
+  "stars": 29741,
   "created_at": "2018-01-27T18:19:31Z",
   "pushed_at": "2026-09-30T04:14:02Z",
   "needs_network": false
@@ -193,9 +193,9 @@
   ],
   "license": "BSD-3-Clause",
   "language": "Python",
-  "stars": 2808,
+  "stars": 2809,
   "created_at": "2012-07-13T16:27:11Z",
-  "pushed_at": "2026-10-02T21:21:27Z",
+  "pushed_at": "2026-10-04T08:50:26Z",
   "needs_network": false
  },
  {
@@ -224,7 +224,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 8414,
+  "stars": 8423,
   "created_at": "2018-04-20T13:55:04Z",
   "pushed_at": "2026-09-10T14:20:32Z",
   "needs_network": true
@@ -247,9 +247,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 19421,
+  "stars": 19427,
   "created_at": "2012-11-12T23:00:09Z",
-  "pushed_at": "2026-09-29T00:56:28Z",
+  "pushed_at": "2026-10-05T22:08:23Z",
   "needs_network": false
  },
  {
@@ -264,7 +264,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 10786,
+  "stars": 10793,
   "created_at": "2015-08-24T03:14:48Z",
   "pushed_at": "2026-08-06T00:46:50Z",
   "needs_network": false
@@ -279,7 +279,7 @@
   "language": "Python",
   "stars": 1939,
   "created_at": "2015-04-09T06:58:23Z",
-  "pushed_at": "2026-09-14T15:30:42Z",
+  "pushed_at": "2026-10-06T00:16:56Z",
   "needs_network": false
  },
  {
@@ -297,9 +297,9 @@
   ],
   "license": "GPL-3.0",
   "language": "Haskell",
-  "stars": 40120,
+  "stars": 40141,
   "created_at": "2012-11-17T03:15:11Z",
-  "pushed_at": "2026-10-02T00:32:34Z",
+  "pushed_at": "2026-10-03T22:31:15Z",
   "needs_network": false
  },
  {
@@ -310,7 +310,7 @@
   "topics": [],
   "license": "BSD-2-Clause",
   "language": "Python",
-  "stars": 4948,
+  "stars": 4947,
   "created_at": "2011-11-10T09:36:22Z",
   "pushed_at": "2026-03-25T03:05:38Z",
   "needs_network": false
@@ -341,9 +341,9 @@
   ],
   "license": "Apache-2.0",
   "language": "JavaScript",
-  "stars": 32737,
+  "stars": 32743,
   "created_at": "2013-08-19T20:24:24Z",
-  "pushed_at": "2026-10-02T16:08:48Z",
+  "pushed_at": "2026-10-06T16:00:40Z",
   "needs_network": false
  },
  {
@@ -364,9 +364,9 @@
   ],
   "license": "Matplotlib (PSF-style)",
   "language": "Python",
-  "stars": 23319,
+  "stars": 23330,
   "created_at": "2011-02-19T03:17:12Z",
-  "pushed_at": "2026-10-03T02:47:06Z",
+  "pushed_at": "2026-10-06T16:31:59Z",
   "needs_network": false
  },
  {
@@ -377,7 +377,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 2252,
+  "stars": 2253,
   "created_at": "2012-06-29T16:30:23Z",
   "pushed_at": "2026-06-30T20:26:41Z",
   "needs_network": false
@@ -398,9 +398,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 188130,
+  "stars": 188834,
   "created_at": "2024-11-13T19:56:40Z",
-  "pushed_at": "2026-10-03T02:35:06Z",
+  "pushed_at": "2026-10-04T03:59:52Z",
   "needs_network": false
  },
  {
@@ -427,9 +427,9 @@
   ],
   "license": "MIT",
   "language": "Go",
-  "stars": 16046,
+  "stars": 16061,
   "created_at": "2015-09-26T22:14:44Z",
-  "pushed_at": "2026-10-01T03:57:01Z",
+  "pushed_at": "2026-10-05T00:53:45Z",
   "needs_network": false
  },
  {
@@ -455,9 +455,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 18821,
+  "stars": 18824,
   "created_at": "2013-11-21T05:53:08Z",
-  "pushed_at": "2026-10-01T07:39:55Z",
+  "pushed_at": "2026-10-06T14:21:31Z",
   "needs_network": false
  },
  {
@@ -487,9 +487,9 @@
   ],
   "license": "MIT",
   "language": "JavaScript",
-  "stars": 52314,
+  "stars": 52415,
   "created_at": "2016-11-29T17:13:37Z",
-  "pushed_at": "2026-10-03T13:02:50Z",
+  "pushed_at": "2026-10-06T14:19:24Z",
   "needs_network": false
  },
  {
@@ -509,9 +509,9 @@
   ],
   "license": "BSD-3-Clause",
   "language": "Python",
-  "stars": 10241,
+  "stars": 10246,
   "created_at": "2012-01-06T17:13:38Z",
-  "pushed_at": "2026-10-03T07:38:34Z",
+  "pushed_at": "2026-10-06T15:55:05Z",
   "needs_network": false
  },
  {
@@ -530,7 +530,7 @@
   "language": "Python",
   "stars": 4988,
   "created_at": "2011-12-30T03:37:43Z",
-  "pushed_at": "2026-09-29T01:52:27Z",
+  "pushed_at": "2026-10-05T19:35:08Z",
   "needs_network": false
  },
  {
@@ -541,7 +541,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 5733,
+  "stars": 5734,
   "created_at": "2013-10-15T14:50:41Z",
   "pushed_at": "2026-08-01T14:59:42Z",
   "needs_network": false
@@ -563,9 +563,9 @@
   ],
   "license": "MIT-CMU",
   "language": "Python",
-  "stars": 13880,
+  "stars": 13884,
   "created_at": "2012-07-24T21:38:39Z",
-  "pushed_at": "2026-10-03T10:35:09Z",
+  "pushed_at": "2026-10-06T12:53:58Z",
   "needs_network": false
  },
  {
@@ -589,9 +589,9 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 8030,
+  "stars": 8047,
   "created_at": "2021-01-04T08:02:09Z",
-  "pushed_at": "2026-10-03T02:56:58Z",
+  "pushed_at": "2026-10-06T14:24:44Z",
   "needs_network": false
  },
  {
@@ -602,7 +602,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 3549,
+  "stars": 3550,
   "created_at": "2012-11-21T11:03:31Z",
   "pushed_at": "2024-08-07T17:36:44Z",
   "needs_network": false
@@ -624,7 +624,7 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 2177,
+  "stars": 2179,
   "created_at": "2018-07-14T03:21:46Z",
   "pushed_at": "2026-09-22T18:35:44Z",
   "needs_network": false
@@ -642,9 +642,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 9915,
+  "stars": 9937,
   "created_at": "2018-11-01T23:56:04Z",
-  "pushed_at": "2026-10-03T12:51:43Z",
+  "pushed_at": "2026-10-06T15:15:34Z",
   "needs_network": false
  },
  {
@@ -664,7 +664,7 @@
   ],
   "license": "MIT",
   "language": "JavaScript",
-  "stars": 22711,
+  "stars": 22714,
   "created_at": "2012-08-22T10:41:43Z",
   "pushed_at": "2026-08-27T14:58:51Z",
   "needs_network": false
@@ -683,9 +683,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 14985,
+  "stars": 14993,
   "created_at": "2010-04-30T20:37:14Z",
-  "pushed_at": "2026-10-02T22:51:12Z",
+  "pushed_at": "2026-10-05T04:38:31Z",
   "needs_network": false
  },
  {
@@ -705,9 +705,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 25681,
+  "stars": 25727,
   "created_at": "2023-02-11T09:17:27Z",
-  "pushed_at": "2026-10-01T14:01:34Z",
+  "pushed_at": "2026-10-06T12:33:47Z",
   "needs_network": false
  },
  {
@@ -725,9 +725,9 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 1386,
+  "stars": 1387,
   "created_at": "2014-06-18T10:54:08Z",
-  "pushed_at": "2026-10-02T09:01:39Z",
+  "pushed_at": "2026-10-05T08:24:05Z",
   "needs_network": false
  },
  {
@@ -738,7 +738,7 @@
   "topics": [],
   "license": "MIT",
   "language": "Python",
-  "stars": 6414,
+  "stars": 6416,
   "created_at": "2011-04-01T03:00:30Z",
   "pushed_at": "2026-09-21T23:53:59Z",
   "needs_network": false
@@ -763,7 +763,7 @@
   ],
   "license": "Apache-2.0",
   "language": "Python",
-  "stars": 2396,
+  "stars": 2395,
   "created_at": "2011-05-16T13:45:29Z",
   "pushed_at": "2026-09-28T22:13:45Z",
   "needs_network": false
@@ -784,7 +784,7 @@
   ],
   "license": "Unlicense",
   "language": "Python",
-  "stars": 195164,
+  "stars": 195953,
   "created_at": "2020-10-26T04:22:55Z",
   "pushed_at": "2026-09-27T22:09:13Z",
   "needs_network": true
@@ -805,7 +805,7 @@
   ],
   "license": "MIT",
   "language": "Python",
-  "stars": 14945,
+  "stars": 14954,
   "created_at": "2013-08-12T09:39:28Z",
   "pushed_at": "2026-08-26T06:17:08Z",
   "needs_network": false

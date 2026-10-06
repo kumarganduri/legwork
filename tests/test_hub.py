@@ -491,3 +491,11 @@ def test_installing_an_internet_tool_without_network_says_so(limits, monkeypatch
     _, text = install(h)
     assert "fetches from the internet" in text and "restart it" in text
     h.close()
+
+
+def test_find_tools_says_it_reaches_the_users_own_files():
+    """Claude Desktop sent "Transcribe ~/Downloads/..." to its cloud sandbox,
+    which can't see local files, instead of Legwork (2026-10-06)."""
+    find = next(t for t in hub.STATIC_TOOLS if t["name"] == "find_tools")
+    assert "user's own computer" in find["description"] and "~/Downloads" in find["description"]
+    assert "cloud code sandbox can't see" in find["description"] and "cloud code sandbox can't see" in hub.INSTRUCTIONS
