@@ -13,7 +13,10 @@ def _ensure_out_path(out_path: Optional[str], default_basename: str) -> str:
     if out_path is None or not str(out_path).strip():
         os.makedirs("outputs", exist_ok=True)
         out_path = os.path.join("outputs", default_basename)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    # A bare file name ("qr.png") has no folder to make: os.makedirs("")
+    # raised FileNotFoundError (known-answer test, 2026-10-11).
+    if os.path.dirname(out_path):
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
     return os.path.abspath(out_path)
 
 

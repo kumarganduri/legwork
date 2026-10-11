@@ -58,7 +58,6 @@ def sg_search(
     pattern: str,
     lang: str,
     path: str = ".",
-    ignore_case: bool = False,
     json_output: bool = False,
 ) -> str:
     """
@@ -67,12 +66,11 @@ def sg_search(
     - pattern: ast-grep pattern, e.g., 'var code = $PATTERN'
     - lang: language for parsing (e.g., ts, js, py, rs, etc.)
     - path: directory or file to search (default '.')
-    - ignore_case: perform case-insensitive matching
     - json_output: output matches in JSON format
     """
+    # No ignore-case option: ast-grep matches syntax trees and has none. The
+    # old one passed -i, which is --interactive (known-answer test, 2026-10-11).
     args = ["-p", pattern, "-l", lang, path]
-    if ignore_case:
-        args.append("-i")
     if json_output:
         args.append("--json")
     return _run_sg(args)
@@ -83,7 +81,6 @@ def sg_rewrite(
     rewrite: str,
     lang: str,
     path: str = ".",
-    ignore_case: bool = False,
     dry_run: bool = True,
 ) -> str:
     """
@@ -93,16 +90,13 @@ def sg_rewrite(
     - rewrite: replacement template
     - lang: language for parsing
     - path: directory or file to operate on
-    - ignore_case: case-insensitive matching
     - dry_run: if True, only previews changes (does not write). If False, attempts to write changes.
     """
     args = ["-p", pattern, "-l", lang, "-r", rewrite, path]
-    if ignore_case:
-        args.append("-i")
-    # By default ast-grep previews changes; if user requests write, add the flag.
+    # By default ast-grep previews changes; --update-all (-U) applies them.
+    # There is no --write flag in ast-grep 0.45.
     if not dry_run:
-        # ast-grep uses --write to commit changes to disk.
-        args.append("--write")
+        args.append("--update-all")
     return _run_sg(args)
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from typing import List, Union, Optional
@@ -21,7 +22,8 @@ def bar_chart_html(
         title: Optional chart title.
 
     Returns:
-        {"html_path": absolute path of the chart (opens offline in any browser), "size_bytes": ...}
+        {"html_path": absolute path of the chart (opens offline in any browser), "size_bytes": ...,
+         "title", "bars": [[x, y], ...], "title_in_html": whether the saved chart carries the title}
 
     Raises:
         ValueError: If x and y lengths differ or are empty.
@@ -42,7 +44,18 @@ def bar_chart_html(
     # to a file in the tool's folder rather than into the client's context.
     path = os.path.abspath(f"chart-{int(time.time() * 1000)}.html")
     fig.write_html(path, include_plotlyjs=True)
-    return {"html_path": path, "size_bytes": os.path.getsize(path)}
+    # What the chart shows, read back from the figure, so the caller (and a
+    # known-answer test) can check it without opening a 3.5 MB file.
+    bar = fig.data[0]
+    with open(path, encoding="utf-8") as f:
+        html = f.read()
+    return {
+        "html_path": path,
+        "size_bytes": os.path.getsize(path),
+        "title": fig.layout.title.text,
+        "bars": [[label, value] for label, value in zip(list(bar.x), list(bar.y))],
+        "title_in_html": bool(title) and json.dumps(title)[1:-1] in html,
+    }
 
 
 if __name__ == "__main__":

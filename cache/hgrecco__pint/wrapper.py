@@ -29,7 +29,10 @@ def convert(value: float, from_unit: str, to_unit: str) -> Dict[str, object]:
           - text: a human-readable string representation like "123.0 centimeter"
     """
     try:
-        quantity = value * ureg(from_unit)
+        # Quantity(), not value * unit: multiplying an offset unit (degC, degF)
+        # raised OffsetUnitCalculusError, so temperatures never converted
+        # (known-answer test, 2026-10-11).
+        quantity = ureg.Quantity(value, from_unit)
     except Exception as e:
         raise ValueError(f"Invalid source unit '{from_unit}': {e}")
 
@@ -38,10 +41,12 @@ def convert(value: float, from_unit: str, to_unit: str) -> Dict[str, object]:
     except Exception as e:
         raise ValueError(f"Cannot convert from '{from_unit}' to '{to_unit}': {e}")
 
+    # 12 significant digits: 100 degC came out as 211.99999999999991 degF.
+    value = float(f"{float(converted.magnitude):.12g}")
     return {
-        "value": float(converted.magnitude),
+        "value": value,
         "unit": f"{converted.units}",
-        "text": str(converted),
+        "text": f"{value} {converted.units}",
     }
 
 

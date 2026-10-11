@@ -123,10 +123,17 @@ def convert_notebook(
     with open(out_path, write_mode) as f:
         f.write(data)
 
+    # The converted text itself, so the caller can read the result (and a
+    # known answer can check it) without opening the file; none for PDF.
+    try:
+        preview = data.decode("utf-8")[:4000]
+    except UnicodeDecodeError:
+        preview = None
     return {
         "output_path": os.path.abspath(out_path),
         "format": to,
         "bytes_written": len(data),
+        "preview": preview,
     }
 
 if __name__ == "__main__":

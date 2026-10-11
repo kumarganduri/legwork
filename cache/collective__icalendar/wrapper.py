@@ -18,6 +18,11 @@ def _to_iso(value: Any) -> Optional[str]:
         return None
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, str):
+        # vText is already the decoded text; to_ical() escaped it again, so
+        # "Seed swap, potluck" came back as "Seed swap\, potluck"
+        # (known-answer test, 2026-10-11).
+        return str(value)
     try:
         # Try icalendar decoded value (e.g., bytes to string)
         if isinstance(value, bytes):
