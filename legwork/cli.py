@@ -272,7 +272,9 @@ def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
     verb = "Would free" if dry_run else "Freed"
     print(f"{verb} {local_store.human_size(total)}.")
     if everything and not dry_run:
-        print("Rebuild a wrapper with `legwork owner/repo` before serving it again.")
+        # Most people use the hub, where asking again is all it takes (2026-10-10).
+        print("Using the hub? Restart your AI client and ask again: the tool is reinstalled when needed. "
+              "Using `legwork serve`? Rebuild first with `legwork owner/repo`.")
     return 0
 
 
