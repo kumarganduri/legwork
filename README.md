@@ -400,8 +400,14 @@ tool works. It does not mean every tool works. In the trial:
 - AnyJev's decision tool needs a running vLLM server, which the self-test
   didn't have.
 
-Tools that must reach the network at run time won't work under `serve`,
-because the network is off.
+The same model writes the wrapper and its self-test, so a wrapper that
+misread the README can pass its own wrong test. **Cached tools have one
+more check:** a known answer, a fixed input and the output a person expects
+from it, which must pass before an entry is added or changed
+([#3](https://github.com/kumarganduri/legwork/issues/3)).
+
+Tools that must reach the network at run time need `--allow-net`; without
+it the network is off.
 
 ## Risks, stated plainly
 

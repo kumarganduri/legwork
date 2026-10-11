@@ -23,6 +23,42 @@ way a user's build would use it, and posts its install command in the job
 summary. Reviewers: read that install command. It runs, with network on,
 for everyone who builds that repo.
 
+### Known answers
+
+Every entry needs a known answer: a fixed input and the output a person
+expects from it. A wrapper's self-test is written by the same model as the
+wrapper, so a wrapper that misread the README can pass its own wrong test
+([#3](https://github.com/kumarganduri/legwork/issues/3)). The known answer
+is the check it can't write for itself.
+
+Put the input in `cache/owner__repo/fixtures/` (small files, under 2 MB in
+all, no links) and add this to `manifest.json`:
+
+```json
+"known_answer": {
+  "tool": "extract_tables",
+  "arguments": {"path": "{fixtures}/launch-plan.pdf"},
+  "expect_contains": ["Offline sync conflicts", "Last-writer-wins plus a conflict inbox"],
+  "derived_from": "launch-plan.pdf was made for Legwork's tests with a three-row risk table; these are cells of that table"
+}
+```
+
+- `tool` and `arguments` are the call; `{fixtures}` becomes the folder's path.
+  The tool can read only that folder, with no network.
+- `expect_contains` lists text that must be in the reply. For a tool that
+  returns a PNG, `expect_image` can check its size: `{"width": 290, "height": 290}`.
+- `derived_from` says why the answer is right. **The expected answer must
+  follow from how you made the input**, not from running the tool and
+  copying what it printed: a CSV whose column you made sum to 42, a voice
+  memo saying a sentence you wrote, a Python file with an unused import
+  that a linter must flag. If the tool disagrees, the wrapper may be wrong.
+- Tools that need the internet set `"needs_network": true` in the manifest.
+  CI skips their known answer (YouTube blocks cloud machines); run it
+  yourself with `uv run python scripts/check_cache_entry.py cache/owner__repo --network`.
+
+`legwork contribute` keeps an entry's known answer and fixtures when you
+rebuild it.
+
 ## Work on Legwork
 
 ```sh

@@ -311,20 +311,34 @@ def pr_description(ref: RepoRef, manifest: dict, stale_warning: str | None = Non
         lines += ["", f"⚠️ License warning — {manifest['license_flag']}. Please check before merging."]
     if stale_warning:
         lines += ["", f"⚠️ {stale_warning}"]
+    if not manifest.get("known_answer"):
+        lines += ["", "Before opening the PR: add a known_answer and its fixtures (see CONTRIBUTING.md, "
+                  "\"Known answers\"). The cache check fails an entry without one."]
     return "\n".join(lines) + "\n"
 
 
 # --- write ----------------------------------------------------------------------
 
 
+def _previous_known_answer(entry_dir: Path) -> dict | None:
+    try:
+        answer = json.loads((entry_dir / "manifest.json").read_text()).get("known_answer")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return answer if isinstance(answer, dict) else None
+
+
 def _write_atomically(entry_dir: Path, files: dict[str, str]) -> None:
     """All files appear together or not at all, and a previous entry is only
-    replaced once the new one is fully on disk."""
+    replaced once the new one is fully on disk. Its fixtures/ folder carries over."""
     entry_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{entry_dir.name}.", dir=entry_dir.parent))
     try:
         for name, content in files.items():
             (staging / name).write_text(content)
+        fixtures = entry_dir / "fixtures"
+        if fixtures.is_dir() and not fixtures.is_symlink():
+            shutil.copytree(fixtures, staging / "fixtures", symlinks=True)
         if entry_dir.exists():
             retired = Path(tempfile.mkdtemp(prefix=f".{entry_dir.name}.old.", dir=entry_dir.parent))
             entry_dir.rename(retired / entry_dir.name)
@@ -353,6 +367,11 @@ def write_entry(ref: RepoRef, record: BuildRecord, cache_dir: Path = DEFAULT_CAC
     entry_dir = cache_dir / cache_reader.entry_name(ref)
     warnings, build_behind = check_staleness(ref, build_sha, entry_dir)
     manifest = build_manifest(ref, record, build_sha, detect_license(clone), smoke_test)
+    # A person wrote the entry's known answer and its fixtures; a rebuild
+    # mustn't drop them (issue #3). The cache check re-runs it on the new wrapper.
+    previous = _previous_known_answer(entry_dir)
+    if previous is not None:
+        manifest["known_answer"] = previous
     pr_text = pr_description(ref, manifest, str(warnings[-1]) if build_behind else None)
 
     outputs = {

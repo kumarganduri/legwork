@@ -1,0 +1,40 @@
+name: cache-weekly
+
+# Every cached tool, installed and checked against its known answer once a
+# week. Entries pin their top-level package, not its dependencies, so an
+# upstream release can break a tool with no change here. Known answers that
+# need the internet are skipped: YouTube blocks cloud machines.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install bubblewrap (Legwork's Linux sandbox)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q bubblewrap
+          python3 -c "from legwork.sandbox_runner import BWRAP_APPARMOR_PROFILE as p; print(p, end='')" > /tmp/bwrap.aa
+          sudo cp /tmp/bwrap.aa /etc/apparmor.d/bwrap && sudo apparmor_parser -r /etc/apparmor.d/bwrap
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: Check every entry
+        run: |
+          ls -d cache/*/ | sed 's#/$##' > "$RUNNER_TEMP/entries"
+          failed=0
+          while read -r e; do uv run python scripts/check_cache_entry.py "$e" || failed=1; done < "$RUNNER_TEMP/entries"
+          exit $failed

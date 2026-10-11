@@ -361,3 +361,21 @@ def test_contribute_command_reports_a_block_and_exits_1(tmp_path, capsys, smoke_
 def test_contribute_without_a_build_exits_1(tmp_path, capsys):
     assert cli.main(["contribute", "owner/repo", "--out", str(tmp_path / "cache")]) == 1
     assert "legwork owner/repo" in capsys.readouterr().err
+
+
+
+def test_rewriting_an_entry_keeps_its_known_answer_and_fixtures(tmp_path):
+    """A person wrote them; a rebuild mustn't drop them (issue #3)."""
+    cache_dir = tmp_path / "cache"
+    first = cache_writer.write_entry(REF, make_build(), cache_dir)
+    assert "add a known_answer" in first.pr_description
+    manifest = json.loads((first.path / "manifest.json").read_text())
+    manifest["known_answer"] = {"tool": "t", "expect_contains": ["x"], "derived_from": "made by hand"}
+    (first.path / "manifest.json").write_text(json.dumps(manifest))
+    (first.path / "fixtures").mkdir()
+    (first.path / "fixtures" / "input.txt").write_text("hello")
+    second = cache_writer.write_entry(REF, make_build(), cache_dir)
+    assert second.manifest["known_answer"]["derived_from"] == "made by hand"
+    assert json.loads((second.path / "manifest.json").read_text())["known_answer"]["tool"] == "t"
+    assert (second.path / "fixtures" / "input.txt").read_text() == "hello"
+    assert "add a known_answer" not in second.pr_description
