@@ -222,3 +222,21 @@ def test_version_flag_prints_the_version(flag, capsys):
         cli.main([flag])
     assert exit_info.value.code == 0
     assert capsys.readouterr().out.startswith("legwork ")
+
+
+def test_show_prints_what_a_build_came_from(tmp_path, monkeypatch, capsys):
+    """Issue #4: the commit, wrapper hash, install command and packages of a build."""
+    monkeypatch.setenv("LEGWORK_HOME", str(tmp_path / "home"))
+    attempt = local_store.new_build_dir(REF) / "attempt-1"
+    (attempt / ".venv" / "bin").mkdir(parents=True)
+    (attempt / ".venv" / "bin" / "python").write_text("")
+    (attempt / "wrapper.py").write_text("x")
+    site = attempt / ".venv" / "lib" / "python3.12" / "site-packages" / "demo-1.2.dist-info"
+    site.mkdir(parents=True)
+    (site / "METADATA").write_text("Name: demo\nVersion: 1.2\n")
+    local_store.save_current(REF, attempt, "pip install demo==1.2", "does a thing", "gpt-5")
+    assert cli.main(["show", "owner/repo"]) == 0
+    out = capsys.readouterr().out
+    assert "owner/repo, built" in out and "pip install demo==1.2" in out and "pip:demo==1.2" in out
+    assert "sha256 2d711642b726" in out  # sha256 of "x"
+    assert cli.main(["show", "owner/other"]) == 1

@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from legwork import builder, discovery, local_store, outputs, sandbox_runner
+from legwork import builder, discovery, local_store, outputs, repo_fetcher, sandbox_runner
 from legwork.mcp_stdio import MCPClientError, StdioMCPClient
 from legwork.repo_fetcher import InvalidRepoURLError, parse_repo_url
 
@@ -418,8 +418,9 @@ class Hub:
                    "MCP config and restart it, then install again with allow_net=true.")
                 + "\n"
             )
+        built = _build_line(item.slug)
         return (
-            f"{item.slug} is {how}. It may read: {grants}; network: {'yes' if item.allow_net else 'no'}.\n{net_note}"
+            f"{item.slug} is {how}. It may read: {grants}; network: {'yes' if item.allow_net else 'no'}.\n{built}{net_note}"
             f"Tools:\n{tools}\n"
             f"Call one as {prefix}__{example} if it's in your tool list; otherwise "
             f'use_tool(repo="{item.slug}", tool="{example}", arguments={{...}}).'
@@ -451,7 +452,8 @@ class Hub:
                 self._start(item)
             except MCPClientError:
                 pass
-        return "\n\n".join(self._ready_message(i, "installed") for i in items)
+        moved = _upstream_moved([i.slug for i in items])
+        return "\n\n".join(self._ready_message(i, "installed") + moved.get(i.slug, "") for i in items)
 
     def use_tool(self, repo: str, tool: str, arguments: dict | None = None) -> dict:
         slug = self._slug(repo)
@@ -691,6 +693,55 @@ _DENIAL_SIGNS = (
     "Operation not permitted", "Permission denied", "Read-only file system",
     "nodename nor servname", "Name or service not known", "Temporary failure in name resolution",
 )
+
+
+def _build_line(slug: str) -> str:
+    """What this install was built from: the commit that was cloned and
+    scanned, who wrote the wrapper, its hash, and how many packages the
+    install resolved (issue #4). Empty for builds from before 0.7.12."""
+    try:
+        record = local_store.load_current(parse_repo_url(slug))
+    except (local_store.NoBuildError, InvalidRepoURLError, OSError, ValueError, TypeError):
+        return ""
+    if not record.commit_sha:
+        return ""
+    who = "a cached wrapper reviewed by Legwork" if "Legwork cache" in record.model else f"a wrapper written by {record.model}"
+    return (
+        f"Built from {slug}@{record.commit_sha[:12]} with {who} (sha256 {record.wrapper_sha256[:12]}); "
+        f"install: {_first_sentence(record.install_command.splitlines()[0] if record.install_command else '', 100)}; "
+        f"{len(record.packages)} packages installed (`legwork show {slug}` lists them).\n"
+    )
+
+
+UPSTREAM_CHECK_SECONDS = 8
+
+
+def _upstream_moved(slugs: list[str]) -> dict[str, str]:
+    """Notes for installed tools whose repo has new commits since their build.
+    Never rebuilds: the user decides. Silent when GitHub can't be reached."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+
+    def check(slug: str) -> str:
+        record = local_store.load_current(parse_repo_url(slug))
+        if not record.commit_sha:
+            return ""
+        current = repo_fetcher.remote_head_sha(parse_repo_url(slug).clone_url)
+        if current == record.commit_sha:
+            return ""
+        return (f"Note: {slug} has new commits since this build (now {current[:12]}). They are not installed; "
+                f"to update, the user can run `legwork clean --all {slug}` and install it again.\n")
+
+    if not slugs:
+        return {}
+    pool = ThreadPoolExecutor(max_workers=min(8, len(slugs)))
+    futures = {slug: pool.submit(check, slug) for slug in slugs}
+    wait(futures.values(), timeout=UPSTREAM_CHECK_SECONDS)
+    pool.shutdown(wait=False, cancel_futures=True)
+    notes = {}
+    for slug, future in futures.items():
+        if future.done() and not future.exception() and future.result():
+            notes[slug] = future.result()
+    return notes
 
 
 def _first_sentence(text: str, limit: int = 160) -> str:

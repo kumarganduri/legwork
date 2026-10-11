@@ -8,7 +8,8 @@ Layout under LEGWORK_HOME (default ~/.legwork):
         builds/<UTC timestamp>/      one folder per `legwork build` run
             repo/                    the clone
             attempt-N/               wrapper.py + .venv of each attempt
-        current.json                 points at the latest successful attempt
+        current.json                 points at the latest successful attempt, and
+                                     records what it was built from (issue #4)
 
 Each build gets its own folder rather than overwriting the last one: a venv
 can't be moved (its scripts hold absolute paths), and a failed rebuild
@@ -17,12 +18,16 @@ shouldn't break a wrapper that's already working.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-from dataclasses import asdict, dataclass
+import re
+import stat
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
 
+from legwork import repo_fetcher
 from legwork.repo_fetcher import RepoRef
 
 LEGWORK_HOME_ENV = "LEGWORK_HOME"
@@ -42,6 +47,10 @@ class BuildRecord:
     entrypoint: str
     model: str
     built_at: str
+    # What the build came from (issue #4). Empty in records from before 0.7.12.
+    commit_sha: str = ""  # the commit that was cloned and scanned
+    wrapper_sha256: str = ""
+    packages: tuple[str, ...] = ()  # what the install resolved: "pip:name==1.2", "npm:name@1.2"
 
 
 def legwork_home() -> Path:
@@ -60,6 +69,10 @@ def new_build_dir(ref: RepoRef) -> Path:
 
 
 def save_current(ref: RepoRef, attempt_dir: Path, install_command: str, entrypoint: str, model: str) -> BuildRecord:
+    try:
+        commit = repo_fetcher.head_sha(attempt_dir.parent / "repo")
+    except Exception:  # noqa: BLE001 — a record without a commit beats no record
+        commit = ""
     record = BuildRecord(
         repo=ref.slug,
         attempt_dir=str(attempt_dir),
@@ -69,6 +82,9 @@ def save_current(ref: RepoRef, attempt_dir: Path, install_command: str, entrypoi
         entrypoint=entrypoint,
         model=model,
         built_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        commit_sha=commit,
+        wrapper_sha256=_sha256(attempt_dir / "wrapper.py"),
+        packages=tuple(installed_packages(attempt_dir)),
     )
     (_wrapper_root(ref) / "current.json").write_text(json.dumps(asdict(record), indent=2) + "\n")
     return record
@@ -78,7 +94,9 @@ def load_current(ref: RepoRef) -> BuildRecord:
     pointer = _wrapper_root(ref) / "current.json"
     if not pointer.exists():
         raise NoBuildError(f"No wrapper has been built for {ref.slug} yet — run `legwork {ref.slug}` first.")
-    record = BuildRecord(**json.loads(pointer.read_text()))
+    data = json.loads(pointer.read_text())
+    known = {f.name for f in fields(BuildRecord)}
+    record = BuildRecord(**{k: (tuple(v) if k == "packages" else v) for k, v in data.items() if k in known})
     missing = [p for p in (record.wrapper_path, record.python_path) if not Path(p).exists()]
     if missing:
         raise NoBuildError(
@@ -86,6 +104,57 @@ def load_current(ref: RepoRef) -> BuildRecord:
             f"rebuild it with `legwork {ref.slug}`."
         )
     return record
+
+
+def _sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+MAX_PACKAGES = 5000
+_MAX_METADATA_BYTES = 256 * 1024
+
+
+def _read_no_follow(path: Path) -> str | None:
+    """A small regular file in the tool's folder, read from outside the
+    sandbox without following links (install code could plant one pointing
+    at a file of yours)."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        return os.read(fd, _MAX_METADATA_BYTES).decode("utf-8", errors="replace")
+    finally:
+        os.close(fd)
+
+
+def installed_packages(attempt_dir: Path) -> list[str]:
+    """What an install resolved to, read from package metadata files without
+    running any of the tool's code (a venv's python runs .pth files on start).
+    It's what the install says it installed: the install could have written
+    these files itself, so it's a record, not proof."""
+    found: set[str] = set()
+    for site in sorted((attempt_dir / ".venv" / "lib").glob("python*/site-packages")):
+        for info in sorted(site.glob("*.dist-info")):
+            text = _read_no_follow(info / "METADATA") or ""
+            name = re.search(r"^Name:\s*(\S+)", text, re.MULTILINE)
+            version = re.search(r"^Version:\s*(\S+)", text, re.MULTILINE)
+            if name and version:
+                found.add(f"pip:{name.group(1)}=={version.group(1)}")
+    modules = attempt_dir / "node_modules"
+    for package_json in sorted([*modules.glob("*/package.json"), *modules.glob("@*/*/package.json")]):
+        try:
+            meta = json.loads(_read_no_follow(package_json) or "{}")
+        except ValueError:
+            continue
+        if isinstance(meta, dict) and isinstance(meta.get("name"), str) and isinstance(meta.get("version"), str):
+            found.add(f"npm:{meta['name']}@{meta['version']}")
+    return sorted(found)[:MAX_PACKAGES]
 
 
 def disk_usage(path: Path) -> int:

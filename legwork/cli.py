@@ -249,6 +249,28 @@ def cmd_hub(allow_read: list[str] | None, allow_net: bool, outputs_to: str | Non
     return hub.run(limits, allow_net, outputs_dir)
 
 
+def cmd_show(repo: str) -> int:
+    """The build record for one tool, to inspect it or compare two builds (issue #4)."""
+    try:
+        ref = parse_repo_url(repo)
+        record = local_store.load_current(ref)
+    except (InvalidRepoURLError, local_store.NoBuildError) as exc:
+        _err(str(exc))
+        return 1
+    home = str(Path.home())
+    print(f"{record.repo}, built {record.built_at}")
+    print(f"  commit:   {record.commit_sha or 'not recorded (built before 0.7.12)'}  (cloned and scanned; the install may come from a package index)")
+    print(f"  wrapper:  sha256 {record.wrapper_sha256 or 'not recorded'}, by {record.model}")
+    print(f"  folder:   {record.attempt_dir.replace(home, '~', 1)}")
+    print("  install:")
+    for line in record.install_command.splitlines() or ["(none)"]:
+        print(f"    {line}")
+    print(f"  packages: {len(record.packages)}" + ("" if record.packages else " recorded"))
+    for package in record.packages:
+        print(f"    {package}")
+    return 0
+
+
 def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
     ref = None
     if repo is not None:
@@ -287,7 +309,7 @@ def _installed_version() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor")
+    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "show")
     if argv and argv[0] not in (*commands, "-h", "--help", "-V", "--version"):
         if not argv[0].startswith("-") and "/" not in argv[0]:
             # "legwork doctr" said "Invalid repo URL: 'doctr'" (fresh QA, 2026-10-03)
@@ -332,6 +354,8 @@ def main(argv: list[str] | None = None) -> int:
     clean.add_argument("repo", nargs="?", help="only this repo (default: all)")
     clean.add_argument("--all", action="store_true", help="also remove current builds (rebuild before serving)")
     clean.add_argument("--dry-run", action="store_true", help="show what would be removed")
+    show = sub.add_parser("show", help="what a built tool came from: commit, wrapper hash, install command, packages")
+    show.add_argument("repo", help="github.com URL or owner/repo")
     args = parser.parse_args(argv)
 
     if args.command == "build":
@@ -348,6 +372,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":
         return cmd_contribute(args.repo, args.out)
+    if args.command == "show":
+        return cmd_show(args.repo)
     return cmd_serve(args.repo, args.allow_read, args.allow_net)
 
 

@@ -44,6 +44,29 @@ are a ceiling: an install can ask for those or less, and your client
 shows you what it asks for before it runs (in clients that ask; see the
 README's client table).
 
+## What an approval covers
+
+Approving `install_tool` approves a **repository and the grants** you see
+(folders, network). It doesn't approve a commit or exact code:
+
+- Legwork clones the repo's default branch as it is at that moment, scans
+  it, and builds. For a cached tool the install command is the one in the
+  cache, pinned to a package version; for a fresh build a model writes it,
+  usually unpinned, so its dependencies resolve at build time.
+- Every build records **what it came from**: the commit that was cloned
+  and scanned, the wrapper's SHA-256, the install command, and the
+  packages the install resolved to. The install reply shows a summary, and
+  `legwork show owner/repo` prints it all. The package list is read from
+  the packages' own metadata files, which the install wrote, so it's a
+  record of what the install says it installed, not proof.
+- A built tool is reused. There are no silent rebuilds: new commits
+  upstream are never installed unless you remove the tool
+  (`legwork clean --all owner/repo`) and install it again, which is a new
+  approval. `list_installed_tools` says when a repo has moved on since its
+  build.
+- Not yet: choosing the commit to build, or approving the exact install
+  command before it runs ([#4](https://github.com/kumarganduri/legwork/issues/4)).
+
 ## Known gaps
 
 - **Installs on Linux can reach `localhost`.** bubblewrap shares the

@@ -499,3 +499,31 @@ def test_find_tools_says_it_reaches_the_users_own_files():
     find = next(t for t in hub.STATIC_TOOLS if t["name"] == "find_tools")
     assert "user's own computer" in find["description"] and "~/Downloads" in find["description"]
     assert "cloud code sandbox can't see" in find["description"] and "cloud code sandbox can't see" in hub.INSTRUCTIONS
+
+
+def test_install_replies_say_what_the_build_came_from(tmp_path, monkeypatch):
+    """Issue #4: the commit, who wrote the wrapper, its hash and the packages."""
+    record = local_store.BuildRecord(
+        repo="owner/repo", attempt_dir=str(tmp_path), wrapper_path="w", python_path="p",
+        install_command="pip install demo==1.2\nsecond line", entrypoint="e", model="gpt-5 (Legwork cache)",
+        built_at="t", commit_sha="3f2c1a9e0b12" + "0" * 28, wrapper_sha256="9d1e" + "0" * 60,
+        packages=("pip:demo==1.2", "pip:dep==3"),
+    )
+    monkeypatch.setattr(local_store, "load_current", lambda ref: record)
+    line = hub._build_line("owner/repo")
+    assert "owner/repo@3f2c1a9e0b12" in line and "cached wrapper reviewed by Legwork" in line
+    assert "sha256 9d1e00000000" in line and "pip install demo==1.2" in line and "second line" not in line
+    assert "2 packages installed" in line and "legwork show owner/repo" in line
+
+    monkeypatch.setattr(hub.repo_fetcher, "remote_head_sha", lambda url: "a" * 40)
+    assert "has new commits since this build (now aaaaaaaaaaaa)" in hub._upstream_moved(["owner/repo"])["owner/repo"]
+    monkeypatch.setattr(hub.repo_fetcher, "remote_head_sha", lambda url: record.commit_sha)
+    assert hub._upstream_moved(["owner/repo"]) == {}
+
+
+def test_an_old_build_record_adds_no_build_line(monkeypatch):
+    def missing(ref):
+        raise local_store.NoBuildError("none")
+
+    monkeypatch.setattr(local_store, "load_current", missing)
+    assert hub._build_line("owner/repo") == ""

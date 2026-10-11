@@ -472,6 +472,7 @@ found so far with the test that keeps it fixed.
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key. `--allow-read PATH`, `--allow-net` grant access (see Permissions) |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
 | `legwork doctor` | Check this machine is ready: sandbox, cache, key, search limit, client configs. Read-only; prints no keys. Paste it into bug reports |
+| `legwork show owner/repo` | What a built tool came from: the commit that was scanned, the wrapper's hash, the install command and every package it installed |
 | `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 
 Builds live in `~/.legwork` (override with `LEGWORK_HOME`). A failed build
