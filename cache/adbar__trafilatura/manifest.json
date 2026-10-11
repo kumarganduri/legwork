@@ -13,5 +13,17 @@
   },
   "entrypoint": "Extract main text and metadata from HTML strings or local HTML files using Trafilatura",
   "install_command": "pip install trafilatura==2.3.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "extract_from_file",
+    "arguments": {
+      "file_path": "{fixtures}/tide-pools.html"
+    },
+    "expect_contains": [
+      "Tide pools form where rocky shores trap seawater as the tide goes out",
+      "Anemones close their tentacles during low tide to hold moisture",
+      "Visitors are asked to step only on bare rock"
+    ],
+    "derived_from": "tide-pools.html was written for this test with a nav bar, a footer and an article of three paragraphs; these sentences are from those paragraphs, the main text a person expects extracted"
+  }
 }

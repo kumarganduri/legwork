@@ -13,5 +13,18 @@
   },
   "entrypoint": "Run SQLite queries and modify tables using the sqlite-utils Python library",
   "install_command": "pip install sqlite-utils==4.2.1",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "query_db",
+    "arguments": {
+      "db_path": "{fixtures}/orchard.db",
+      "sql": "select group_concat(name, ' | ') as gala_trees, sum(apples) as gala_apples from (select name, apples from trees where variety = 'Gala' order by name)"
+    },
+    "expect_contains": [
+      "North Row | Old Gate",
+      "gala_apples",
+      "70"
+    ],
+    "derived_from": "orchard.db holds four trees; the two Gala rows are North Row (12 apples) and Old Gate (58), so sorted by name they join to \"North Row | Old Gate\" and sum to 70"
+  }
 }

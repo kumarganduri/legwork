@@ -13,5 +13,18 @@
   },
   "entrypoint": "Run ShellCheck to lint shell scripts (from text or files) and return structured diagnostics",
   "install_command": "set -e\n\n# Download a precompiled ShellCheck binary locally into ./bin/shellcheck\nOS=\"$(uname -s)\"\nARCH=\"$(uname -m)\"\n\ncase \"$OS\" in\n  Linux)   PLATFORM=\"linux\" ;;\n  Darwin)  PLATFORM=\"darwin\" ;;\n  *) echo \"Unsupported OS: $OS\"; exit 1 ;;\nesac\n\ncase \"$ARCH\" in\n  x86_64|amd64)   MACHINE=\"x86_64\" ;;\n  arm64|aarch64)  MACHINE=\"aarch64\" ;;\n  *) echo \"Unsupported architecture: $ARCH\"; exit 1 ;;\nesac\n\nBASE_URL=\"https://github.com/koalaman/shellcheck/releases/download/v0.11.0\"\nFILENAME=\"shellcheck-v0.11.0.${PLATFORM}.${MACHINE}.tar.xz\"\nURL=\"${BASE_URL}/${FILENAME}\"\n\nmkdir -p bin\ncurl -L -o sc.tar.xz \"$URL\"\n# Extract; macOS bsdtar and GNU tar both support -J for xz\ntar -xJf sc.tar.xz\n# Move the binary into ./bin\nmv shellcheck-v0.11.0/shellcheck ./bin/shellcheck\nchmod +x ./bin/shellcheck\n# Cleanup\nrm -rf sc.tar.xz shellcheck-v0.11.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "shellcheck_files",
+    "arguments": {
+      "paths": [
+        "{fixtures}/cleanup.sh"
+      ]
+    },
+    "expect_contains": [
+      "2086",
+      "Double quote to prevent globbing and word splitting."
+    ],
+    "derived_from": "cleanup.sh was written with an unquoted variable expansion (rm -r $target on line 3), the textbook case ShellCheck reports as SC2086 with the message 'Double quote to prevent globbing and word splitting.'"
+  }
 }

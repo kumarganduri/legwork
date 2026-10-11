@@ -13,5 +13,17 @@
   },
   "entrypoint": "Create, read, and modify .docx files using python-docx (create new documents, extract paragraphs, and append text into a new copy)",
   "install_command": "pip install python-docx==1.2.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "read_docx_paragraphs",
+    "arguments": {
+      "path": "{fixtures}/garden-notes.docx"
+    },
+    "expect_contains": [
+      "Community Garden Notes",
+      "Tomatoes ripened two weeks early this season.",
+      "The tool shed needs a new padlock before winter."
+    ],
+    "derived_from": "garden-notes.docx was made with a heading and two paragraphs of exactly these texts, which are its three paragraphs"
+  }
 }

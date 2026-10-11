@@ -13,5 +13,19 @@
   },
   "entrypoint": "Image resizing/format conversion and metadata via the Node sharp library invoked from Python",
   "install_command": "npm install sharp@0.35.5",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "resize_image",
+    "arguments": {
+      "input_path": "{fixtures}/banner-400x200.png",
+      "output_path": "thumb.png",
+      "width": 100,
+      "format": "png"
+    },
+    "expect_image": {
+      "width": 100,
+      "height": 50
+    },
+    "derived_from": "banner-400x200.png is a 400x200 solid PNG written with Python's zlib; resizing to width 100 with the default fit 'inside' keeps the 2:1 aspect ratio, so the result is 100x50"
+  }
 }

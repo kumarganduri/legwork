@@ -13,5 +13,26 @@
   },
   "entrypoint": "Generate static plots (line, scatter, histogram) with Matplotlib and return PNG images",
   "install_command": "pip install matplotlib==3.11.2",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "plot_line",
+    "arguments": {
+      "y": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "title": "Rainfall by Week",
+      "width": 640,
+      "height": 480,
+      "dpi": 100
+    },
+    "expect_contains": [],
+    "expect_image": {
+      "width": 640,
+      "height": 480
+    },
+    "derived_from": "a line chart asked for at 640x480 pixels (dpi 100) must come back as a 640x480 PNG"
+  }
 }

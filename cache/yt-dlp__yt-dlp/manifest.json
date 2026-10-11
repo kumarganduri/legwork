@@ -14,5 +14,21 @@
   "entrypoint": "Use yt-dlp to download media or extract info from URLs via its Python API",
   "install_command": "pip install \"yt-dlp[default]==2026.8.19\"",
   "mcp_sdk": "mcp<2",
-  "needs_network": true
+  "needs_network": true,
+  "known_answer": {
+    "tool": "yt_dlp_download",
+    "arguments": {
+      "urls": [
+        "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+      ],
+      "simulate": true
+    },
+    "expect_contains": [
+      "Me at the zoo",
+      "\"uploader\": \"jawed\"",
+      "\"duration\": 19",
+      "jNQXAC9IVRw"
+    ],
+    "derived_from": "jNQXAC9IVRw is YouTube's first video, \"Me at the zoo\", uploaded by jawed and 19 seconds long; simulate=true only extracts its info"
+  }
 }

@@ -13,5 +13,20 @@
   },
   "entrypoint": "Generate QR codes as PNG or SVG and ASCII art from text using the python-qrcode library",
   "install_command": "pip install \"qrcode[pil]==8.2\"",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "generate_qr_png",
+    "arguments": {
+      "data": "HELLO WORLD",
+      "version": 1,
+      "box_size": 5,
+      "border": 2,
+      "out_path": "qr.png"
+    },
+    "expect_image": {
+      "width": 125,
+      "height": 125
+    },
+    "derived_from": "a version 1 QR code is 21x21 modules by the QR spec; with a 2-module border on each side and 5 px per module the PNG is (21 + 2*2) * 5 = 125 px square ('HELLO WORLD' is 11 alphanumeric characters, within version 1-M's 20) The bare output name qr.png must work too (it crashed before 2026-10-11)."
+  }
 }

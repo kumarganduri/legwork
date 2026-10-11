@@ -14,5 +14,20 @@
   "entrypoint": "Retrieve, list, and translate YouTube video transcripts using the youtube-transcript-api library",
   "install_command": "pip install youtube-transcript-api==1.2.4",
   "mcp_sdk": "mcp<2",
-  "needs_network": true
+  "needs_network": true,
+  "known_answer": {
+    "tool": "get_transcript",
+    "arguments": {
+      "video_id": "jNQXAC9IVRw",
+      "languages": [
+        "en"
+      ]
+    },
+    "expect_contains": [
+      "jNQXAC9IVRw",
+      "elephants",
+      "trunks"
+    ],
+    "derived_from": "in \"Me at the zoo\" (jNQXAC9IVRw) the speaker stands in front of the elephants and says they have really long trunks, so the English transcript must contain those words"
+  }
 }

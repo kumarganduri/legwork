@@ -13,5 +13,17 @@
   },
   "entrypoint": "Extract text, tables, and low-level page objects from local PDFs using pdfplumber’s Python API",
   "install_command": "pip install pdfplumber==0.11.10",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "extract_tables",
+    "arguments": {
+      "path": "{fixtures}/launch-plan.pdf"
+    },
+    "expect_contains": [
+      "Offline sync conflicts",
+      "Last-writer-wins plus a conflict inbox",
+      "Cold-start regression on Android"
+    ],
+    "derived_from": "launch-plan.pdf was made for Legwork's tests with a three-row risk table; these are cells of that table"
+  }
 }

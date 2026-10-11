@@ -13,5 +13,19 @@
   },
   "entrypoint": "Convert Jupyter .ipynb notebooks to static formats (e.g., HTML, Markdown) via nbconvert’s Python API",
   "install_command": "pip install nbconvert==7.17.1",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "convert_notebook",
+    "arguments": {
+      "input_path": "{fixtures}/rainfall.ipynb",
+      "to": "markdown"
+    },
+    "expect_contains": [
+      "rainfall.md",
+      "# Weekly Rainfall",
+      "Totals for the garden plot.",
+      "rainfall_mm = [12, 30, 7]"
+    ],
+    "derived_from": "rainfall.ipynb was written by hand with a markdown cell (a 'Weekly Rainfall' heading and one sentence) and a code cell; converting to markdown must write rainfall.md containing that heading, that sentence and the code"
+  }
 }

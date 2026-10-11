@@ -13,5 +13,20 @@
   },
   "entrypoint": "Convert HTML (string or file) to Markdown using the python-markdownify library",
   "install_command": "pip install markdownify==1.2.3",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "file_to_markdown",
+    "arguments": {
+      "file_path": "{fixtures}/page.html",
+      "heading_style": "ATX"
+    },
+    "expect_contains": [
+      "# Release Notes",
+      "**stable**",
+      "[change list](https://example.com/changes)",
+      "* Faster startup",
+      "* Smaller downloads"
+    ],
+    "derived_from": "page.html was hand-written with <h1>Release Notes</h1>, <b>stable</b>, a link 'change list' to https://example.com/changes and a two-item <ul>; Markdown for those is an ATX '#' heading, **bold**, [text](url) and '*' bullets (markdownify's first default bullet)"
+  }
 }

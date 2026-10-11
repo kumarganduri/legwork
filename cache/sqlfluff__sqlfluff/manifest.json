@@ -13,5 +13,18 @@
   },
   "entrypoint": "Lint SQL strings using the sqlfluff CLI (and report the installed sqlfluff version)",
   "install_command": "pip install sqlfluff==4.4.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "lint_sql",
+    "arguments": {
+      "sql": "SELECT col_a from tbl",
+      "dialect": "ansi"
+    },
+    "expect_contains": [
+      "FAIL",
+      "CP01",
+      "LT12"
+    ],
+    "derived_from": "the SQL was written with an upper-case SELECT but a lower-case from (inconsistent keyword capitalisation, sqlfluff rule CP01) and no trailing newline (rule LT12), so the lint must fail with both rule codes"
+  }
 }

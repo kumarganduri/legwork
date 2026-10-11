@@ -13,5 +13,19 @@
   },
   "entrypoint": "Create, update, and extract text from PowerPoint (.pptx) files using the python-pptx library",
   "install_command": "pip install python-pptx==1.0.2",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "extract_text",
+    "arguments": {
+      "pptx_path": "{fixtures}/volunteer-briefing.pptx"
+    },
+    "expect_contains": [
+      "Library Volunteer Briefing",
+      "Autumn schedule",
+      "Shelving Tasks",
+      "Return carts by noon",
+      "Check the atlas section on Fridays"
+    ],
+    "derived_from": "volunteer-briefing.pptx was made with a title slide (title and subtitle) and a bulleted slide with these exact texts"
+  }
 }

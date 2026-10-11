@@ -13,5 +13,17 @@
   },
   "entrypoint": "PDF text extraction, metadata reading, splitting, and merging using pypdf",
   "install_command": "pip install pypdf[crypto]==6.19.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "extract_text",
+    "arguments": {
+      "pdf_path": "{fixtures}/ferry-timetable.pdf"
+    },
+    "expect_contains": [
+      "Harbor Ferry Timetable",
+      "First departure leaves Pier Seven at 06:15.",
+      "Weekend service adds a sunset crossing."
+    ],
+    "derived_from": "ferry-timetable.pdf was made with fpdf2: page 1 has the heading and the 06:15 sentence, page 2 the weekend sentence, so all-pages text must contain all three"
+  }
 }

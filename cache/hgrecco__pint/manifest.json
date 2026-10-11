@@ -13,5 +13,18 @@
   },
   "entrypoint": "Convert quantities between units using the Pint Python library (exposes conversion and conversion-factor tools)",
   "install_command": "pip install pint==0.26.1",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "convert",
+    "arguments": {
+      "value": 100,
+      "from_unit": "degC",
+      "to_unit": "degF"
+    },
+    "expect_contains": [
+      "\"value\": 212.0",
+      "degree_Fahrenheit"
+    ],
+    "derived_from": "F = C x 9/5 + 32, so 100 degrees Celsius is exactly 212 degrees Fahrenheit; temperatures have an offset, the case the wrapper got wrong before 2026-10-11"
+  }
 }

@@ -13,5 +13,20 @@
   },
   "entrypoint": "Parse and generate iCalendar (.ics) files: list events from ICS text or file, and create/append events to ICS files",
   "install_command": "pip install icalendar==7.3.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "parse_ics_file",
+    "arguments": {
+      "path": "{fixtures}/garden-club.ics"
+    },
+    "expect_contains": [
+      "Garden club standup",
+      "Greenhouse B",
+      "2026-03-14T09:30:00+00:00",
+      "WEEKLY",
+      "Seed swap, potluck day",
+      "2026-04-01"
+    ],
+    "derived_from": "garden-club.ics was written for this test with two events: a weekly standup in Greenhouse B starting 20260314T093000Z (09:30 UTC) and an all-day 'Seed swap, potluck day' on 20260401, whose comma is escaped in the file (\\,) as iCalendar requires and must come back unescaped"
+  }
 }

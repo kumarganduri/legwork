@@ -13,5 +13,19 @@
   },
   "entrypoint": "Run the ast-grep CLI for AST-based code search and rewrite",
   "install_command": "pip install ast-grep-cli==0.45.3",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "sg_search",
+    "arguments": {
+      "pattern": "$A == None",
+      "lang": "python",
+      "path": "{fixtures}/none_checks.py",
+      "json_output": true
+    },
+    "expect_contains": [
+      "count == None",
+      "name == None"
+    ],
+    "derived_from": "none_checks.py was written for this test with exactly two `x == None` comparisons (on count and on name) plus a `count is None` and a comment, so the pattern `$A == None` must match those two expressions"
+  }
 }

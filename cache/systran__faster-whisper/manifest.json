@@ -11,7 +11,20 @@
     "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
     "ran_at": "2026-10-01T19:14:27+00:00"
   },
-  "entrypoint": "Offline speech-to-text: transcribe voice memos, recordings or any audio or video file (m4a, mp3, wav, mp4\u2026) with faster-whisper's multilingual base model, downloaded during install",
+  "entrypoint": "Offline speech-to-text: transcribe voice memos, recordings or any audio or video file (m4a, mp3, wav, mp4…) with faster-whisper's multilingual base model, downloaded during install",
   "install_command": "pip install \"faster-whisper==1.2.1\" \"av==15.1.0\" \"huggingface_hub>=0.23,<3\"\npython - <<'PY'\nfrom huggingface_hub import snapshot_download\nsnapshot_download(repo_id=\"Systran/faster-whisper-base\", local_dir=\"./models/faster-whisper-base\")\nPY",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "transcribe_audio",
+    "arguments": {
+      "audio_path": "{fixtures}/bicycle-memo.m4a",
+      "language": "en"
+    },
+    "expect_contains": [
+      "bicycle",
+      "library",
+      "Tuesday"
+    ],
+    "derived_from": "bicycle-memo.m4a is macOS `say` reading the sentence \"The orange bicycle is parked beside the library every Tuesday morning.\", so its distinctive words must come back"
+  }
 }

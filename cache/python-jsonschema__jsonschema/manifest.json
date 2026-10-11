@@ -13,5 +13,34 @@
   },
   "entrypoint": "Validate JSON data against JSON Schema using the jsonschema Python library",
   "install_command": "pip install \"jsonschema[format]==4.26.0\"",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "validate_json",
+    "arguments": {
+      "instance": {
+        "age": -3
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "name",
+          "age"
+        ]
+      }
+    },
+    "expect_contains": [
+      "'name' is a required property",
+      "-3 is less than the minimum of 0"
+    ],
+    "derived_from": "the instance was built to break the schema twice: it omits the required 'name' and its age -3 is below the schema's minimum of 0, so both errors must be reported"
+  }
 }

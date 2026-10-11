@@ -13,5 +13,21 @@
   },
   "entrypoint": "Run csvkit CLI tools (csvcut, csvstat, in2csv, etc.) via a generic subprocess wrapper",
   "install_command": "pip install csvkit==2.2.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "csvkit_run",
+    "arguments": {
+      "command": "csvstat",
+      "args": [
+        "-c",
+        "amount",
+        "--sum",
+        "{fixtures}/sales.csv"
+      ]
+    },
+    "expect_contains": [
+      "777"
+    ],
+    "derived_from": "sales.csv was written with amounts 100, 250 and 427, chosen to sum to 777"
+  }
 }

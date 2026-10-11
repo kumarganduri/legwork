@@ -13,5 +13,17 @@
   },
   "entrypoint": "Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins",
   "install_command": "pip install \"markitdown[all]==0.1.8\"",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "convert_to_markdown",
+    "arguments": {
+      "path_or_uri": "{fixtures}/garden-notes.docx"
+    },
+    "expect_contains": [
+      "# Community Garden Notes",
+      "Tomatoes ripened two weeks early this season.",
+      "The tool shed needs a new padlock before winter."
+    ],
+    "derived_from": "garden-notes.docx was made with python-docx: a Heading 1 \"Community Garden Notes\" (a # heading in Markdown) and two paragraphs with exactly these sentences"
+  }
 }

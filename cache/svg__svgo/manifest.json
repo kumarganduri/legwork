@@ -13,5 +13,16 @@
   },
   "entrypoint": "Optimize SVG files using the local svgo CLI (minify a file or an SVG string)",
   "install_command": "npm install svgo@4.1.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "svgo_optimize_text",
+    "arguments": {
+      "svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- drawn by hand for a test -->\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><title>Red square</title><rect width=\"10\" height=\"10\" fill=\"#ff0000\"/></svg>\n"
+    },
+    "expect_contains": [
+      "fill=\"red\"",
+      "<title>Red square</title>"
+    ],
+    "derived_from": "the input SVG fills its square with #ff0000, which svgo's default convertColors plugin rewrites to its shortest form, the name red; svgo 4's default preset no longer removes <title>, so the title written into the input survives"
+  }
 }

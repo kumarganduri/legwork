@@ -13,5 +13,20 @@
   },
   "entrypoint": "Execute SQL queries with DuckDB (in-memory or file-backed) and return results",
   "install_command": "pip install duckdb==1.5.6",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "duckdb_query",
+    "arguments": {
+      "sql": "SELECT region, SUM(amount) AS total, COUNT(*) AS orders FROM read_csv('{fixtures}/orders.csv') GROUP BY region ORDER BY total DESC"
+    },
+    "expect_contains": [
+      "north",
+      "1000",
+      "south",
+      "234",
+      "east",
+      "17"
+    ],
+    "derived_from": "orders.csv was written for this test with north 100 and 900, south 234 and east 17, so the per-region sums are north 1000, south 234, east 17"
+  }
 }

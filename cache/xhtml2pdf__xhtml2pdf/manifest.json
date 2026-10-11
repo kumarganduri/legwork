@@ -13,5 +13,16 @@
   },
   "entrypoint": "Convert HTML (string or local .html file) to a PDF using xhtml2pdf’s Python API",
   "install_command": "pip install xhtml2pdf==0.2.21",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "html_file_to_pdf",
+    "arguments": {
+      "html_file_path": "{fixtures}/notice.html"
+    },
+    "expect_contains": [
+      "notice.pdf",
+      "\"errors\": 0"
+    ],
+    "derived_from": "notice.html is a small valid HTML page (a heading and one paragraph), so it converts with zero errors and, with no output path given, the PDF is named after the input file: notice.pdf"
+  }
 }

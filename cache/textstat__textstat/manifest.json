@@ -13,5 +13,19 @@
   },
   "entrypoint": "Compute readability metrics and text statistics from text using the textstat Python library",
   "install_command": "pip install textstat==0.7.13\npython -c \"import nltk; nltk.download('cmudict', download_dir='./nltk_data', quiet=True, raise_on_error=True)\"",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "compute_readability",
+    "arguments": {
+      "text": "Banana is a yellow fruit. Elephants walk slowly."
+    },
+    "expect_contains": [
+      "\"lexicon_count\": 8",
+      "\"sentence_count\": 2",
+      "\"syllable_count\": 14",
+      "\"polysyllable_count\": 2",
+      "\"letter_count_no_spaces\": 39"
+    ],
+    "derived_from": "the text has 2 sentences and 8 words; syllables ba-na-na 3, is 1, a 1, yel-low 2, fruit 1, el-e-phants 3, walk 1, slow-ly 2 sum to 14 with two words (banana, elephants) of 3+ syllables; the letters of the 8 words sum to 39"
+  }
 }

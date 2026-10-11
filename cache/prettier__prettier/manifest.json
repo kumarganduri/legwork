@@ -13,5 +13,18 @@
   },
   "entrypoint": "Run Prettier’s CLI to format code (format from string via stdin or operate on files) using ./node_modules/.bin/prettier",
   "install_command": "npm install prettier@3.9.9",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "prettier_format_code",
+    "arguments": {
+      "code": "function add(a,b){return a+b}\nconst greeting='hello'\n",
+      "parser": "babel"
+    },
+    "expect_contains": [
+      "function add(a, b) {",
+      "  return a + b;",
+      "const greeting = \"hello\";"
+    ],
+    "derived_from": "the input is cramped JavaScript; Prettier's documented defaults (2-space indent, spaces around operators and after commas, semicolons on, double quotes) give exactly these lines"
+  }
 }

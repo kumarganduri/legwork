@@ -13,5 +13,23 @@
   },
   "entrypoint": "Ruff CLI to lint (check) and format Python code",
   "install_command": "pip install ruff==0.16.10",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "ruff_check",
+    "arguments": {
+      "paths": [
+        "{fixtures}/unused_import.py"
+      ],
+      "extra_args": [
+        "--isolated",
+        "--no-cache"
+      ]
+    },
+    "expect_contains": [
+      "F401",
+      "`os` imported but unused",
+      "unused_import.py:1:8"
+    ],
+    "derived_from": "unused_import.py was written for this test: line 1 is `import os` and os is never used (sys is), so ruff's default rules must report F401 for `os` at line 1, column 8"
+  }
 }

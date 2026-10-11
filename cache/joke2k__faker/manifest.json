@@ -13,5 +13,21 @@
   },
   "entrypoint": "Generate arbitrary fake data fields by provider name via the Faker Python API, with optional locales, seeding, repeats, and custom providers",
   "install_command": "pip install Faker==40.40.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "generate",
+    "arguments": {
+      "fake_name": "lexify",
+      "kwargs": {
+        "text": "ref-????",
+        "letters": "x"
+      },
+      "repeat": 3
+    },
+    "expect_contains": [
+      "ref-xxxx",
+      "\"repeat\": 3"
+    ],
+    "derived_from": "Faker output is random, so this asserts what must hold: lexify replaces each ? with a random pick from `letters`, and with letters='x' the only possible value is 'ref-xxxx', repeated 3 times"
+  }
 }

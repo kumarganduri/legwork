@@ -13,5 +13,30 @@
   },
   "entrypoint": "Generate interactive Plotly bar charts as HTML from x/y data using plotly.graph_objects",
   "install_command": "pip install plotly==7.1.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "bar_chart_html",
+    "arguments": {
+      "x": [
+        "Mon",
+        "Tue",
+        "Wed"
+      ],
+      "y": [
+        3,
+        7,
+        5
+      ],
+      "title": "Bikes Rented per Day"
+    },
+    "expect_contains": [
+      "\"title\": \"Bikes Rented per Day\"",
+      "\"Mon\",",
+      "\"Tue\",",
+      "\"Wed\",",
+      "\"title_in_html\": true",
+      ".html"
+    ],
+    "derived_from": "the chart is built from three bars (Mon 3, Tue 7, Wed 5) titled 'Bikes Rented per Day'; the reply must report that title and those labels, and the saved HTML must carry the title"
+  }
 }

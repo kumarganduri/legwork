@@ -13,5 +13,16 @@
   },
   "entrypoint": "Symbolic math operations via SymPy’s Python API (simplify, differentiate, integrate, solve, series, LaTeX)",
   "install_command": "pip install sympy==1.14.0",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "solve_zero",
+    "arguments": {
+      "expr": "x**2 - 5*x + 6",
+      "var": "x"
+    },
+    "expect_contains": [
+      "{2, 3}"
+    ],
+    "derived_from": "x**2 - 5*x + 6 factors as (x - 2)(x - 3), so the solution set of expr = 0 is {2, 3}"
+  }
 }

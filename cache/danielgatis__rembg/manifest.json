@@ -13,5 +13,16 @@
   },
   "entrypoint": "Remove image backgrounds from local images using rembg’s Python API (models cached under ./models)",
   "install_command": "pip install \"rembg[cpu,cli]==2.0.85\"\nREMBG_HOME=./models python - <<'PY'\nimport os\nos.makedirs(\"./models\", exist_ok=True)\nfrom PIL import Image\nfrom rembg import new_session, remove\n# Pre-download a small, fast model to ensure offline operation\nsession = new_session(\"u2net\")\n# Trigger a load by processing a tiny image\nimg = Image.new(\"RGBA\", (8, 8), (255, 255, 255, 255))\nout = remove(img, session=session)\nout.save(\"._rembg_warmup.png\")\nprint(\"rembg warm-up done\")\nPY",
-  "mcp_sdk": "mcp<2"
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "remove_background",
+    "arguments": {
+      "input_path": "{fixtures}/blue-circle.png"
+    },
+    "expect_image": {
+      "width": 96,
+      "height": 64
+    },
+    "derived_from": "blue-circle.png was drawn for this test as a 96x64 image (a blue disc on white), and rembg returns the cut-out at the size of its input"
+  }
 }

@@ -1,0 +1,9 @@
+service:
+  name: weather-api
+  port: 8080
+database:
+  name: forecasts
+  replicas:
+    - east
+    - west
+    - north
