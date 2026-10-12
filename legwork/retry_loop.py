@@ -107,6 +107,10 @@ class RunResult:
     final_error: str | None = None
     # The successful attempt's folder (wrapper.py + its .venv), for serving.
     attempt_dir: Path | None = None
+    # Hosts the installs reached through Legwork's recording proxy, across
+    # attempts, and whether that record is complete (issue #5).
+    contacted: list[dict] = field(default_factory=list)
+    network_complete: bool = False
 
 
 def _no_progress(_message: str) -> None:
@@ -180,7 +184,8 @@ def _copy_source(attempt_dir: Path) -> None:
 
 
 def _install_and_self_test(
-    attempt_dir: Path, install_command: str, wrapper_code: str, progress: Callable[[str], None] = _no_progress
+    attempt_dir: Path, install_command: str, wrapper_code: str, progress: Callable[[str], None] = _no_progress,
+    network: list[dict] | None = None,
 ) -> None:
     """Write the wrapper, install into a fresh venv isolated from Legwork's
     own environment, invoke the self-test. Shared by freshly written and
@@ -215,12 +220,21 @@ def _install_and_self_test(
         f" && python -m pip install {shlex.quote(codegen.MCP_SDK_PIN)}"
     )
     progress("installing dependencies in a sandboxed venv")
-    sandbox_runner.install(
-        ["/bin/sh", "-c", combined_install_cmd],
-        attempt_dir,
-        extra_env=venv_env,
-        cache_dir=attempt_dir.parent / DOWNLOAD_CACHE_DIR,
-    )
+    contacted: tuple[dict, ...] = ()
+    try:
+        installed = sandbox_runner.install(
+            ["/bin/sh", "-c", combined_install_cmd],
+            attempt_dir,
+            extra_env=venv_env,
+            cache_dir=attempt_dir.parent / DOWNLOAD_CACHE_DIR,
+        )
+        contacted = getattr(installed, "contacted", ())
+    except (sandbox_runner.DependencyInstallError, sandbox_runner.InstallTimeoutExceeded) as exc:
+        contacted = getattr(exc, "contacted", ())
+        raise
+    finally:
+        if network is not None:
+            network.extend(dict(h, attempt=attempt_dir.name) for h in contacted)
 
     progress("running the wrapper's self-test (network off)")
     sandbox_runner.invoke([str(venv_dir / "bin" / "python"), str(wrapper_path)], attempt_dir, extra_env=venv_env)
@@ -232,6 +246,7 @@ def _run_one_attempt(
     prior_failures: list[str],
     llm_config: LLMConfig,
     progress: Callable[[str], None] = _no_progress,
+    network: list[dict] | None = None,
 ) -> codegen.WrapperDraft:
     """One wrapper-repair attempt: ask the LLM, install into a fresh venv
     isolated from Legwork's own environment, invoke the self-test. Raises
@@ -245,7 +260,7 @@ def _run_one_attempt(
     (attempt_dir / "model-reply.md").write_text(response_text)
     draft = codegen.parse_response(response_text)
 
-    _install_and_self_test(attempt_dir, draft.install_command, draft.wrapper_code, progress)
+    _install_and_self_test(attempt_dir, draft.install_command, draft.wrapper_code, progress, network)
     return draft
 
 
@@ -298,18 +313,23 @@ def _run_cached(
     (attempt_dir / "wrapper.py").write_text(wrapper_code)
     progress("scanning the cached wrapper")
     obfuscation_scanner.scan(attempt_dir)
+    network: list[dict] = []
+    complete = sandbox_runner.install_network_is_complete()
     try:
-        _install_and_self_test(attempt_dir, install_command, wrapper_code, progress)
+        _install_and_self_test(attempt_dir, install_command, wrapper_code, progress, network)
     except RETRYABLE_EXCEPTIONS as exc:
         detail = f"{type(exc).__name__}: {exc}"
         attempts = [AttemptLog(1, "cached wrapper", type(exc).__name__, detail)]
-        return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail)
+        return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail,
+                         contacted=network, network_complete=complete)
     return RunResult(
         success=True,
         wrapper_code=wrapper_code,
         install_command=install_command,
         attempts=[AttemptLog(1, "cached wrapper", "success", "")],
         attempt_dir=attempt_dir,
+        contacted=network,
+        network_complete=complete,
     )
 
 
@@ -354,6 +374,8 @@ def _run(
 
     attempts: list[AttemptLog] = []
     prior_failures: list[str] = []
+    network: list[dict] = []
+    complete = sandbox_runner.install_network_is_complete()
 
     for attempt_number in range(1, MAX_WRAPPER_ATTEMPTS + 1):
         _check_deadline()
@@ -364,11 +386,12 @@ def _run(
             progress(f"attempt {n}/{MAX_WRAPPER_ATTEMPTS}: {message}")
 
         try:
-            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config, attempt_progress)
+            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config, attempt_progress, network)
         except FAIL_FAST_EXCEPTIONS as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
-            return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail)
+            return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail,
+                             contacted=network, network_complete=complete)
         except RETRYABLE_EXCEPTIONS as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
@@ -382,6 +405,8 @@ def _run(
                     install_command=None,
                     attempts=attempts,
                     final_error=f"Retry budget exhausted after {MAX_WRAPPER_ATTEMPTS} attempts: {summary}",
+                    contacted=network,
+                    network_complete=complete,
                 )
             continue
         else:
@@ -393,6 +418,8 @@ def _run(
                 attempts=attempts,
                 final_error=None,
                 attempt_dir=attempt_dir,
+                contacted=network,
+                network_complete=complete,
             )
 
     raise AssertionError("unreachable: loop always returns")  # pragma: no cover

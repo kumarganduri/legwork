@@ -421,7 +421,9 @@ wrapper an LLM wrote from a README a stranger wrote. What contains it:
   readable), no writes outside the folder, and an
   environment with none of your variables (including your model key). A
   malicious package can still misbehave inside that folder and reach the
-  network during install.
+  network during install. Legwork records which hosts it reached
+  (`legwork log owner/repo`); see [THREAT_MODEL.md](THREAT_MODEL.md#what-is-recorded)
+  for what that record can miss.
 - **The scan covers the repo's source, not what installers download.**
   magpie, for example, installs with the vendor's `curl … | sh`. For
   downloaded code, the sandbox is the protection.
@@ -473,6 +475,7 @@ found so far with the test that keeps it fixed.
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
 | `legwork doctor` | Check this machine is ready: sandbox, cache, key, search limit, client configs. Read-only; prints no keys. Paste it into bug reports |
 | `legwork show owner/repo` | What a built tool came from: the commit that was scanned, the wrapper's hash, the install command and every package it installed |
+| `legwork log owner/repo` | A tool's record: the hosts each install reached, written by Legwork outside the sandbox |
 | `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 
 Builds live in `~/.legwork` (override with `LEGWORK_HOME`). A failed build

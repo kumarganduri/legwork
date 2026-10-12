@@ -151,6 +151,8 @@ class ExecutionResult:
     stdout: str
     stderr: str
     duration_seconds: float
+    # Hosts an install reached through Legwork's recording proxy (issue #5).
+    contacted: tuple[dict, ...] = ()
 
 
 _BWRAP_INSTALL_HINT = (
@@ -530,6 +532,8 @@ def _generate_profile(
     extra_writable: tuple[Path, ...] = (),
     read_only: tuple[Path, ...] = (),
     local_network: bool = False,
+    proxy_port: int | None = None,
+    proxy_only: bool = False,
 ) -> MacProfile:
     real_workdir = str(workdir.resolve())
     home = str(Path.home().resolve())
@@ -610,7 +614,9 @@ def _generate_profile(
         # inside the workdir; nothing else local.
         lines += [
             "(allow system-socket)",
-            '(allow network-outbound (remote ip "*:*"))',
+            # Strict mode: only Legwork's recording proxy, so the record of
+            # hosts an install reached is complete (issue #5).
+            *([] if proxy_only and proxy_port else ['(allow network-outbound (remote ip "*:*"))']),
             '(allow network-inbound (local ip "localhost:*"))',
             '(allow network-bind (local ip "*:*"))',
             '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
@@ -623,6 +629,10 @@ def _generate_profile(
             # above to the internet. Served tools given --allow-net keep
             # localhost: some drive their own helper processes over it.
             lines.append('(deny network-outbound (remote ip "localhost:*"))')
+        if proxy_port:
+            # Legwork's recording proxy is the one local port an install may
+            # reach; it only connects to public addresses (netlog.py).
+            lines.append(f'(allow network-outbound (remote ip "localhost:{int(proxy_port)}"))')
     return MacProfile("\n".join(lines), params)
 
 
@@ -699,12 +709,15 @@ def _run_sandboxed(
     extra_env: dict[str, str] | None = None,
     extra_writable: tuple[Path, ...] = (),
     read_only: tuple[Path, ...] = (),
+    proxy_port: int | None = None,
+    proxy_only: bool = False,
 ) -> ExecutionResult:
     _check_backend_available()
     workdir.mkdir(parents=True, exist_ok=True)
     profile = None
     if platform.system() == "Darwin":
-        profile = _generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable, read_only=read_only)
+        profile = _generate_profile(workdir, allow_network=allow_network, extra_writable=extra_writable,
+                                    read_only=read_only, proxy_port=proxy_port, proxy_only=proxy_only)
 
     started = time.monotonic()
     with contextlib.ExitStack() as stack:
@@ -824,20 +837,45 @@ def install(
             UV_CACHE_DIR=str(cache_dir / "uv"),
             XDG_CACHE_HOME=str(cache_dir / "xdg"),
         )
-    result = _run_sandboxed(
-        command,
-        workdir,
-        allow_network=True,
-        timeout=timeout,
-        timeout_error=InstallTimeoutExceeded,
-        extra_env=env,
-        extra_writable=writable,
-    )
+    from legwork import netlog
+
+    with netlog.Recorder() as recorder:
+        env.update(recorder.environment())
+        try:
+            result = _run_sandboxed(
+                command,
+                workdir,
+                allow_network=True,
+                timeout=timeout,
+                timeout_error=InstallTimeoutExceeded,
+                extra_env=env,
+                extra_writable=writable,
+                proxy_port=recorder.port,
+                proxy_only=install_network_is_complete(),
+            )
+        except InstallTimeoutExceeded as exc:
+            exc.contacted = tuple(recorder.hosts())  # type: ignore[attr-defined]
+            raise
+        contacted = tuple(recorder.hosts())
+    result = ExecutionResult(result.command, result.exit_code, result.stdout, result.stderr, result.duration_seconds, contacted)
     if result.exit_code != 0:
-        raise DependencyInstallError(
+        error = DependencyInstallError(
             f"{' '.join(command)!r} failed (exit {result.exit_code}): {result.stderr.strip()}"
         )
+        error.contacted = contacted  # type: ignore[attr-defined]
+        raise error
     return result
+
+
+INSTALL_NETWORK_ENV = "LEGWORK_INSTALL_NETWORK"
+
+
+def install_network_is_complete() -> bool:
+    """Whether installs may reach the internet only through Legwork's
+    recording proxy, so the record of hosts is complete. Experimental and
+    macOS only: LEGWORK_INSTALL_NETWORK=proxy. Otherwise code that opens its
+    own connections can skip the proxy (issue #5)."""
+    return platform.system() == "Darwin" and os.environ.get(INSTALL_NETWORK_ENV, "").strip().lower() == "proxy"
 
 
 def invoke(

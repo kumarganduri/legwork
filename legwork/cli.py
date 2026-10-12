@@ -268,6 +268,40 @@ def cmd_show(repo: str) -> int:
     print(f"  packages: {len(record.packages)}" + ("" if record.packages else " recorded"))
     for package in record.packages:
         print(f"    {package}")
+    complete = "complete" if record.install_hosts_complete else "through Legwork's proxy; code that opens its own connections isn't listed"
+    print(f"  install reached: {len(record.install_hosts)} hosts ({complete})")
+    for host in record.install_hosts:
+        print(f"    {host}")
+    print(f"  full history: legwork log {record.repo}")
+    return 0
+
+
+def cmd_log(repo: str) -> int:
+    """A tool's append-only record: every install's hosts, kept outside the
+    sandbox (issue #5)."""
+    from legwork import netlog
+
+    try:
+        ref = parse_repo_url(repo)
+    except InvalidRepoURLError as exc:
+        _err(str(exc))
+        return 1
+    entries = netlog.read_records(local_store.records_path(ref))
+    if not entries:
+        print(f"Nothing recorded for {ref.slug} yet (records start with Legwork 0.7.12).")
+        return 0
+    for entry in entries:
+        outcome = "succeeded" if entry.get("success") else "failed"
+        scope = "complete" if entry.get("complete") else "through Legwork's proxy"
+        print(f"{entry.get('time', '?')}  {entry.get('event', '?')} ({entry.get('source', '?')}) {outcome}; hosts reached, {scope}:")
+        for host in entry.get("hosts") or []:
+            if host.get("refused"):
+                print(f"    {host['host']}:{host['port']}  refused: {host['refused']}")
+            else:
+                print(f"    {host['host']}:{host['port']}  {host.get('connections', 0)} connections, "
+                      f"{host.get('bytes_out', 0)} bytes out, {host.get('bytes_in', 0)} in")
+        if not entry.get("hosts"):
+            print("    none")
     return 0
 
 
@@ -309,7 +343,7 @@ def _installed_version() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "show")
+    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "show", "log")
     if argv and argv[0] not in (*commands, "-h", "--help", "-V", "--version"):
         if not argv[0].startswith("-") and "/" not in argv[0]:
             # "legwork doctr" said "Invalid repo URL: 'doctr'" (fresh QA, 2026-10-03)
@@ -356,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
     clean.add_argument("--dry-run", action="store_true", help="show what would be removed")
     show = sub.add_parser("show", help="what a built tool came from: commit, wrapper hash, install command, packages")
     show.add_argument("repo", help="github.com URL or owner/repo")
+    log = sub.add_parser("log", help="a tool's record: the hosts each install reached, kept outside the sandbox")
+    log.add_argument("repo", help="github.com URL or owner/repo")
     args = parser.parse_args(argv)
 
     if args.command == "build":
@@ -374,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_contribute(args.repo, args.out)
     if args.command == "show":
         return cmd_show(args.repo)
+    if args.command == "log":
+        return cmd_log(args.repo)
     return cmd_serve(args.repo, args.allow_read, args.allow_net)
 
 

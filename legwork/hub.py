@@ -710,6 +710,11 @@ def _build_line(slug: str) -> str:
         f"Built from {slug}@{record.commit_sha[:12]} with {who} (sha256 {record.wrapper_sha256[:12]}); "
         f"install: {_first_sentence(record.install_command.splitlines()[0] if record.install_command else '', 100)}; "
         f"{len(record.packages)} packages installed (`legwork show {slug}` lists them).\n"
+        + (f"During install it reached: {', '.join(h.removesuffix(':443') for h in record.install_hosts[:8])}"
+           + (f" and {len(record.install_hosts) - 8} more" if len(record.install_hosts) > 8 else "")
+           + (" (recorded by Legwork outside the sandbox).\n" if record.install_hosts_complete else
+              " (recorded by Legwork's proxy, outside the sandbox; code that opens its own connections isn't in this list).\n")
+           if record.install_hosts else "")
     )
 
 

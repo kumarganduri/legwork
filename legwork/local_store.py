@@ -51,6 +51,8 @@ class BuildRecord:
     commit_sha: str = ""  # the commit that was cloned and scanned
     wrapper_sha256: str = ""
     packages: tuple[str, ...] = ()  # what the install resolved: "pip:name==1.2", "npm:name@1.2"
+    install_hosts: tuple[str, ...] = ()  # "host:port" reached through Legwork's proxy (issue #5)
+    install_hosts_complete: bool = False  # strict mode: the install could reach nothing else
 
 
 def legwork_home() -> Path:
@@ -68,7 +70,16 @@ def new_build_dir(ref: RepoRef) -> Path:
     return path
 
 
-def save_current(ref: RepoRef, attempt_dir: Path, install_command: str, entrypoint: str, model: str) -> BuildRecord:
+def records_path(ref: RepoRef) -> Path:
+    """A tool's append-only record (netlog.record): outside every folder its
+    sandboxed code can write, so the code can't edit what it's recorded doing."""
+    return legwork_home() / "records" / f"{ref.owner}__{ref.repo}.jsonl"
+
+
+def save_current(
+    ref: RepoRef, attempt_dir: Path, install_command: str, entrypoint: str, model: str,
+    install_hosts: tuple[str, ...] = (), install_hosts_complete: bool = False,
+) -> BuildRecord:
     try:
         commit = repo_fetcher.head_sha(attempt_dir.parent / "repo")
     except Exception:  # noqa: BLE001 — a record without a commit beats no record
@@ -85,6 +96,8 @@ def save_current(ref: RepoRef, attempt_dir: Path, install_command: str, entrypoi
         commit_sha=commit,
         wrapper_sha256=_sha256(attempt_dir / "wrapper.py"),
         packages=tuple(installed_packages(attempt_dir)),
+        install_hosts=tuple(install_hosts),
+        install_hosts_complete=install_hosts_complete,
     )
     (_wrapper_root(ref) / "current.json").write_text(json.dumps(asdict(record), indent=2) + "\n")
     return record
@@ -96,7 +109,7 @@ def load_current(ref: RepoRef) -> BuildRecord:
         raise NoBuildError(f"No wrapper has been built for {ref.slug} yet — run `legwork {ref.slug}` first.")
     data = json.loads(pointer.read_text())
     known = {f.name for f in fields(BuildRecord)}
-    record = BuildRecord(**{k: (tuple(v) if k == "packages" else v) for k, v in data.items() if k in known})
+    record = BuildRecord(**{k: (tuple(v) if k in ("packages", "install_hosts") else v) for k, v in data.items() if k in known})
     missing = [p for p in (record.wrapper_path, record.python_path) if not Path(p).exists()]
     if missing:
         raise NoBuildError(

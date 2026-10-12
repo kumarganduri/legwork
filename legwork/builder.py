@@ -14,6 +14,7 @@ from legwork import (
     cache_reader,
     codegen,
     local_store,
+    netlog,
     repo_fetcher,
     retry_loop,
     sandbox_runner,
@@ -104,6 +105,7 @@ def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> tuple[BuildOut
     result = retry_loop.run_cached(
         ref.slug, local_store.new_build_dir(ref), cached.install_command, cached.wrapper_code, progress=progress
     )
+    _record_install(ref, "cache", result)
     if not result.success:
         detail = codegen.failure_summary(result.attempts[-1].detail, 300)
         progress(f"The cached wrapper didn't pass here ({detail}); writing a fresh one.")
@@ -114,8 +116,26 @@ def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> tuple[BuildOut
         install_command=cached.install_command,
         entrypoint=cached.entrypoint,
         model=f"{cached.manifest['llm_model']} (Legwork cache)",
+        install_hosts=_host_list(result.contacted),
+        install_hosts_complete=result.network_complete,
     )
     return BuildOutcome(ok=True, ref=ref, record=record, from_cache=True, attempts=1), "hit"
+
+
+def _host_list(contacted: list[dict]) -> tuple[str, ...]:
+    return tuple(sorted({f"{h['host']}:{h['port']}" for h in contacted if h.get("connections")}))
+
+
+def _record_install(ref: RepoRef, source: str, result) -> None:
+    """Append what this build's installs reached to the tool's record, from
+    outside the sandbox (issue #5). A failed record never fails a build."""
+    try:
+        netlog.record(local_store.records_path(ref), {
+            "event": "install", "repo": ref.slug, "source": source, "success": result.success,
+            "complete": result.network_complete, "hosts": result.contacted,
+        })
+    except OSError:
+        pass
 
 
 def _no_key_message(ref: RepoRef, cache_state: str, exc: Exception) -> str:
@@ -165,6 +185,7 @@ def build(
     except BUILD_ERRORS as exc:
         return BuildOutcome(ok=False, ref=ref, error=f"{type(exc).__name__}: {exc}")
 
+    _record_install(ref, "fresh", result)
     if not result.success:
         log = build_dir / "attempts.log"
         log.write_text("".join(f"=== attempt {a.attempt_number}: {a.outcome}\n{a.detail}\n\n" for a in result.attempts))
@@ -179,5 +200,7 @@ def build(
         install_command=result.install_command,
         entrypoint=result.attempts[-1].detail,
         model=config.model,
+        install_hosts=_host_list(result.contacted),
+        install_hosts_complete=result.network_complete,
     )
     return BuildOutcome(ok=True, ref=ref, record=record, attempts=len(result.attempts))

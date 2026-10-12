@@ -67,6 +67,30 @@ Approving `install_tool` approves a **repository and the grants** you see
 - Not yet: choosing the commit to build, or approving the exact install
   command before it runs ([#4](https://github.com/kumarganduri/legwork/issues/4)).
 
+## What is recorded
+
+Legwork keeps a record for each tool in `~/.legwork/records/`, outside every
+folder the tool's code can write, so that code can't edit what it's
+recorded doing. Legwork writes it from outside the sandbox and only ever
+appends to it. `legwork log owner/repo` prints it.
+
+- **Hosts an install reached.** Installs go through a small proxy Legwork
+  runs on this machine (`HTTP_PROXY` / `HTTPS_PROXY`, which pip, uv, npm,
+  git, curl and common download libraries honour). It records each host
+  and port and the bytes each way, never the contents, and it only
+  connects to public internet addresses, so it can't be used to reach
+  services on this machine or your network. The install reply lists the
+  hosts.
+- **What the record can miss.** Code that opens its own connections
+  instead of using the proxy isn't in the list. With
+  `LEGWORK_INSTALL_NETWORK=proxy` (experimental, macOS only), installs can
+  reach the internet only through the proxy, so the list is complete; the
+  record says which mode it was.
+- **Not yet recorded:** what the sandbox denied while a tool ran. macOS
+  logs sandbox denials live, without the destination address, and linking
+  each to the right tool needs process tracking
+  ([#5](https://github.com/kumarganduri/legwork/issues/5)).
+
 ## Known gaps
 
 - **Installs on Linux can reach `localhost`.** bubblewrap shares the
