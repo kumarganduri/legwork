@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from legwork import repo_fetcher
 from legwork.repo_fetcher import (
     ClonedRepo,
     InvalidRepoURLError,
@@ -162,7 +163,7 @@ def test_fetch_checks_before_cloning(tmp_path):
         result = fetch("owner/repo", dest)
 
     mock_check.assert_called_once_with("owner/repo")
-    mock_clone.assert_called_once_with(RepoRef(owner="owner", repo="repo"), dest)
+    mock_clone.assert_called_once_with(RepoRef(owner="owner", repo="repo"), dest, None)
     assert result == ClonedRepo(ref=RepoRef(owner="owner", repo="repo"), path=dest)
 
 
@@ -172,3 +173,15 @@ def test_fetch_propagates_invalid_url_without_cloning(tmp_path):
         with pytest.raises(InvalidRepoURLError):
             fetch("not a url", dest)
         mock_clone.assert_not_called()
+
+
+@pytest.mark.parametrize("name", ["v1.2.0", "release/2026-10", "A" * 40, "a" * 40])
+def test_commit_names_that_are_safe_for_git(name):
+    assert repo_fetcher.check_ref_name(name) in (name, name.lower())
+
+
+@pytest.mark.parametrize("name", ["--upload-pack=evil", "-x", "HEAD~3", "main^", "a..b", "x y", "", "tags/", "v1.lock"])
+def test_commit_names_that_could_be_options_or_expressions_are_refused(name):
+    """Issue #4: a commit or tag from the AI goes to git, so it may never be an option."""
+    with pytest.raises(repo_fetcher.InvalidRepoURLError):
+        repo_fetcher.check_ref_name(name)

@@ -264,9 +264,9 @@ def _run_one_attempt(
     return draft
 
 
-def _fetch_and_scan(repo_url: str, workdir: Path, progress: Callable[[str], None]) -> repo_fetcher.ClonedRepo:
-    progress(f"cloning {repo_url}")
-    cloned = repo_fetcher.fetch(repo_url, workdir / "repo")
+def _fetch_and_scan(repo_url: str, workdir: Path, progress: Callable[[str], None], commit: str | None = None) -> repo_fetcher.ClonedRepo:
+    progress(f"cloning {repo_url}" + (f" at {commit}" if commit else ""))
+    cloned = repo_fetcher.fetch(repo_url, workdir / "repo", commit)
     progress("scanning the source for obfuscated code")
     obfuscation_scanner.scan(cloned.path)
     return cloned
@@ -289,13 +289,14 @@ def run_cached(
     install_command: str,
     wrapper_code: str,
     progress: Callable[[str], None] = _no_progress,
+    commit: str | None = None,
 ) -> RunResult:
     """Build from a public-cache wrapper instead of asking a model: the same
     fetch and scan, a scan of the cached wrapper itself, then the same
     sandboxed install and self-test. One attempt; the caller falls back to
     `run` if it fails. Raises the precondition errors `run` raises."""
     try:
-        return _tidy(workdir, _run_cached(repo_url, workdir, install_command, wrapper_code, progress))
+        return _tidy(workdir, _run_cached(repo_url, workdir, install_command, wrapper_code, progress, commit))
     finally:
         shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
 
@@ -306,8 +307,9 @@ def _run_cached(
     install_command: str,
     wrapper_code: str,
     progress: Callable[[str], None],
+    commit: str | None = None,
 ) -> RunResult:
-    _fetch_and_scan(repo_url, workdir, progress)
+    _fetch_and_scan(repo_url, workdir, progress, commit)
     attempt_dir = workdir / "attempt-1"
     attempt_dir.mkdir(parents=True)
     (attempt_dir / "wrapper.py").write_text(wrapper_code)
@@ -338,13 +340,14 @@ def run(
     workdir: Path,
     llm_config: LLMConfig,
     progress: Callable[[str], None] = _no_progress,
+    commit: str | None = None,
 ) -> RunResult:
     """The T6 entrypoint. Fetches, scans, parses, then runs up to
     MAX_WRAPPER_ATTEMPTS codegen+install+invoke attempts, each logged.
     `progress` gets one short status line per stage (a build takes
     minutes; the CLI shows these so it doesn't look hung)."""
     try:
-        return _tidy(workdir, _run(repo_url, workdir, llm_config, progress))
+        return _tidy(workdir, _run(repo_url, workdir, llm_config, progress, commit))
     finally:
         shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
 
@@ -354,6 +357,7 @@ def _run(
     workdir: Path,
     llm_config: LLMConfig,
     progress: Callable[[str], None],
+    commit: str | None = None,
 ) -> RunResult:
     deadline = time.monotonic() + TOTAL_RUN_TIMEOUT_SECONDS
 
@@ -365,7 +369,7 @@ def _run(
     # failure here aborts before attempt 1 is even logged — these aren't
     # wrapper-repair attempts at all.
     _check_deadline()
-    cloned = _fetch_and_scan(repo_url, workdir, progress)
+    cloned = _fetch_and_scan(repo_url, workdir, progress, commit)
     _check_deadline()
     progress("reading the README")
     readme = readme_parser.parse_readme(cloned.path)

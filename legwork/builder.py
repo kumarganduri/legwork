@@ -88,7 +88,7 @@ def _warn_if_stale(ref: RepoRef, cached: cache_reader.CachedWrapper, progress: C
         )
 
 
-def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> tuple[BuildOutcome | None, str]:
+def _from_cache(ref: RepoRef, progress: Callable[[str], None], commit: str | None = None) -> tuple[BuildOutcome | None, str]:
     """(outcome, state): state is "hit", "miss", "unreachable" or "failed"."""
     try:
         cached = cache_reader.fetch(ref)
@@ -103,7 +103,8 @@ def _from_cache(ref: RepoRef, progress: Callable[[str], None]) -> tuple[BuildOut
     )
     _warn_if_stale(ref, cached, progress)
     result = retry_loop.run_cached(
-        ref.slug, local_store.new_build_dir(ref), cached.install_command, cached.wrapper_code, progress=progress
+        ref.slug, local_store.new_build_dir(ref), cached.install_command, cached.wrapper_code, progress=progress,
+        commit=commit,
     )
     _record_install(ref, "cache", result)
     if not result.success:
@@ -164,13 +165,15 @@ def build(
     use_cache: bool = True,
     progress: Callable[[str], None] = _quiet,
     llm_config: LLMConfig | None = None,
+    commit: str | None = None,
 ) -> BuildOutcome:
     """Build `ref`, from the cache when possible. Never raises for an
-    ordinary failure: the outcome says what happened."""
+    ordinary failure: the outcome says what happened. `commit` (a full SHA
+    or a tag) builds exactly that commit instead of the default branch (#4)."""
     try:
         cache_state = "off"
         if use_cache:
-            hit, cache_state = _from_cache(ref, progress)
+            hit, cache_state = _from_cache(ref, progress, commit)
             if hit is not None:
                 return hit
         try:
@@ -181,7 +184,7 @@ def build(
             progress(OLLAMA_TIP)
         build_dir = local_store.new_build_dir(ref)
         progress(f"Building an MCP wrapper for {ref.slug} (usually 1-3 minutes)")
-        result = retry_loop.run(ref.slug, build_dir, config, progress=progress)
+        result = retry_loop.run(ref.slug, build_dir, config, progress=progress, commit=commit)
     except BUILD_ERRORS as exc:
         return BuildOutcome(ok=False, ref=ref, error=f"{type(exc).__name__}: {exc}")
 

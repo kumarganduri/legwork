@@ -527,3 +527,56 @@ def test_an_old_build_record_adds_no_build_line(monkeypatch):
 
     monkeypatch.setattr(local_store, "load_current", missing)
     assert hub._build_line("owner/repo") == ""
+
+
+# --- building an exact commit (issue #4) -------------------------------------------
+
+SHA_A, SHA_B = "a" * 40, "b" * 40
+
+
+def fake_build_at(ref, progress=None, commit=None, **_):
+    import json
+
+    outcome = fake_build(ref, progress)
+    pointer = local_store.legwork_home() / "wrappers" / f"{ref.owner}__{ref.repo}" / "current.json"
+    pointer.write_text(json.dumps({**json.loads(pointer.read_text()), "commit_sha": commit or SHA_A}))
+    fake_build_at.calls.append(commit)
+    return outcome
+
+
+def test_installing_a_commit_builds_exactly_that_and_reuses_it_after(limits, monkeypatch):
+    fake_build_at.calls = []
+    monkeypatch.setattr(hub.repo_fetcher, "resolve_ref", lambda ref, name: {"v2.0": SHA_B}.get(name, name))
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve)
+    with patch("legwork.hub.builder.build", side_effect=fake_build_at), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5):
+        _, text = call(h, "install_tool", {"repo": "owner/repo", "commit": SHA_A})
+        assert "is installed" in text and fake_build_at.calls == [SHA_A]
+        _, text = call(h, "install_tool", {"repo": "owner/repo", "commit": SHA_A})
+        assert "already installed" in text and fake_build_at.calls == [SHA_A]  # same commit: reused
+        call(h, "install_tool", {"repo": "owner/repo", "commit": "v2.0"})
+        for _ in range(50):
+            if fake_build_at.calls == [SHA_A, SHA_B]:
+                break
+            time.sleep(0.1)
+        assert fake_build_at.calls == [SHA_A, SHA_B]  # a tag is resolved to its commit, then built
+    h.close()
+
+
+def test_a_preview_installs_nothing_and_names_the_commit(limits, monkeypatch):
+    from legwork import cache_reader
+
+    monkeypatch.setattr(hub.repo_fetcher, "remote_head_sha", lambda url: SHA_A)
+    monkeypatch.setattr(cache_reader, "fetch", lambda ref: None)
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve)
+    with patch("legwork.hub.builder.build") as build:
+        result, text = call(h, "install_tool", {"repo": "owner/repo", "preview": True})
+    assert not build.called and not result["isError"] and h.installed == {}
+    assert f"commit {SHA_A}" in text and "not in the Legwork cache" in text and f'commit="{SHA_A}"' in text
+    h.close()
+
+
+def test_a_commit_that_isnt_a_sha_or_tag_is_refused(limits):
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve)
+    result, text = call(h, "install_tool", {"repo": "owner/repo", "commit": "--upload-pack=evil"})
+    assert result["isError"] and "full 40-character commit SHA or a tag" in text
+    h.close()

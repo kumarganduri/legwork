@@ -110,6 +110,14 @@ STATIC_TOOLS = [
             "repo": {"type": "string", "description": "owner/repo from find_tools"},
             "allow_read": {"type": "array", "items": {"type": "string"}, "description": "folders the tool may read"},
             "allow_net": {"type": "boolean", "description": "whether the tool may use the network"},
+            "commit": {"type": "string", "description": (
+                "optional: a full 40-character commit SHA or a tag (e.g. v1.2.0) to build exactly that, "
+                "instead of the default branch as it is now"
+            )},
+            "preview": {"type": "boolean", "description": (
+                "true: install nothing; say which commit would be built and how it would be installed, "
+                "so the user can approve that exact commit"
+            )},
         },
         ["repo"],
         # Adds a tool; replaces nothing of the user's. Downloads from GitHub and package indexes.
@@ -344,12 +352,23 @@ class Hub:
         except discovery.DiscoveryError as exc:
             raise HubError(str(exc)) from exc
 
-    def install_tool(self, repo: str, allow_read: list[str] | None = None, allow_net: bool | None = None) -> str:
+    def install_tool(self, repo: str, allow_read: list[str] | None = None, allow_net: bool | None = None,
+                     commit: str | None = None, preview: bool = False) -> str:
         try:
             ref = parse_repo_url(repo)
         except InvalidRepoURLError as exc:
             raise HubError(str(exc)) from exc
         slug = ref.slug
+        # An exact commit to build, as a full SHA (issue #4). Resolved here, so
+        # what the user approved is what's cloned, even if a tag moves later.
+        wanted = None
+        if commit or preview:
+            try:
+                wanted = repo_fetcher.resolve_ref(ref, commit) if commit else repo_fetcher.remote_head_sha(ref.clone_url)
+            except (InvalidRepoURLError, repo_fetcher.RepoAccessError) as exc:
+                raise HubError(str(exc)) from exc
+        if preview:
+            return self._preview(ref, wanted, commit)
         existing = self.installed.get(slug)
         # Asking again without saying which folders or network keeps what was
         # granted before; it used to silently drop it (fresh QA, 2026-10-03).
@@ -364,6 +383,8 @@ class Hub:
             existing = None if already_running else self.installed.get(slug)
             if existing is None or existing.allow_read != grants or existing.allow_net != net:
                 existing = None
+            elif commit and _built_commit(slug) != wanted:
+                existing = None  # installed, but from another commit: build the one asked for
             if not already_running and existing is None:
                 job = Job(slug)
                 self.jobs[slug] = job
@@ -373,16 +394,18 @@ class Hub:
             return self.install_status(slug)
         if existing is not None:
             return self._ready_message(existing, "already installed")
-        threading.Thread(target=self._install, args=(job, ref, grants, net), daemon=True).start()
+        threading.Thread(target=self._install, args=(job, ref, grants, net, wanted if commit else None), daemon=True).start()
         return self.install_status(slug)  # waits up to INSTALL_WAIT_SECONDS
 
-    def _install(self, job: Job, ref, grants: tuple[Path, ...], net: bool) -> None:
+    def _install(self, job: Job, ref, grants: tuple[Path, ...], net: bool, commit: str | None = None) -> None:
         try:
             try:
-                local_store.load_current(ref)  # built before: reuse it
+                record = local_store.load_current(ref)  # built before: reuse it, unless another commit was asked for
+                if commit and record.commit_sha != commit:
+                    raise local_store.NoBuildError("a different commit was asked for")
                 job.log.append("already built on this machine")
             except local_store.NoBuildError:
-                outcome = builder.build(ref, progress=job.log.append)
+                outcome = builder.build(ref, progress=job.log.append, commit=commit)
                 if not outcome.ok:
                     job.error = outcome.error + ("\n" + "\n".join(outcome.attempt_lines) if outcome.attempt_lines else "")
                     job.state = "failed"
@@ -424,6 +447,28 @@ class Hub:
             f"Tools:\n{tools}\n"
             f"Call one as {prefix}__{example} if it's in your tool list; otherwise "
             f'use_tool(repo="{item.slug}", tool="{example}", arguments={{...}}).'
+        )
+
+    def _preview(self, ref, sha: str | None, asked: str | None) -> str:
+        """What install_tool would build, installing nothing (issue #4)."""
+        from legwork import cache_reader
+
+        try:
+            cached = cache_reader.fetch(ref)
+        except cache_reader.CacheUnavailableError:
+            cached = None
+        where = f"{asked} = commit {sha}" if asked else f"commit {sha} (the default branch now)"
+        if cached is not None:
+            how = (f"from the Legwork cache: a reviewed wrapper, installed with `{cached.install_command.splitlines()[0]}`"
+                   + (" (and more lines)" if len(cached.install_command.splitlines()) > 1 else ""))
+        else:
+            how = "not in the Legwork cache: a model would write the wrapper and its install command during the build"
+        current = _built_commit(ref.slug)
+        installed = f"\nInstalled now: commit {current}." if current else ""
+        return (
+            f"Preview, nothing installed: {ref.slug} at {where}.\n"
+            f"How: {how}. The source at that commit is scanned before anything runs.{installed}\n"
+            f'To install exactly this, call install_tool with repo="{ref.slug}" and commit="{sha}".'
         )
 
     def install_status(self, repo: str, wait: float = INSTALL_WAIT_SECONDS) -> str:
@@ -522,7 +567,11 @@ class Hub:
                 if allow_read is not None and not (isinstance(allow_read, list) and all(isinstance(p, str) for p in allow_read)):
                     raise HubError("allow_read must be a list of folder paths")
                 allow_net = None if args.get("allow_net") is None else _arg(args, "allow_net", bool, False)
-                return _install_text(self.install_tool(_arg(args, "repo", str, ""), allow_read, allow_net))
+                commit = args.get("commit") or None
+                if commit is not None and not isinstance(commit, str):
+                    raise HubError("commit must be a string: a full commit SHA or a tag")
+                return _install_text(self.install_tool(_arg(args, "repo", str, ""), allow_read, allow_net,
+                                                       commit, bool(args.get("preview"))))
             if name == "install_status":
                 return _install_text(self.install_status(_arg(args, "repo", str, "")))
             if name == "list_installed_tools":
@@ -693,6 +742,13 @@ _DENIAL_SIGNS = (
     "Operation not permitted", "Permission denied", "Read-only file system",
     "nodename nor servname", "Name or service not known", "Temporary failure in name resolution",
 )
+
+
+def _built_commit(slug: str) -> str:
+    try:
+        return local_store.load_current(parse_repo_url(slug)).commit_sha
+    except (local_store.NoBuildError, InvalidRepoURLError, OSError, ValueError, TypeError):
+        return ""
 
 
 def _build_line(slug: str) -> str:

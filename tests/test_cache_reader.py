@@ -190,7 +190,7 @@ def test_run_cached_scans_the_cached_wrapper_itself(tmp_path, no_clone):
 # --- legwork build with the cache ----------------------------------------------------------
 
 
-def _cached_ok(repo_url, workdir, install_command, wrapper_code, progress):
+def _cached_ok(repo_url, workdir, install_command, wrapper_code, progress, **_):
     attempt = workdir / "attempt-1"
     (attempt / ".venv" / "bin").mkdir(parents=True)
     (attempt / ".venv" / "bin" / "python").write_text("")

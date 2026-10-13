@@ -137,8 +137,48 @@ def check_repo(url: str) -> RepoRef:
         ) from exc
 
 
-def clone_repo(ref: RepoRef, dest: Path) -> Path:
-    """Shallow-clone `ref` into `dest`. Assumes check_repo(ref) already passed."""
+_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_REF_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$")
+
+
+def check_ref_name(name: str) -> str:
+    """A full commit SHA or a tag/branch name, safe to hand to git: never an
+    option (a leading '-'), never a revision expression ('..', '^', '~')."""
+    name = name.strip()
+    if _SHA_RE.match(name.lower()):
+        return name.lower()
+    if not _REF_NAME_RE.match(name) or ".." in name or name.endswith((".lock", "/", ".")):
+        raise InvalidRepoURLError(
+            f"commit {name!r}: give a full 40-character commit SHA or a tag name, e.g. v1.2.0"
+        )
+    return name
+
+
+def resolve_ref(ref: RepoRef, name: str) -> str:
+    """The commit SHA a full SHA or tag/branch name points at, without cloning."""
+    name = check_ref_name(name)
+    if _SHA_RE.match(name):
+        return name
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", ref.clone_url, f"refs/tags/{name}", f"refs/tags/{name}^{{}}", f"refs/heads/{name}"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30, check=False,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RepoAccessError(f"Looking up {name} in {ref.slug} timed out") from exc
+    shas = dict(reversed(line.split("\t", 1)) for line in result.stdout.splitlines() if "\t" in line)
+    for key in (f"refs/tags/{name}^{{}}", f"refs/tags/{name}", f"refs/heads/{name}"):  # a tag's commit, not the tag object
+        if key in shas:
+            return shas[key]
+    raise RepoAccessError(f"{ref.slug} has no tag or branch named {name!r}")
+
+
+def clone_repo(ref: RepoRef, dest: Path, commit: str | None = None) -> Path:
+    """Shallow-clone `ref` into `dest`, at `commit` (a full SHA or a tag)
+    when given. Assumes check_repo(ref) already passed."""
+    if commit is not None:
+        return _clone_at(ref, dest, check_ref_name(commit))
     dest.mkdir(parents=True, exist_ok=True)
     try:
         result = subprocess.run(
@@ -158,11 +198,35 @@ def clone_repo(ref: RepoRef, dest: Path) -> Path:
     return dest
 
 
-def fetch(url: str, dest: Path) -> ClonedRepo:
-    """The T2 entrypoint: check, then clone. Raises the same exceptions as
-    check_repo and clone_repo."""
+def _clone_at(ref: RepoRef, dest: Path, name: str) -> Path:
+    """Exactly one commit, by full SHA or tag name (issue #4)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    steps = [
+        ["git", "init", "-q", str(dest)],
+        ["git", "-C", str(dest), "remote", "add", "origin", ref.clone_url],
+        ["git", "-C", str(dest), "fetch", "-q", "--depth", "1", "origin", name],
+        ["git", "-C", str(dest), "checkout", "-q", "--detach", "FETCH_HEAD"],
+    ]
+    for step in steps:
+        try:
+            result = subprocess.run(step, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                    timeout=CLONE_TIMEOUT_SECONDS, check=False, env=env)
+        except subprocess.TimeoutExpired as exc:
+            raise RepoAccessError(f"Clone of {ref.slug} at {name} exceeded {CLONE_TIMEOUT_SECONDS}s") from exc
+        if result.returncode != 0:
+            raise RepoAccessError(
+                f"Couldn't fetch {ref.slug} at {name}: {result.stderr.strip()[:300]} "
+                "(use a full 40-character commit SHA or a tag name)"
+            )
+    return dest
+
+
+def fetch(url: str, dest: Path, commit: str | None = None) -> ClonedRepo:
+    """The T2 entrypoint: check, then clone (at `commit` when given). Raises
+    the same exceptions as check_repo and clone_repo."""
     ref = check_repo(url)
-    path = clone_repo(ref, dest)
+    path = clone_repo(ref, dest, commit)
     return ClonedRepo(ref=ref, path=path)
 
 

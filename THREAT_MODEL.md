@@ -64,8 +64,17 @@ Approving `install_tool` approves a **repository and the grants** you see
   (`legwork clean --all owner/repo`) and install it again, which is a new
   approval. `list_installed_tools` says when a repo has moved on since its
   build.
-- Not yet: choosing the commit to build, or approving the exact install
-  command before it runs ([#4](https://github.com/kumarganduri/legwork/issues/4)).
+- **Building an exact commit.** `install_tool` with `preview: true`
+  installs nothing and says which commit would be built and how it would
+  be installed (for a cached tool, its install command). `install_tool`
+  with `commit` (a full SHA, or a tag that Legwork resolves to one before
+  cloning) builds exactly that, so the call your client asks you to approve
+  names the commit. For a tool built from source that's what's installed;
+  a cached tool installs its pinned package, and the commit is the source
+  that was scanned. Asking for a different commit than the one installed
+  builds it; the same commit is reused.
+- Not yet: approving a fresh build's model-written install command before
+  it runs ([#4](https://github.com/kumarganduri/legwork/issues/4)).
 
 ## What is recorded
 

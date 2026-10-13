@@ -26,7 +26,7 @@ def _env(tmp_path, monkeypatch):
     monkeypatch.setenv("LEGWORK_CACHE_URL", "off")  # tests/test_cache_reader.py covers the cache
 
 
-def _successful_run(repo_url, workdir, config, progress):
+def _successful_run(repo_url, workdir, config, progress, **_):
     attempt = workdir / "attempt-1"
     (attempt / ".venv" / "bin").mkdir(parents=True)
     (attempt / ".venv" / "bin" / "python").write_text("")
