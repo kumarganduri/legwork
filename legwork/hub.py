@@ -843,8 +843,12 @@ def _upstream_moved(slugs: list[str]) -> dict[str, str]:
         current = repo_fetcher.remote_head_sha(parse_repo_url(slug).clone_url)
         if current == record.commit_sha:
             return ""
-        return (f"Note: {slug} has new commits since this build (now {current[:12]}). They are not installed; "
-                f"to update, the user can run `legwork clean --all {slug}` and install it again.\n")
+        # A link to exactly what changed, so the user can read it before
+        # choosing to rebuild (asked on r/mcp, 2026-10-13).
+        return (f"Note: {slug} has new commits since this build ({record.commit_sha[:12]} -> {current[:12]}); "
+                f"what changed: https://github.com/{slug}/compare/{record.commit_sha[:12]}...{current[:12]} . "
+                f"They are not installed. To update after reviewing, install it again with commit=\"{current}\" "
+                f"(a new approval).\n")
 
     if not slugs:
         return {}

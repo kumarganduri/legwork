@@ -516,7 +516,9 @@ def test_install_replies_say_what_the_build_came_from(tmp_path, monkeypatch):
     assert "2 packages installed" in line and "legwork show owner/repo" in line
 
     monkeypatch.setattr(hub.repo_fetcher, "remote_head_sha", lambda url: "a" * 40)
-    assert "has new commits since this build (now aaaaaaaaaaaa)" in hub._upstream_moved(["owner/repo"])["owner/repo"]
+    note = hub._upstream_moved(["owner/repo"])["owner/repo"]
+    assert "has new commits since this build (3f2c1a9e0b12 -> aaaaaaaaaaaa)" in note
+    assert "https://github.com/owner/repo/compare/3f2c1a9e0b12...aaaaaaaaaaaa" in note and f'commit="{"a" * 40}"' in note
     monkeypatch.setattr(hub.repo_fetcher, "remote_head_sha", lambda url: record.commit_sha)
     assert hub._upstream_moved(["owner/repo"]) == {}
 

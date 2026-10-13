@@ -60,10 +60,11 @@ Approving `install_tool` approves a **repository and the grants** you see
   the packages' own metadata files, which the install wrote, so it's a
   record of what the install says it installed, not proof.
 - A built tool is reused. There are no silent rebuilds: new commits
-  upstream are never installed unless you remove the tool
-  (`legwork clean --all owner/repo`) and install it again, which is a new
+  upstream are never installed until you install again, which is a new
   approval. `list_installed_tools` says when a repo has moved on since its
-  build.
+  build, with a link to exactly what changed (a GitHub compare between the
+  built commit and the new one) and the `commit` to install once you've
+  read it.
 - **Building an exact commit.** `install_tool` with `preview: true`
   installs nothing and says which commit would be built and how it would
   be installed (for a cached tool, its install command). `install_tool`
