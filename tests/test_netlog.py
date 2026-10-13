@@ -37,7 +37,7 @@ def test_only_public_addresses_pass():
 def test_the_proxy_records_hosts_it_relayed():
     with netlog.Recorder() as recorder:
         env = {"PATH": "/usr/bin:/bin", **recorder.environment()}
-        out = subprocess.run(["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "https://pypi.org/simple/"],
+        out = subprocess.run(["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "https://pypi.org/simple/pdfplumber/"],
                              env=env, capture_output=True, text=True, timeout=60)
         assert out.stdout == "200"
         [pypi] = [h for h in recorder.hosts() if h["host"] == "pypi.org"]
@@ -75,8 +75,8 @@ def test_strict_mode_allows_only_the_proxy(tmp_path, monkeypatch):
     sandbox_runner._check_backend_available()
     monkeypatch.setenv(sandbox_runner.INSTALL_NETWORK_ENV, "proxy")
     script = (
-        "curl -sS -o /dev/null https://pypi.org/simple/ && echo via-proxy-ok > a.txt; "
-        "curl -sS --noproxy '*' -o /dev/null --max-time 10 https://pypi.org/simple/ && echo direct-ok > b.txt; true"
+        "curl -sS -o /dev/null https://pypi.org/simple/pdfplumber/ && echo via-proxy-ok > a.txt; "
+        "curl -sS --noproxy '*' -o /dev/null --max-time 10 https://pypi.org/simple/pdfplumber/ && echo direct-ok > b.txt; true"
     )
     result = sandbox_runner.install(["/bin/sh", "-c", script], tmp_path / "w")
     assert (tmp_path / "w" / "a.txt").exists() and not (tmp_path / "w" / "b.txt").exists()
