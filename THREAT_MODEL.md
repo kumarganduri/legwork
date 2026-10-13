@@ -95,10 +95,16 @@ appends to it. `legwork log owner/repo` prints it.
   `LEGWORK_INSTALL_NETWORK=proxy` (experimental, macOS only), installs can
   reach the internet only through the proxy, so the list is complete; the
   record says which mode it was.
-- **Not yet recorded:** what the sandbox denied while a tool ran. macOS
-  logs sandbox denials live, without the destination address, and linking
-  each to the right tool needs process tracking
-  ([#5](https://github.com/kumarganduri/legwork/issues/5)).
+- **What the sandbox blocked while a tool ran (macOS).** The hub watches
+  the kernel's live sandbox log and keeps only denials from each tool's own
+  processes: a network attempt (macOS hides the destination, so only the
+  port is known), a read or write outside what the tool may touch, a
+  signal to another process. The routine denials every sandboxed program
+  makes are dropped. They're added to the call's reply and appended to the
+  record. It's best effort: macOS reports a repeated identical denial once
+  and summarizes the duplicates later, a child process that exits before
+  Legwork looks up its parent can't be linked to the tool, and Linux has
+  no equivalent log yet. `LEGWORK_RECORD_DENIALS=off` turns the watcher off.
 
 ## Known gaps
 

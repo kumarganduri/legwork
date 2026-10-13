@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from legwork import builder, discovery, local_store, outputs, repo_fetcher, sandbox_runner
+from legwork import builder, denials, discovery, local_store, netlog, outputs, repo_fetcher, sandbox_runner
 from legwork.mcp_stdio import MCPClientError, StdioMCPClient
 from legwork.repo_fetcher import InvalidRepoURLError, parse_repo_url
 
@@ -51,6 +51,9 @@ SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 # per-call timeouts.
 INSTALL_WAIT_SECONDS = 45
 TOOL_TIMEOUT_SECONDS = 300
+DENIAL_SETTLE_SECONDS = 0.3  # a call that looks fine
+DENIAL_WAIT_SECONDS = 1.5  # a call that looks like it hit the sandbox
+DENIAL_RECORD_DELAY_SECONDS = 2.0
 
 INSTRUCTIONS = """\
 Legwork finds open-source tools on GitHub and installs them for you in a sandbox,
@@ -194,6 +197,8 @@ class Hub:
         self.jobs: dict[str, Job] = {}
         self._lock = threading.RLock()  # re-entrant: _save and _items take it inside install
         self._state_path = local_store.legwork_home() / "hub.json"
+        self._denials = denials.Watcher()
+        self._call_starts: dict[int, list[float]] = {}
         self._restore()
 
     # --- persistence ----------------------------------------------------------
@@ -316,7 +321,16 @@ class Hub:
             workdir = self._workdir(item) if self.outputs_dir is not None else None
             before = outputs.snapshot(workdir) if workdir else {}
             arguments = _expand_home(arguments)
+            watching = self._denials.available()
+            if watching:  # what the sandbox blocks during this call (#5)
+                self._denials.start()
+                self._denials.watch(item.client.proc.pid)
+                since = time.monotonic()
+                with self._lock:
+                    self._call_starts.setdefault(item.client.proc.pid, []).append(since)
             result = _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
+            if watching:
+                self._report_denials(item, tool, since, result)
             # A failed call's leftovers aren't results: a failed moviepy trim
             # left its temporary audio file (fresh QA, 2026-10-03).
             if workdir and not result.get("isError"):
@@ -327,6 +341,45 @@ class Hub:
                 item.client.close()
                 item.client = None
             raise HubError(f"{item.slug}: {exc}") from exc
+
+    def _report_denials(self, item: Installed, tool: str, since: float, result: dict) -> None:
+        """Say what the sandbox blocked during a call, and record it outside
+        the sandbox, append-only (issue #5). The kernel's lines arrive up to
+        about 1.5 s late: a call that looks like it hit the sandbox waits that
+        long for the reply; the record is written 2 s after the call, from
+        the whole window, so it doesn't depend on that wait."""
+        root, done = item.client.proc.pid, time.monotonic()
+        text = " ".join(c.get("text", "") for c in result.get("content", []) if c.get("type") == "text")
+        hit = result.get("isError") or any(s in text for s in (*_DENIAL_SIGNS, *_MISSING_SIGNS))
+        blocked = self._denials.wait_for(root, since, DENIAL_WAIT_SECONDS if hit else DENIAL_SETTLE_SECONDS)
+        threading.Timer(DENIAL_RECORD_DELAY_SECONDS, self._record_denials,
+                        args=(item.slug, tool, root, since, done + DENIAL_RECORD_DELAY_SECONDS)).start()
+        if not blocked:
+            return
+        listed = "; ".join(text + (f" (x{count})" if count > 1 else "") for text, count in blocked[:8])
+        more = f"; and {len(blocked) - 8} more" if len(blocked) > 8 else ""
+        result.setdefault("content", []).append({"type": "text", "text": (
+            f"[Legwork: during this call the sandbox blocked {item.slug}: {listed}{more}. Nothing was let through. "
+            f"Recorded in `legwork log {item.slug}`.]"
+        )})
+
+    def _record_denials(self, slug: str, tool: str, root: int, since: float, until: float) -> None:
+        with self._lock:  # a call's window ends where the tool's next call began
+            starts = self._call_starts.get(root, [])
+            later = [s for s in starts if s > since]
+            self._call_starts[root] = [s for s in starts if s >= since]
+        if later:
+            until = min(until, min(later))
+        blocked = self._denials.collect(root, since, until)
+        if not blocked:
+            return
+        try:
+            netlog.record(local_store.records_path(parse_repo_url(slug)), {
+                "event": "serve", "repo": slug, "tool": tool,
+                "blocked": [{"what": text, "count": count} for text, count in blocked],
+            })
+        except (OSError, InvalidRepoURLError):
+            pass
 
     def _workdir(self, item: Installed) -> Path | None:
         try:
@@ -587,6 +640,7 @@ class Hub:
 
     def close(self) -> None:
         sandbox_runner.stop_all()  # installs still running in this process
+        self._denials.close()
         for item in self._items():
             if item.client:
                 item.client.close()

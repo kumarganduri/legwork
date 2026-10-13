@@ -23,6 +23,9 @@ def _no_live_cache(monkeypatch):
     everyone. Tests that cover the cache point LEGWORK_CACHE_URL at a
     local folder themselves."""
     monkeypatch.setenv("LEGWORK_CACHE_URL", "off")
+    # The hub's sandbox-denial watcher runs `log stream` on macOS; tests that
+    # cover it turn it back on (issue #5).
+    monkeypatch.setenv("LEGWORK_RECORD_DENIALS", "off")
     from legwork import cache_reader
 
     monkeypatch.setattr(cache_reader, "_revoked_cache", None)
