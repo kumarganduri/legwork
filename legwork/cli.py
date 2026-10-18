@@ -233,12 +233,16 @@ def cmd_find(query: str) -> int:
     return 0
 
 
-def cmd_hub(allow_read: list[str] | None, allow_net: bool, outputs_to: str | None = None) -> int:
+def cmd_hub(allow_read: list[str] | None, allow_net: bool, outputs_to: str | None = None, inspect_only: bool = False) -> int:
     from legwork import hub, outputs
 
     try:
         limits = sandbox_runner.check_read_grants(allow_read or [])
-        sandbox_runner._check_backend_available()
+        # Inspect-only (for MCP directories that list a server's tools from a
+        # container where the sandbox can't run): the hub starts, but installs
+        # nothing, so nothing ever runs unsandboxed.
+        if not inspect_only:
+            sandbox_runner._check_backend_available()
     except (sandbox_runner.SandboxGrantError, sandbox_runner.SandboxUnavailableError) as exc:
         _err(str(exc))
         return 1
@@ -246,7 +250,7 @@ def cmd_hub(allow_read: list[str] | None, allow_net: bool, outputs_to: str | Non
         outputs_dir = None
     else:
         outputs_dir = Path(outputs_to).expanduser().resolve() if outputs_to else outputs.DEFAULT_DIR
-    return hub.run(limits, allow_net, outputs_dir)
+    return hub.run(limits, allow_net, outputs_dir, inspect_only)
 
 
 def cmd_show(repo: str) -> int:
@@ -385,6 +389,10 @@ def main(argv: list[str] | None = None) -> int:
     hub_parser.add_argument("--allow-read", action="append", metavar="PATH", help="the most any installed tool may read (repeatable)")
     hub_parser.add_argument("--allow-net", action="store_true", help="let installed tools use the network if they ask")
     hub_parser.add_argument(
+        "--inspect-only", action="store_true",
+        help="for MCP directories: start and list the hub's tools even where the sandbox can't run; installs nothing",
+    )
+    hub_parser.add_argument(
         "--outputs", metavar="DIR",
         help="where files that tools make are copied (default: ~/Legwork/outputs; 'off' to keep them in the tool's folder)",
     )
@@ -408,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "find":
         return cmd_find(" ".join(args.query))
     if args.command == "hub":
-        return cmd_hub(args.allow_read, args.allow_net, args.outputs)
+        return cmd_hub(args.allow_read, args.allow_net, args.outputs, args.inspect_only)
     if args.command == "clean":
         return cmd_clean(args.repo, args.all, args.dry_run)
     if args.command == "contribute":

@@ -187,8 +187,10 @@ class Hub:
         write: Callable[[dict], None] | None = None,
         serve_command: Callable[[str, tuple[Path, ...], bool], list[str]] | None = None,
         outputs_dir: Path | None = None,
+        inspect_only: bool = False,
     ):
         self.limit_read = allow_read
+        self.inspect_only = inspect_only  # `legwork hub --inspect-only`: lists tools, installs and runs nothing
         self.outputs_dir = outputs_dir  # where files tools make are copied; None: not copied
         self.limit_net = allow_net
         self._write = write or _write_stdout
@@ -199,7 +201,8 @@ class Hub:
         self._state_path = local_store.legwork_home() / "hub.json"
         self._denials = denials.Watcher()
         self._call_starts: dict[int, list[float]] = {}
-        self._restore()
+        if not inspect_only:  # an inspect-only hub serves no installed tools either
+            self._restore()
 
     # --- persistence ----------------------------------------------------------
 
@@ -412,6 +415,11 @@ class Hub:
         except InvalidRepoURLError as exc:
             raise HubError(str(exc)) from exc
         slug = ref.slug
+        if self.inspect_only:
+            raise HubError(
+                "This Legwork hub was started with --inspect-only, for an MCP directory to list its tools; it "
+                "installs nothing. Install Legwork itself to use it: https://github.com/kumarganduri/legwork"
+            )
         # An exact commit to build, as a full SHA (issue #4). Resolved here, so
         # what the user approved is what's cloned, even if a tag moves later.
         wanted = None
@@ -984,9 +992,10 @@ def _child_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if k not in ("LEGWORK_LLM_API_KEY", "GITHUB_TOKEN")}
 
 
-def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False, outputs_dir: Path | None = None) -> int:
+def run(allow_read: tuple[Path, ...] = (), allow_net: bool = False, outputs_dir: Path | None = None,
+        inspect_only: bool = False) -> int:
     """Serve MCP over stdio until the client closes stdin."""
-    hub = Hub(allow_read, allow_net, outputs_dir=outputs_dir)
+    hub = Hub(allow_read, allow_net, outputs_dir=outputs_dir, inspect_only=inspect_only)
     workers: list[threading.Thread] = []
     try:
         for line in sys.stdin:

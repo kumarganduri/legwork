@@ -582,3 +582,15 @@ def test_a_commit_that_isnt_a_sha_or_tag_is_refused(limits):
     result, text = call(h, "install_tool", {"repo": "owner/repo", "commit": "--upload-pack=evil"})
     assert result["isError"] and "full 40-character commit SHA or a tag" in text
     h.close()
+
+
+def test_an_inspect_only_hub_lists_its_tools_but_installs_nothing(limits):
+    """For MCP directories (Glama) that list a server's tools from a container
+    where the sandbox can't run: nothing is ever installed or run."""
+    h = Hub((limits,), False, write=lambda m: None, serve_command=fake_serve, inspect_only=True)
+    listed = h.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})["result"]["tools"]
+    assert {t["name"] for t in listed} >= {"find_tools", "install_tool", "install_status", "list_installed_tools", "use_tool"}
+    with patch("legwork.hub.builder.build") as build:
+        result, text = call(h, "install_tool", {"repo": "owner/repo"})
+    assert result["isError"] and "--inspect-only" in text and not build.called
+    h.close()

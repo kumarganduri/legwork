@@ -80,3 +80,28 @@ jobs:
             LEGWORK_REQUIRE_SANDBOX=1 ~/.local/bin/uv run pytest -q
           '
 
+
+  # The image MCP directories build (Glama): it must start and list the
+  # hub's tools over stdio, and refuse installs (Dockerfile, --inspect-only).
+  docker-inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t legwork-inspect .
+      - name: initialize and tools/list over stdio, as a directory does
+        run: |
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"install_tool","arguments":{"repo":"jsvine/pdfplumber"}}}' \
+            | docker run -i --rm legwork-inspect > replies.jsonl
+          python3 - <<'PY'
+          import json
+          replies = {m["id"]: m for m in map(json.loads, open("replies.jsonl")) if "id" in m}
+          tools = {t["name"] for t in replies[2]["result"]["tools"]}
+          assert {"find_tools", "install_tool", "install_status", "list_installed_tools", "use_tool"} <= tools, tools
+          refused = replies[3]["result"]
+          assert refused["isError"] and "--inspect-only" in refused["content"][0]["text"], refused
+          print("ok:", sorted(tools))
+          PY
