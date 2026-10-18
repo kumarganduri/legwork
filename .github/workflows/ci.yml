@@ -105,3 +105,11 @@ jobs:
           assert refused["isError"] and "--inspect-only" in refused["content"][0]["text"], refused
           print("ok:", sorted(tools))
           PY
+
+  # The Claude Desktop extension (mcpb/): its manifest must stay valid.
+  # It's built after each release by scripts/build_mcpb.sh.
+  mcpb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx -y @anthropic-ai/mcpb@2.1.2 validate mcpb/manifest.json

@@ -1,0 +1,10 @@
+# The Claude Desktop extension (MCPB bundle) runs the released Legwork from
+# PyPI, pinned to the version in manifest.json. Bump both with each release.
+[project]
+name = "legwork-mcpb"
+version = "0.7.15"
+requires-python = ">=3.10"
+dependencies = ["legwork-mcp==0.7.15"]
+
+[tool.uv]
+package = false

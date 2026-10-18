@@ -3,14 +3,22 @@
 ## Release
 
 1. `uv run pytest -q` and `uv run python scripts/e2e_hub.py` pass locally.
-2. Bump `version` in `pyproject.toml`, commit, push to main, and wait for
-   CI to pass on every OS.
+2. Bump the version in `pyproject.toml`, `server.json` (twice),
+   `mcpb/manifest.json` and `mcpb/pyproject.toml` (also the
+   `legwork-mcp==` pin; `tests/test_mcpb.py` checks they match), commit,
+   push to main, and wait for CI to pass on every OS.
 3. Tag that commit and push the tag: `git tag -a v0.7.9 -m "..." && git push origin v0.7.9`.
    The `publish` workflow tests again, builds, and publishes to PyPI with
    trusted publishing.
 4. Check it's live: `uvx --refresh legwork-mcp@latest --version`.
 5. `gh release create v0.7.9 --verify-tag --notes-file notes.md`. Credit
    anyone who reported an escape.
+6. The Claude Desktop extension: `scripts/build_mcpb.sh` (it needs the
+   release on PyPI), then `gh release upload v0.7.9 dist/legwork.mcpb`. The
+   README links to `releases/latest/download/legwork.mcpb`, so every
+   release needs one.
+7. The official MCP registry: `mcp-publisher login github`, then at once
+   `mcp-publisher publish` (the login expires within minutes).
 
 The tag also fixes the cache that release reads
 (`raw.githubusercontent.com/kumarganduri/legwork/v0.7.9/cache`). A tool

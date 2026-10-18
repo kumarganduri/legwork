@@ -6,3 +6,4 @@ cache
 tests
 docs
 **/__pycache__
+mcpb

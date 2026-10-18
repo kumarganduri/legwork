@@ -101,9 +101,16 @@ fixed. [Write-up](docs/designs/legwork-trending-trial-2-2026-09-27.md).
 claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 ```
 
-For Claude Desktop or Cursor, add this to the MCP config (for Claude
-Desktop, while the app is quit), with your own user name in the path: a
-folder that doesn't exist stops the hub from starting.
+For Claude Desktop (macOS), download
+[legwork.mcpb](https://github.com/kumarganduri/legwork/releases/latest/download/legwork.mcpb)
+and double-click it. Desktop installs it as an extension and lets you
+pick the folders tools may read (Downloads by default) and whether they
+may use the internet, under Settings → Extensions → Legwork → Configure.
+It runs the released `legwork-mcp` from PyPI, pinned to that release.
+
+Or, for Cursor or Claude Desktop without the extension, add this to the
+MCP config (for Claude Desktop, while the app is quit), with your own user
+name in the path: a folder that doesn't exist stops the hub from starting.
 
 ```json
 { "mcpServers": { "legwork": { "command": "uvx",
