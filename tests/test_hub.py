@@ -501,6 +501,17 @@ def test_find_tools_says_it_reaches_the_users_own_files():
     assert "cloud code sandbox can't see" in find["description"] and "cloud code sandbox can't see" in hub.INSTRUCTIONS
 
 
+def test_every_hub_tool_and_parameter_is_described():
+    """Clients pick tools by these. Glama rated "Progress or result of an
+    install." 2/5: it said nothing about when to call it, what `repo` is, or
+    what comes back (2026-10-18)."""
+    for tool in [*hub.STATIC_TOOLS, hub._use_tool(False)]:
+        assert len(tool["description"]) > 150, tool["name"]
+        for name, prop in tool["inputSchema"]["properties"].items():
+            assert len(prop.get("description", "")) > 20, f"{tool['name']}.{name}"
+    assert "malware" not in next(t for t in hub.STATIC_TOOLS if t["name"] == "install_tool")["description"]
+
+
 def test_install_replies_say_what_the_build_came_from(tmp_path, monkeypatch):
     """Issue #4: the commit, who wrote the wrapper, its hash and the packages."""
     record = local_store.BuildRecord(

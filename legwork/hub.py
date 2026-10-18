@@ -107,12 +107,22 @@ STATIC_TOOLS = [
     ),
     _tool(
         "install_tool",
-        "Install a GitHub repo as a sandboxed tool: malware scan, sandboxed build and self-test. "
-        "Grants are read-only folders and/or network, within the limits the user started Legwork with.",
+        "Install a GitHub repo, usually one picked with find_tools, as a tool on the user's computer: "
+        "Legwork scans its source for hidden payloads, then builds and self-tests it in a sandbox. "
+        "Grants are read-only folders and/or network, within the limits the user started Legwork with; "
+        "ask only for what the task needs. Waits up to 45 seconds; if the build is still running it says "
+        "so, and install_status follows it. A repo already installed with the same grants is reused, "
+        "not rebuilt. Replies with the new tools' names and how to call them.",
         {
-            "repo": {"type": "string", "description": "owner/repo from find_tools"},
-            "allow_read": {"type": "array", "items": {"type": "string"}, "description": "folders the tool may read"},
-            "allow_net": {"type": "boolean", "description": "whether the tool may use the network"},
+            "repo": {"type": "string", "description": "owner/repo (or its GitHub URL), e.g. 'jsvine/pdfplumber'"},
+            "allow_read": {"type": "array", "items": {"type": "string"}, "description": (
+                "folders the tool may read, read-only, e.g. ['~/Downloads']. Omitted: keeps what an earlier "
+                "install of this repo was granted, or none"
+            )},
+            "allow_net": {"type": "boolean", "description": (
+                "whether the tool may use the internet while it runs (installs always can). Omitted: keeps "
+                "an earlier grant, or no"
+            )},
             "commit": {"type": "string", "description": (
                 "optional: a full 40-character commit SHA or a tag (e.g. v1.2.0) to build exactly that, "
                 "instead of the default branch as it is now"
@@ -128,11 +138,23 @@ STATIC_TOOLS = [
          "idempotentHint": True, "openWorldHint": True},
     ),
     _tool(
-        "install_status", "Progress or result of an install.", {"repo": {"type": "string"}}, ["repo"],
+        "install_status",
+        "Check on an install that install_tool started, when it replied that the build is still running. "
+        "Waits up to 45 seconds for it to finish, then replies with one of: still installing, with the "
+        "latest build steps (call it again); installed, with the folders and network it was granted and "
+        "its tools; or failed, with the reason. For a repo that was never installed, it says to call "
+        "install_tool. Changes nothing.",
+        {"repo": {"type": "string", "description": "owner/repo given to install_tool, e.g. 'jsvine/pdfplumber'"}},
+        ["repo"],
         {"title": "Install progress", "readOnlyHint": True, "openWorldHint": False},
     ),
     _tool(
-        "list_installed_tools", "Tools installed through Legwork, with their grants.", {}, [],
+        "list_installed_tools",
+        "List the repos already installed through Legwork on this computer. For each: the folders and "
+        "network it may use, the commit it was built from, its tools and how to call them, and a link "
+        "if the repo has changed upstream since. Call it before find_tools to reuse what's already "
+        "installed, or to look up a tool's repo and name for use_tool. Changes nothing.",
+        {}, [],
         {"title": "List installed tools", "readOnlyHint": True, "openWorldHint": False},
     ),
 ]
@@ -141,8 +163,22 @@ STATIC_TOOLS = [
 def _use_tool(network: bool) -> dict:
     return _tool(
         "use_tool",
-        "Call a tool of an installed repo (works in every client, even if the tool isn't listed yet).",
-        {"repo": {"type": "string"}, "tool": {"type": "string"}, "arguments": {"type": "object"}},
+        "Call a tool of a repo installed through Legwork, by repo and tool name. Most clients also list "
+        "installed tools directly as <repo>__<tool>; use this when the tool isn't in your list yet. It "
+        "runs in the sandbox with the folders and network granted at install. Replies with the tool's "
+        "output, marked as untrusted text and size-capped, plus (on macOS) anything the sandbox blocked; "
+        "files it makes are copied to ~/Legwork/outputs/ by default. Calling a repo that isn't installed "
+        "is an error that says to call install_tool; a wrong tool name is an error listing the repo's tools.",
+        {
+            "repo": {"type": "string", "description": "owner/repo of an installed tool, e.g. 'jsvine/pdfplumber'"},
+            "tool": {"type": "string", "description": (
+                "the tool's name as listed by install_tool or list_installed_tools, e.g. 'extract_tables'"
+            )},
+            "arguments": {"type": "object", "description": (
+                "the arguments for that tool, an object of its parameters, e.g. {'path': '~/Downloads/report.pdf'}. "
+                "Paths may start with ~/. Omitted: no arguments"
+            )},
+        },
         ["repo", "tool"],
         _served_annotations("Use an installed tool", network),
     )
