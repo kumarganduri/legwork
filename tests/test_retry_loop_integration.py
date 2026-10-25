@@ -72,7 +72,7 @@ def test_full_pipeline_real_fetch_real_sandbox_mocked_llm(tmp_path):
     config = LLMConfig(endpoint="https://unused.example.com", api_key="unused", model="unused")
 
     with patch("legwork.retry_loop.complete", return_value=REALISTIC_REVERIFY_RESPONSE):
-        result = run("2akouwu/reverify", tmp_path, config)
+        result = run("2akouwu/reverify", tmp_path, config, approve=lambda command: None)
 
     assert result.success is True, result.final_error
     assert len(result.attempts) == 1

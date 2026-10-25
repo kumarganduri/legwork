@@ -131,7 +131,10 @@ is what makes it ask you before an install:
 ```
 
 - **You approve every install:** your client shows the repo and the
-  folders it asks for.
+  folders it asks for. For a repo that isn't in the cache, a model writes
+  the install command during the build, and the build stops to show you
+  that exact command before any of it runs: you approve it in a second
+  call (`legwork build` asks y/N in the terminal).
 - **The hub's flags are the ceiling.** An install can ask for the folders
   you allowed or less, never more, and no network unless you started the
   hub with `--allow-net`. Secret folders (`~/.ssh`, `~/.aws`, ...) are

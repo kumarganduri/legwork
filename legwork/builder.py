@@ -139,6 +139,15 @@ def _record_install(ref: RepoRef, source: str, result) -> None:
         pass
 
 
+def record_approval(ref: RepoRef, command: str, how: str) -> None:
+    """The install command the user approved for a fresh build, before it
+    ran (issue #4), appended to the tool's record from outside the sandbox."""
+    try:
+        netlog.record(local_store.records_path(ref), {"event": "approve", "repo": ref.slug, "how": how, "command": command})
+    except OSError:
+        pass
+
+
 def _no_key_message(ref: RepoRef, cache_state: str, exc: Exception) -> str:
     """Why a model key is needed, accurately. A client with no key once told its
     user Legwork needed a key to install anything; offline, Legwork said a cached
@@ -166,10 +175,14 @@ def build(
     progress: Callable[[str], None] = _quiet,
     llm_config: LLMConfig | None = None,
     commit: str | None = None,
+    *,
+    approve: retry_loop.Approve,
 ) -> BuildOutcome:
     """Build `ref`, from the cache when possible. Never raises for an
     ordinary failure: the outcome says what happened. `commit` (a full SHA
-    or a tag) builds exactly that commit instead of the default branch (#4)."""
+    or a tag) builds exactly that commit instead of the default branch (#4).
+    `approve` is asked before an install command a model wrote runs (a
+    cached tool's command is fixed, and shown by a preview beforehand)."""
     try:
         cache_state = "off"
         if use_cache:
@@ -184,11 +197,17 @@ def build(
             progress(OLLAMA_TIP)
         build_dir = local_store.new_build_dir(ref)
         progress(f"Building an MCP wrapper for {ref.slug} (usually 1-3 minutes)")
-        result = retry_loop.run(ref.slug, build_dir, config, progress=progress, commit=commit)
+        result = retry_loop.run(ref.slug, build_dir, config, progress=progress, commit=commit, approve=approve)
     except BUILD_ERRORS as exc:
         return BuildOutcome(ok=False, ref=ref, error=f"{type(exc).__name__}: {exc}")
 
     _record_install(ref, "fresh", result)
+    if not result.success and result.attempts and result.attempts[-1].outcome == "InstallNotApproved":
+        return BuildOutcome(
+            ok=False, ref=ref, attempts=len(result.attempts),
+            error=f"The model's install command for {ref.slug} wasn't approved, so none of it ran "
+                  f"({result.attempts[-1].detail.split(': ', 1)[-1]}).",
+        )
     if not result.success:
         log = build_dir / "attempts.log"
         log.write_text("".join(f"=== attempt {a.attempt_number}: {a.outcome}\n{a.detail}\n\n" for a in result.attempts))

@@ -85,6 +85,16 @@ RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 FAIL_FAST_EXCEPTIONS: tuple[type[Exception], ...] = codegen.FAIL_FAST_EXCEPTIONS + (LLMAuthError,)
 
 
+class InstallNotApproved(Exception):
+    """The user didn't approve the model's install command (issue #4):
+    nothing of it ran. Hard abort, no further attempts."""
+
+
+# Called with each install command a model wrote, before it runs; returns
+# once the user approved it, raises InstallNotApproved otherwise.
+Approve = Callable[[str], None]
+
+
 class TotalRunTimeoutExceeded(Exception):
     """The whole run (all attempts, all phases) exceeded
     TOTAL_RUN_TIMEOUT_SECONDS. Hard abort — no further retries."""
@@ -245,12 +255,14 @@ def _run_one_attempt(
     readme_content: str,
     prior_failures: list[str],
     llm_config: LLMConfig,
+    approve: Approve,
     progress: Callable[[str], None] = _no_progress,
     network: list[dict] | None = None,
 ) -> codegen.WrapperDraft:
-    """One wrapper-repair attempt: ask the LLM, install into a fresh venv
-    isolated from Legwork's own environment, invoke the self-test. Raises
-    on any failure — caller decides retryable vs fail-fast."""
+    """One wrapper-repair attempt: ask the LLM, have the user approve its
+    install command, install into a fresh venv isolated from Legwork's own
+    environment, invoke the self-test. Raises on any failure — caller
+    decides retryable vs fail-fast."""
     progress("asking the model for a wrapper")
     sandbox = codegen.describe_sandbox(sandbox_runner.available_toolchains())
     messages = codegen.build_messages(readme_content, prior_failures, sandbox)
@@ -260,6 +272,9 @@ def _run_one_attempt(
     (attempt_dir / "model-reply.md").write_text(response_text)
     draft = codegen.parse_response(response_text)
 
+    # The user approved a repo before any model saw it; this is where they
+    # approve what will actually run (issue #4). Nothing of it has run yet.
+    approve(draft.install_command)
     _install_and_self_test(attempt_dir, draft.install_command, draft.wrapper_code, progress, network)
     return draft
 
@@ -341,13 +356,17 @@ def run(
     llm_config: LLMConfig,
     progress: Callable[[str], None] = _no_progress,
     commit: str | None = None,
+    *,
+    approve: Approve,
 ) -> RunResult:
     """The T6 entrypoint. Fetches, scans, parses, then runs up to
     MAX_WRAPPER_ATTEMPTS codegen+install+invoke attempts, each logged.
     `progress` gets one short status line per stage (a build takes
-    minutes; the CLI shows these so it doesn't look hung)."""
+    minutes; the CLI shows these so it doesn't look hung). `approve` is
+    asked before each install command a model wrote runs, once per distinct
+    command: required, so no caller runs one unseen by accident."""
     try:
-        return _tidy(workdir, _run(repo_url, workdir, llm_config, progress, commit))
+        return _tidy(workdir, _run(repo_url, workdir, llm_config, progress, commit, approve))
     finally:
         shutil.rmtree(workdir / DOWNLOAD_CACHE_DIR, ignore_errors=True)
 
@@ -358,12 +377,28 @@ def _run(
     llm_config: LLMConfig,
     progress: Callable[[str], None],
     commit: str | None = None,
+    approve: Approve | None = None,
 ) -> RunResult:
     deadline = time.monotonic() + TOTAL_RUN_TIMEOUT_SECONDS
+    approved: set[str] = set()
 
     def _check_deadline() -> None:
         if time.monotonic() > deadline:
             raise TotalRunTimeoutExceeded(f"Run exceeded {TOTAL_RUN_TIMEOUT_SECONDS}s total")
+
+    def _approve_once(command: str) -> None:
+        # A retry that only rewrote the wrapper keeps the command already
+        # approved; a different command is asked about again. Time spent
+        # waiting for the user doesn't count against the build's deadline.
+        nonlocal deadline
+        if command in approved:
+            return
+        if approve is None:
+            raise InstallNotApproved("no one was asked to approve the install command")
+        started = time.monotonic()
+        approve(command)
+        deadline += time.monotonic() - started
+        approved.add(command)
 
     # Preconditions: one-shot, not part of the wrapper-repair budget. Any
     # failure here aborts before attempt 1 is even logged — these aren't
@@ -390,8 +425,9 @@ def _run(
             progress(f"attempt {n}/{MAX_WRAPPER_ATTEMPTS}: {message}")
 
         try:
-            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config, attempt_progress, network)
-        except FAIL_FAST_EXCEPTIONS as exc:
+            draft = _run_one_attempt(attempt_dir, readme.content, prior_failures, llm_config, _approve_once,
+                                     attempt_progress, network)
+        except (*FAIL_FAST_EXCEPTIONS, InstallNotApproved) as exc:
             detail = f"{type(exc).__name__}: {exc}"
             attempts.append(AttemptLog(attempt_number, what_changed, type(exc).__name__, detail))
             return RunResult(success=False, wrapper_code=None, install_command=None, attempts=attempts, final_error=detail,

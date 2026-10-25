@@ -62,7 +62,8 @@ def test_build_then_serve_over_stdio_with_a_real_mcp_client(tmp_path, monkeypatc
     monkeypatch.setenv("LEGWORK_LLM_API_KEY", "unused")
     monkeypatch.setenv("LEGWORK_LLM_MODEL", "unused")
 
-    with patch("legwork.retry_loop.complete", return_value=FASTMCP_REVERIFY_REPLY):
+    with patch("legwork.retry_loop.complete", return_value=FASTMCP_REVERIFY_REPLY), \
+            patch("builtins.input", return_value="y"):  # the user approves the install command (#4)
         assert cli.cmd_build("2akouwu/reverify") == 0
     local_store.load_current(RepoRef("2akouwu", "reverify"))  # recorded and complete
 

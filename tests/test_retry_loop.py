@@ -32,6 +32,10 @@ from legwork.sandbox_runner import (
 
 CONFIG = LLMConfig(endpoint="https://api.example.com/v1", api_key="sk-test", model="gpt-test")
 
+
+def APPROVE_ALL(command: str) -> None:  # noqa: N802 — a constant-like stand-in for the user saying yes
+    pass
+
 VALID_DRAFT = WrapperDraft(
     entrypoint_description="does a thing",
     install_command="pip install foo",
@@ -86,7 +90,7 @@ def test_success_on_first_attempt(tmp_path):
     patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw response"))
     with _MultiPatch(patches):
         with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
-            result = run("owner/repo", tmp_path, CONFIG)
+            result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     assert result.success is True
     assert result.wrapper_code == VALID_DRAFT.wrapper_code
@@ -107,7 +111,7 @@ def test_fails_twice_then_succeeds_on_third_attempt(tmp_path):
     ]
     with _MultiPatch(patches):
         with patch("legwork.retry_loop.codegen.parse_response", side_effect=parse_side_effects):
-            result = run("owner/repo", tmp_path, CONFIG)
+            result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     assert result.success is True
     assert len(result.attempts) == 3
@@ -126,7 +130,7 @@ def test_fails_all_three_attempts_reports_all(tmp_path):
     failures = [WrapperRuntimeError(f"fail {i}") for i in range(1, MAX_WRAPPER_ATTEMPTS + 1)]
     with _MultiPatch(patches):
         with patch("legwork.retry_loop.codegen.parse_response", side_effect=failures):
-            result = run("owner/repo", tmp_path, CONFIG)
+            result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     assert result.success is False
     assert len(result.attempts) == MAX_WRAPPER_ATTEMPTS
@@ -142,7 +146,7 @@ def test_llm_malformed_output_is_retryable(tmp_path):
         "legwork.retry_loop.codegen.parse_response",
         side_effect=[LLMMalformedOutputError("bad shape"), VALID_DRAFT],
     ):
-        result = run("owner/repo", tmp_path, CONFIG)
+        result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
     assert result.success is True
     assert len(result.attempts) == 2
 
@@ -158,7 +162,7 @@ def test_codegen_refusal_fails_fast_no_retry(tmp_path):
         "legwork.retry_loop.codegen.parse_response",
         side_effect=InsufficientReadmeError("no install info"),
     ):
-        result = run("owner/repo", tmp_path, CONFIG)
+        result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     assert result.success is False
     assert len(result.attempts) == 1  # did NOT retry
@@ -170,7 +174,7 @@ def test_llm_auth_error_fails_fast_no_retry(tmp_path):
         tmp_path, complete=patch("legwork.retry_loop.complete", side_effect=LLMAuthError("bad key"))
     )
     with _MultiPatch(patches):
-        result = run("owner/repo", tmp_path, CONFIG)
+        result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     assert result.success is False
     assert len(result.attempts) == 1
@@ -185,7 +189,7 @@ def test_repo_fetch_failure_never_reaches_the_retry_loop(tmp_path):
 
     with patch("legwork.retry_loop.repo_fetcher.fetch", side_effect=RepoNotFoundError("gone")):
         with pytest.raises(RepoNotFoundError):
-            run("owner/repo", tmp_path, CONFIG)
+            run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
 
 def test_obfuscation_scan_failure_never_reaches_the_retry_loop(tmp_path):
@@ -199,7 +203,7 @@ def test_obfuscation_scan_failure_never_reaches_the_retry_loop(tmp_path):
         ),
     )
     with _MultiPatch(patches), pytest.raises(ObfuscatedPayloadDetectedError):
-        run("owner/repo", tmp_path, CONFIG)
+        run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
 
 # --- total-run timeout: hard abort regardless of remaining attempts --------
@@ -213,7 +217,7 @@ def test_total_run_timeout_aborts_before_starting_an_attempt(tmp_path):
             past = TOTAL_RUN_TIMEOUT_SECONDS + 1
             with patch("legwork.retry_loop.time.monotonic", side_effect=[0, past, past, past]):
                 with pytest.raises(TotalRunTimeoutExceeded):
-                    run("owner/repo", tmp_path, CONFIG)
+                    run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
 
 # --- isolation: install command runs against a fresh venv, not ambient -----
@@ -223,7 +227,7 @@ def test_install_uses_venv_bin_first_on_path(tmp_path):
     patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"))
     with _MultiPatch(patches) as mocks:
         with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
-            run("owner/repo", tmp_path, CONFIG)
+            run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
 
     install_call = mocks["sandbox_install"].call_args
     extra_env = install_call.kwargs["extra_env"]
@@ -280,7 +284,7 @@ def test_codegen_call_uses_the_longer_codegen_timeout(tmp_path):
         _MultiPatch(patches) as mocks,
         patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT),
     ):
-        run("owner/repo", tmp_path, CONFIG)
+        run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
     assert mocks["complete"].call_args.kwargs["timeout"] == CODEGEN_TIMEOUT_SECONDS
 
 
@@ -292,7 +296,7 @@ def test_mcp_pin_is_installed_after_the_models_install_command(tmp_path):
         _MultiPatch(patches) as mocks,
         patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT),
     ):
-        run("owner/repo", tmp_path, CONFIG)
+        run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
     shell_cmd = mocks["sandbox_install"].call_args.args[0][-1]
     assert MCP_SDK_PIN in shell_cmd
     assert shell_cmd.index("legwork-install.sh") < shell_cmd.index(MCP_SDK_PIN)
@@ -307,7 +311,7 @@ def test_third_attempt_prompt_includes_first_attempts_failure(tmp_path):
         _MultiPatch(patches) as mocks,
         patch("legwork.retry_loop.codegen.parse_response", side_effect=failures),
     ):
-        run("owner/repo", tmp_path, CONFIG)
+        run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
     third_call_messages = mocks["complete"].call_args_list[2].args[1]
     user_content = third_call_messages[1].content
     assert "bad hex input" in user_content
@@ -360,7 +364,7 @@ def test_a_finished_build_drops_downloads_and_failed_environments(tmp_path):
 def test_every_model_reply_is_kept_in_its_attempt_folder(tmp_path):
     patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="the raw reply"))
     with _MultiPatch(patches), patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
-        run("owner/repo", tmp_path, CONFIG)
+        run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
     assert (tmp_path / "attempt-1" / "model-reply.md").read_text() == "the raw reply"
 
 
@@ -372,3 +376,59 @@ def test_the_source_is_copied_into_the_attempt_without_git(tmp_path):
     _copy_source(tmp_path / "attempt-1")
     assert (tmp_path / "attempt-1" / "src" / "requirements.txt").read_text() == "requests\n"
     assert not (tmp_path / "attempt-1" / "src" / ".git").exists()
+
+
+# --- the user approves the model's install command before it runs (issue #4) ---
+
+
+def test_an_install_command_that_isnt_approved_never_runs(tmp_path):
+    from legwork.retry_loop import InstallNotApproved
+
+    seen = []
+
+    def decline(command):
+        seen.append(command)
+        raise InstallNotApproved("the user declined it")
+
+    install = patch("legwork.retry_loop.sandbox_runner.install", return_value=None)
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"), sandbox_install=install)
+    with _MultiPatch(patches) as patched:
+        with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
+            result = run("owner/repo", tmp_path, CONFIG, approve=decline)
+        assert patched["sandbox_install"].call_count == 0
+
+    assert seen == [VALID_DRAFT.install_command]
+    assert result.success is False and len(result.attempts) == 1  # no retry after a no
+    assert result.attempts[0].outcome == "InstallNotApproved" and "declined" in result.final_error
+
+
+def test_each_distinct_install_command_is_approved_once(tmp_path):
+    """A retry that only rewrote the wrapper keeps its approved command; a
+    rewritten command is asked about again."""
+    second = WrapperDraft(entrypoint_description="does a thing", install_command="pip install foo==2", wrapper_code="x")
+    drafts = [VALID_DRAFT, VALID_DRAFT, second]
+    invoke = patch("legwork.retry_loop.sandbox_runner.invoke",
+                   side_effect=[WrapperRuntimeError("self-test 1"), WrapperRuntimeError("self-test 2"), None])
+    asked = []
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"), sandbox_invoke=invoke)
+    with _MultiPatch(patches):
+        with patch("legwork.retry_loop.codegen.parse_response", side_effect=drafts):
+            result = run("owner/repo", tmp_path, CONFIG, approve=asked.append)
+
+    assert result.success is True and result.install_command == "pip install foo==2"
+    assert asked == ["pip install foo", "pip install foo==2"]
+
+
+def test_a_build_with_no_one_to_ask_runs_nothing(tmp_path):
+    """run() requires an approver; the loop itself refuses without one."""
+    from legwork import retry_loop
+
+    install = patch("legwork.retry_loop.sandbox_runner.install", return_value=None)
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"), sandbox_install=install)
+    with _MultiPatch(patches) as patched:
+        with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
+            result = retry_loop._run("owner/repo", tmp_path, CONFIG, lambda message: None)
+        assert patched["sandbox_install"].call_count == 0
+    assert result.success is False and result.attempts[0].outcome == "InstallNotApproved"
+    with pytest.raises(TypeError):
+        run("owner/repo", tmp_path, CONFIG)  # approve is required

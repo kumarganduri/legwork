@@ -35,6 +35,7 @@ import shlex
 import shutil
 import sys
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
 
 from legwork import (  # noqa: F401 — cache_reader/repo_fetcher kept as patch points for tests
@@ -139,13 +140,33 @@ def _progress(message: str) -> None:
     print(f"  {message}", file=sys.stderr)
 
 
+def _ask_in_terminal(ref: RepoRef) -> Callable[[str], None]:
+    """Shows the install command a model wrote and runs it only on a yes
+    typed in the terminal (issue #4)."""
+    def approve(command: str) -> None:
+        print(f"\nThe model wrote this install command for {ref.slug}. None of it has run yet. It runs in the "
+              "sandbox, with network on to download packages and none of your files:\n", file=sys.stderr)
+        for line in command.splitlines():
+            print(f"    {line}", file=sys.stderr)
+        # A typed or piped "y" (`echo y | legwork build ...`) is a yes; no
+        # input at all is a no.
+        try:
+            answer = input("\nRun it? [y/N] ")
+        except (EOFError, OSError):
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            raise retry_loop.InstallNotApproved("you declined it")
+        builder.record_approval(ref, command, "legwork build")
+    return approve
+
+
 def cmd_build(repo: str, use_cache: bool = True) -> int:
     try:
         ref = parse_repo_url(repo)
     except InvalidRepoURLError as exc:
         _err(str(exc))
         return 1
-    outcome = builder.build(ref, use_cache=use_cache, progress=_progress)
+    outcome = builder.build(ref, use_cache=use_cache, progress=_progress, approve=_ask_in_terminal(ref))
     if not outcome.ok:
         _err(outcome.error)
         for line in outcome.attempt_lines:
@@ -295,6 +316,11 @@ def cmd_log(repo: str) -> int:
         print(f"Nothing recorded for {ref.slug} yet (records start with Legwork 0.7.12).")
         return 0
     for entry in entries:
+        if entry.get("event") == "approve":
+            print(f"{entry.get('time', '?')}  install command approved ({entry.get('how', '?')}), before it ran:")
+            for line in str(entry.get("command", "")).splitlines():
+                print(f"    {line}")
+            continue
         if entry.get("event") == "serve":
             print(f"{entry.get('time', '?')}  {entry.get('tool', '?')}: the sandbox blocked")
             for item in entry.get("blocked") or []:

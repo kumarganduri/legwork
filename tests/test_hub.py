@@ -605,3 +605,79 @@ def test_an_inspect_only_hub_lists_its_tools_but_installs_nothing(limits):
         result, text = call(h, "install_tool", {"repo": "owner/repo"})
     assert result["isError"] and "--inspect-only" in text and not build.called
     h.close()
+
+
+# --- approving a fresh build's install command (issue #4) ---------------------------
+
+MODEL_COMMAND = 'pip install "foo==1.2"\npython -m foo.download small'
+
+
+def fake_fresh_build(ref, progress=None, approve=None, **_):
+    """A build whose model wrote MODEL_COMMAND: like builder.build, it asks
+    before running it, and runs nothing on a no."""
+    from legwork import retry_loop
+
+    try:
+        approve(MODEL_COMMAND)
+    except retry_loop.InstallNotApproved as exc:
+        return builder.BuildOutcome(ok=False, ref=ref, error=f"wasn't approved, so none of it ran ({exc})")
+    return fake_build(ref, progress)
+
+
+def wait_for(h, repo, needle):
+    for _ in range(100):
+        _, text = call(h, "install_status", {"repo": repo})
+        if needle in text:
+            return text
+        time.sleep(0.05)
+    raise AssertionError(text)
+
+
+def test_a_fresh_build_shows_the_model_s_install_command_and_waits():
+    h, _ = make_hub()
+    with patch("legwork.hub.builder.build", side_effect=fake_fresh_build), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5):
+        result, text = call(h, "install_tool", {"repo": "owner/repo"})
+        assert "waiting for approval" in text and MODEL_COMMAND in text and "None of it has run" in text
+        assert not result["isError"] and "owner/repo" not in h.installed
+
+        # Anything but the exact command runs nothing and keeps waiting.
+        result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": "pip install evil"})
+        assert result["isError"] and "isn't the install command the model wrote" in text and MODEL_COMMAND in text
+        assert "waiting for approval" in call(h, "install_status", {"repo": "owner/repo"})[1]
+
+        # The exact text approves it, even if the client changed line endings.
+        result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": MODEL_COMMAND.replace("\n", "  \r\n")})
+        assert not result["isError"] and "is installed" in text, text
+    assert "owner/repo" in h.installed
+    record = local_store.records_path(RepoRef("owner", "repo")).read_text()
+    assert '"event": "approve"' in record and "foo==1.2" in record
+    h.close()
+
+
+def test_declining_an_install_command_runs_none_of_it():
+    h, _ = make_hub()
+    with patch("legwork.hub.builder.build", side_effect=fake_fresh_build), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5):
+        call(h, "install_tool", {"repo": "owner/repo"})
+        result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": ""})
+        assert "Declined" in text and "none of the install command" in text
+        failed = wait_for(h, "owner/repo", "failed")
+    assert "declined" in failed and "owner/repo" not in h.installed
+    h.close()
+
+
+def test_an_unanswered_install_command_times_out_having_run_nothing():
+    h, _ = make_hub()
+    with patch("legwork.hub.builder.build", side_effect=fake_fresh_build), patch("legwork.hub.INSTALL_WAIT_SECONDS", 5), \
+            patch("legwork.hub.APPROVAL_WAIT_SECONDS", 0.2):
+        call(h, "install_tool", {"repo": "owner/repo"})
+        failed = wait_for(h, "owner/repo", "failed")
+    assert "no answer within" in failed and "owner/repo" not in h.installed
+    h.close()
+
+
+def test_install_command_with_nothing_waiting_is_refused():
+    h, _ = make_hub()
+    result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": "pip install foo"})
+    assert result["isError"] and "No install command of owner/repo is waiting" in text
+    result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": 5})
+    assert result["isError"] and "must be a string" in text

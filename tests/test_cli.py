@@ -240,3 +240,42 @@ def test_show_prints_what_a_build_came_from(tmp_path, monkeypatch, capsys):
     assert "owner/repo, built" in out and "pip install demo==1.2" in out and "pip:demo==1.2" in out
     assert "sha256 2d711642b726" in out  # sha256 of "x"
     assert cli.main(["show", "owner/other"]) == 1
+
+
+# --- the install command a model wrote is shown and asked about (issue #4) ---
+
+
+def _run_asking(repo_url, workdir, config, progress, approve, **_):
+    """Like retry_loop.run: the model's command is approved before it runs."""
+    from legwork import retry_loop
+
+    try:
+        approve("pip install repo==1.0")
+    except retry_loop.InstallNotApproved as exc:
+        return RunResult(success=False, wrapper_code=None, install_command=None,
+                         attempts=[AttemptLog(1, "initial attempt", "InstallNotApproved", f"InstallNotApproved: {exc}")],
+                         final_error=str(exc))
+    return _successful_run(repo_url, workdir, config, progress)
+
+
+def test_build_shows_the_install_command_and_runs_it_only_on_yes(capsys):
+    with patch("legwork.cli.retry_loop.run", side_effect=_run_asking), patch("builtins.input", return_value="n"):
+        assert cli.cmd_build("owner/repo") == 1
+    err = capsys.readouterr().err
+    assert "pip install repo==1.0" in err and "wasn't approved, so none of it ran" in err and "you declined it" in err
+    with pytest.raises(local_store.NoBuildError):
+        local_store.load_current(REF)
+
+    with patch("legwork.cli.retry_loop.run", side_effect=_run_asking), patch("builtins.input", return_value="y"):
+        assert cli.cmd_build("owner/repo") == 0
+    local_store.load_current(REF)
+    capsys.readouterr()
+    assert cli.cmd_log("owner/repo") == 0
+    log = capsys.readouterr().out
+    assert "install command approved (legwork build), before it ran:" in log and "pip install repo==1.0" in log
+
+
+def test_build_with_no_answer_runs_nothing(capsys):
+    with patch("legwork.cli.retry_loop.run", side_effect=_run_asking), patch("builtins.input", side_effect=EOFError):
+        assert cli.cmd_build("owner/repo") == 1
+    assert "you declined it" in capsys.readouterr().err

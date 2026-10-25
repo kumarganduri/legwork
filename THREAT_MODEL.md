@@ -51,8 +51,18 @@ Approving `install_tool` approves a **repository and the grants** you see
 
 - Legwork clones the repo's default branch as it is at that moment, scans
   it, and builds. For a cached tool the install command is the one in the
-  cache, pinned to a package version; for a fresh build a model writes it,
+  cache, pinned to a package version. For a fresh build a model writes it,
   usually unpinned, so its dependencies resolve at build time.
+- **A fresh build's install command is approved before it runs.** The
+  build stops once the model has written it and shows it; nothing of it
+  runs until you approve that exact text (`install_tool` with
+  `install_command`, so your client's approval prompt shows the command;
+  `legwork build` asks y/N). Any other text runs nothing; an empty one
+  declines; after 30 minutes with no answer the build stops. A retry that
+  only rewrites the wrapper keeps the approved command; a rewritten
+  command is asked about again. The approval is appended to the tool's
+  record. What you don't review is the wrapper the model writes: it runs
+  in the sandbox with the grants you gave, and its hash is recorded.
 - Every build records **what it came from**: the commit that was cloned
   and scanned, the wrapper's SHA-256, the install command, and the
   packages the install resolved to. The install reply shows a summary, and
@@ -74,8 +84,6 @@ Approving `install_tool` approves a **repository and the grants** you see
   a cached tool installs its pinned package, and the commit is the source
   that was scanned. Asking for a different commit than the one installed
   builds it; the same commit is reused.
-- Not yet: approving a fresh build's model-written install command before
-  it runs ([#4](https://github.com/kumarganduri/legwork/issues/4)).
 
 ## What is recorded
 
@@ -84,6 +92,8 @@ folder the tool's code can write, so that code can't edit what it's
 recorded doing. Legwork writes it from outside the sandbox and only ever
 appends to it. `legwork log owner/repo` prints it.
 
+- **The install commands you approved** for fresh builds, with how
+  (`install_tool` or `legwork build`), before they ran.
 - **Hosts an install reached.** Installs go through a small proxy Legwork
   runs on this machine (`HTTP_PROXY` / `HTTPS_PROXY`, which pip, uv, npm,
   git, curl and common download libraries honour). It records each host
