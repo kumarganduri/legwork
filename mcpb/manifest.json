@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "legwork",
   "display_name": "Legwork",
-  "version": "0.7.16",
+  "version": "0.7.17",
   "description": "Lets your AI find the open-source tool it needs on GitHub and install it as an MCP tool, in a sandbox, after you approve.",
   "long_description": "When you ask for something Claude has no tool for (transcribe a voice memo, pull tables out of a PDF, remove an image background), it searches GitHub, picks a repo and asks you to approve installing it; for a repo not in its cache, it also shows you the install command a model wrote, and runs none of it until you approve. Legwork scans the source for hidden payloads, builds a working tool in a sandbox (sandbox-exec on macOS, bubblewrap on Linux) and tests it. Installed tools read only the folders you choose here, read-only; get none of your environment variables or keys; and have no network unless you allow it. 37 common tools are cached and install with no API key; other repos need a model key in ~/.legwork.env (see the README).",
   "author": {

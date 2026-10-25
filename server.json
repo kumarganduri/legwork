@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/kumarganduri/legwork",
-  "version": "0.7.16",
+  "version": "0.7.17",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "legwork-mcp",
-      "version": "0.7.16",
+      "version": "0.7.17",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
