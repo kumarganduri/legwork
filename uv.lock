@@ -34,7 +34,7 @@ wheels = [
 
 [[package]]
 name = "legwork-mcp"
-version = "0.7.15"
+version = "0.7.16"
 source = { editable = "." }
 
 [package.dev-dependencies]
