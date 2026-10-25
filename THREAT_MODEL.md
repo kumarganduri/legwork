@@ -106,16 +106,26 @@ appends to it. `legwork log owner/repo` prints it.
   `LEGWORK_INSTALL_NETWORK=proxy` (experimental, macOS only), installs can
   reach the internet only through the proxy, so the list is complete; the
   record says which mode it was.
-- **What the sandbox blocked while a tool ran (macOS).** The hub watches
-  the kernel's live sandbox log and keeps only denials from each tool's own
-  processes: a network attempt (macOS hides the destination, so only the
-  port is known), a read or write outside what the tool may touch, a
-  signal to another process. The routine denials every sandboxed program
-  makes are dropped. They're added to the call's reply and appended to the
-  record. It's best effort: macOS reports a repeated identical denial once
-  and summarizes the duplicates later, a child process that exits before
-  Legwork looks up its parent can't be linked to the tool, and Linux has
-  no equivalent log yet. `LEGWORK_RECORD_DENIALS=off` turns the watcher off.
+- **What the sandbox blocked while a tool ran.** Added to the call's reply
+  and appended to the record. `LEGWORK_RECORD_DENIALS=off` turns it off.
+  - **macOS:** the hub watches the kernel's live sandbox log and keeps only
+    denials from each tool's own processes: a network attempt (macOS hides
+    the destination, so only the port is known), a read or write outside
+    what the tool may touch, a signal to another process. The routine
+    denials every sandboxed program makes are dropped. It's best effort:
+    macOS reports a repeated identical denial once and summarizes the
+    duplicates later, and a child process that exits before Legwork looks
+    up its parent can't be linked to the tool.
+  - **Linux:** there's no such log, so for a tool served without network,
+    a few lines that run inside the sandbox before the tool install a
+    seccomp filter that pauses every `connect()`, and hand its listener to
+    the hub over a socket the hub made. The hub reads each paused call's
+    destination (the address and port, which Linux doesn't hide), records
+    it, and lets the call continue, so the empty network namespace refuses
+    it exactly as before. The tool's own loopback services aren't recorded.
+    It covers network attempts only: a read outside the grants just finds
+    nothing there, since those files aren't in the sandbox at all. It needs
+    Linux 5.5+ on x86-64 or ARM64; with network allowed nothing is paused.
 
 ## Known gaps
 

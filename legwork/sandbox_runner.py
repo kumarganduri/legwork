@@ -909,6 +909,7 @@ def exec_serve(
     extra_env: dict[str, str] | None = None,
     allow_read: tuple[Path, ...] = (),
     allow_network: bool = False,
+    notify_fd: int | None = None,
 ) -> NoReturn:
     """Replace this process with `command` running under the invoke-phase
     policy (network off, reads/writes confined to `workdir`, minimal env),
@@ -921,7 +922,12 @@ def exec_serve(
     `allow_read` (already checked by check_read_grants) and `allow_network`
     are the user's explicit grants from `legwork serve --allow-read/--allow-net`;
     without them a served tool sees no files of yours and no network. With
-    network on, Linux gets the same no-Unix-sockets filter as installs."""
+    network on, Linux gets the same no-Unix-sockets filter as installs.
+
+    `notify_fd` (Linux, from the hub): a socket to send the seccomp listener
+    over, which reports what the tool tried to reach with network off
+    (seccomp_notify.py). Without network the tool starts through its loader;
+    otherwise the socket is closed and nothing is reported."""
     _check_backend_available()
     profile = None
     if platform.system() == "Darwin":  # inline: no file in the writable workdir to tamper with
@@ -934,6 +940,17 @@ def exec_serve(
             os.write(seccomp_fd, program)
             os.lseek(seccomp_fd, 0, os.SEEK_SET)
             os.set_inheritable(seccomp_fd, True)  # must survive the exec into bwrap
+    if notify_fd is not None:
+        from legwork import seccomp_notify
+
+        wrapped = None
+        if platform.system() == "Linux" and not allow_network:
+            wrapped = seccomp_notify.wrap(command, notify_fd)
+        if wrapped is None:
+            os.close(notify_fd)  # the hub sees the socket close and records nothing
+        else:
+            command = wrapped
+            os.set_inheritable(notify_fd, True)  # into bwrap, then the loader
     # No --die-with-parent here: it fires when the *thread* that started the
     # server exits, and MCP clients (the hub among them) may start servers
     # from short-lived threads; the hub's tools died right after installing

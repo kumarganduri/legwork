@@ -208,7 +208,7 @@ def test_serve_passes_grants_and_refuses_unsafe_ones(tmp_path, capsys):
     folder.mkdir()
     with patch("legwork.cli.sandbox_runner.exec_serve") as exec_serve:
         cli.main(["serve", "owner/repo", "--allow-read", str(folder), "--allow-net"])
-    assert exec_serve.call_args.kwargs == {"allow_read": (folder.resolve(),), "allow_network": True}
+    assert exec_serve.call_args.kwargs == {"allow_read": (folder.resolve(),), "allow_network": True, "notify_fd": None}
     with patch("legwork.cli.sandbox_runner.exec_serve") as exec_serve:
         assert cli.main(["serve", "owner/repo", "--allow-read", "~"]) == 1
     exec_serve.assert_not_called()

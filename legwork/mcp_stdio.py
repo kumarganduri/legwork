@@ -24,7 +24,7 @@ class MCPClientError(Exception):
 
 
 class StdioMCPClient:
-    def __init__(self, command: list[str], env: dict[str, str] | None = None):
+    def __init__(self, command: list[str], env: dict[str, str] | None = None, pass_fds: tuple[int, ...] = ()):
         self.proc = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -32,6 +32,7 @@ class StdioMCPClient:
             stderr=subprocess.PIPE,
             text=True,
             env=env,
+            pass_fds=pass_fds,
         )
         self._lines: queue.Queue[str | None] = queue.Queue()
         self._stderr: collections.deque[str] = collections.deque(maxlen=200)

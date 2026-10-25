@@ -681,3 +681,52 @@ def test_install_command_with_nothing_waiting_is_refused():
     assert result["isError"] and "No install command of owner/repo is waiting" in text
     result, text = call(h, "install_tool", {"repo": "owner/repo", "install_command": 5})
     assert result["isError"] and "must be a string" in text
+
+
+# --- Linux: the seccomp listener of a served tool (issue #5) -------------------------
+
+SENDS_A_LISTENER = r"""
+import os, socket, struct, sys
+sock = socket.socket(fileno=int(os.environ["LEGWORK_NOTIFY_FD"]))
+r, w = os.pipe()  # stands in for the listener
+sock.sendmsg([b"L"], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, struct.pack("i", r))])
+sock.close()
+os.execv(sys.executable, [sys.executable, sys.argv[1]])
+"""
+
+
+def test_a_tool_served_without_network_hands_its_listener_to_the_hub(monkeypatch):
+    from legwork import denials
+
+    adopted = []
+
+    class FakeWatcher(denials.SeccompWatcher):
+        @staticmethod
+        def available():
+            return True
+
+        def adopt(self, root, listener, alive=lambda: True):
+            adopted.append((root, listener, alive()))
+
+    monkeypatch.setattr(hub.denials, "watcher", FakeWatcher)
+
+    def serve(slug, allow_read, allow_net):
+        return [sys.executable, FAKE_SERVER] if allow_net else [sys.executable, "-c", SENDS_A_LISTENER, FAKE_SERVER]
+
+    h = Hub((), True, write=lambda m: None, serve_command=serve)
+    item = hub.Installed("owner/repo")
+    h._start(item)
+    for _ in range(100):
+        if adopted:
+            break
+        time.sleep(0.05)
+    assert adopted and adopted[0][0] == item.client.proc.pid and adopted[0][2] is True
+    os.close(adopted[0][1])
+
+    # With network allowed nothing is passed: only refused attempts are recorded.
+    adopted.clear()
+    with patch.object(hub, "StdioMCPClient", wraps=hub.StdioMCPClient) as client:
+        h._start(netted := hub.Installed("owner/other", allow_net=True))
+    assert hub.seccomp_notify.FD_ENV not in client.call_args.args[1] and "pass_fds" not in client.call_args.kwargs
+    netted.client.close()
+    h.close()

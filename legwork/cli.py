@@ -203,11 +203,27 @@ def cmd_serve(repo: str, allow_read: list[str] | None = None, allow_net: bool = 
             env,
             allow_read=grants,
             allow_network=allow_net,
+            notify_fd=_notify_fd(),
         )
     except sandbox_runner.SandboxUnavailableError as exc:
         _err(str(exc))
         return 1
     return 0  # pragma: no cover — exec_serve replaces this process
+
+
+def _notify_fd() -> int | None:
+    """The socket the hub passed for its seccomp listener (Linux), if any:
+    a number in the environment, accepted only if it names a socket."""
+    import stat
+
+    from legwork import seccomp_notify
+
+    value = os.environ.pop(seccomp_notify.FD_ENV, "")
+    try:
+        fd = int(value)
+        return fd if stat.S_ISSOCK(os.fstat(fd).st_mode) else None
+    except (ValueError, OSError):
+        return None
 
 
 _CONTRIBUTE_ERRORS = (

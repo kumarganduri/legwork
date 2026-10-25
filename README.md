@@ -485,7 +485,7 @@ found so far with the test that keeps it fixed.
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
 | `legwork doctor` | Check this machine is ready: sandbox, cache, key, search limit, client configs. Read-only; prints no keys. Paste it into bug reports |
 | `legwork show owner/repo` | What a built tool came from: the commit that was scanned, the wrapper's hash, the install command and every package it installed |
-| `legwork log owner/repo` | A tool's record, written by Legwork outside the sandbox: the hosts each install reached, and what the sandbox blocked while it ran (macOS) |
+| `legwork log owner/repo` | A tool's record, written by Legwork outside the sandbox: the hosts each install reached, and what the sandbox blocked while it ran (on Linux, network attempts) |
 | `legwork clean [owner/repo]` | Free disk space: remove old and failed builds, keep the ones you serve. `--dry-run`, `--all` |
 
 Builds live in `~/.legwork` (override with `LEGWORK_HOME`). A failed build

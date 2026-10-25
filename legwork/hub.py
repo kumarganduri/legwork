@@ -39,7 +39,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from legwork import builder, denials, discovery, local_store, netlog, outputs, repo_fetcher, retry_loop, sandbox_runner
+from legwork import (
+    builder,
+    denials,
+    discovery,
+    local_store,
+    netlog,
+    outputs,
+    repo_fetcher,
+    retry_loop,
+    sandbox_runner,
+    seccomp_notify,
+)
 from legwork.mcp_stdio import MCPClientError, StdioMCPClient
 from legwork.repo_fetcher import InvalidRepoURLError, parse_repo_url
 
@@ -54,8 +65,7 @@ INSTALL_WAIT_SECONDS = 45
 # its model wrote (issue #4) before it stops, having run none of it.
 APPROVAL_WAIT_SECONDS = 1800
 TOOL_TIMEOUT_SECONDS = 300
-DENIAL_SETTLE_SECONDS = 0.3  # a call that looks fine
-DENIAL_WAIT_SECONDS = 1.5  # a call that looks like it hit the sandbox
+# How long a call waits for denials is the watcher's `latency` (denials.py).
 DENIAL_RECORD_DELAY_SECONDS = 2.0
 
 INSTRUCTIONS = """\
@@ -260,7 +270,7 @@ class Hub:
         self.jobs: dict[str, Job] = {}
         self._lock = threading.RLock()  # re-entrant: _save and _items take it inside install
         self._state_path = local_store.legwork_home() / "hub.json"
-        self._denials = denials.Watcher()
+        self._denials = denials.watcher()
         self._call_starts: dict[int, list[float]] = {}
         if not inspect_only:  # an inspect-only hub serves no installed tools either
             self._restore()
@@ -343,7 +353,7 @@ class Hub:
         with item.starting:  # two first calls at once used to start two servers
             if item.client is not None and item.client.alive():
                 return
-            client = StdioMCPClient(self._serve_command(item.slug, item.allow_read, item.allow_net), _child_env())
+            client = self._launch(item)
             try:
                 client.initialize(client_name="legwork-hub", timeout=120)
                 item.tools = client.list_tools(timeout=60)
@@ -351,6 +361,30 @@ class Hub:
                 client.close()
                 raise exc if isinstance(exc, MCPClientError) else MCPClientError(f"{item.slug} didn't start: {exc}") from exc
             item.client = client
+
+    def _launch(self, item: Installed) -> StdioMCPClient:
+        """Start the tool's `legwork serve`. On Linux, without network, it
+        also gets a socket for the seccomp listener that reports what the
+        tool tried to reach (issue #5); the listener comes back once the
+        sandbox is up."""
+        command = self._serve_command(item.slug, item.allow_read, item.allow_net)
+        if not isinstance(self._denials, denials.SeccompWatcher) or item.allow_net or not self._denials.available():
+            return StdioMCPClient(command, _child_env())
+        hub_end, sandbox_end = seccomp_notify.socketpair()
+        try:
+            client = StdioMCPClient(command, {**_child_env(), seccomp_notify.FD_ENV: str(sandbox_end.fileno())},
+                                    pass_fds=(sandbox_end.fileno(),))
+        finally:
+            sandbox_end.close()
+
+        def adopt() -> None:
+            with hub_end:
+                listener = seccomp_notify.receive_listener(hub_end)
+            if listener is not None:
+                self._denials.adopt(client.proc.pid, listener, alive=lambda: client.proc.poll() is None)
+
+        threading.Thread(target=adopt, daemon=True).start()
+        return client
 
     def _exported(self) -> list[dict]:
         tools = []
@@ -415,7 +449,8 @@ class Hub:
         root, done = item.client.proc.pid, time.monotonic()
         text = " ".join(c.get("text", "") for c in result.get("content", []) if c.get("type") == "text")
         hit = result.get("isError") or any(s in text for s in (*_DENIAL_SIGNS, *_MISSING_SIGNS))
-        blocked = self._denials.wait_for(root, since, DENIAL_WAIT_SECONDS if hit else DENIAL_SETTLE_SECONDS)
+        settle, wait = self._denials.latency
+        blocked = self._denials.wait_for(root, since, wait if hit else settle)
         threading.Timer(DENIAL_RECORD_DELAY_SECONDS, self._record_denials,
                         args=(item.slug, tool, root, since, done + DENIAL_RECORD_DELAY_SECONDS)).start()
         if not blocked:

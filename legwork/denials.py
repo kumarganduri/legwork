@@ -14,7 +14,8 @@ network attempt, a read or write outside what the tool may touch, a signal
 to another process, goes into the reply and the tool's record.
 
 It's best effort: a child process that exits before Legwork looks up its
-parent can't be attributed, and Linux has no equivalent log yet.
+parent can't be attributed. Linux has no such log: SeccompWatcher below
+records network attempts there instead (seccomp_notify.py).
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ import threading
 import time
 from collections import Counter, deque
 from pathlib import Path
+
+from legwork import seccomp_notify
 
 DENIAL_RE = re.compile(r"^(?:(?P<repeat>\d+) duplicate reports? for )?Sandbox: (?P<name>.+?)\((?P<pid>\d+)\) deny\(\d+\) (?P<op>\S+)(?: (?P<target>.*))?$")
 _PREDICATE = 'process == "kernel" AND (eventMessage BEGINSWITH "Sandbox: " OR eventMessage CONTAINS "duplicate report")'
@@ -59,15 +62,85 @@ def describe(op: str, target: str) -> str | None:
     return None
 
 
-class Watcher:
-    """One `log stream` for a hub; tools register their process ids."""
+class _Events:
+    """Denials by tool process, as they arrive: what collect() and
+    wait_for() read."""
+
+    # How long a call's reply waits for lines to arrive, in seconds: (a call
+    # that looks fine, one that looks like it hit the sandbox). macOS's lines
+    # arrive up to about 1.5 s late (see the hub's _report_denials).
+    latency = (0.3, 1.5)
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._events: deque[tuple[float, int, str]] = deque(maxlen=20000)
+
+    def collect(self, root: int, since: float, until: float | None = None) -> list[tuple[str, int]]:
+        """What was blocked for `root`'s processes between `since` and `until`
+        (monotonic, by when the line arrived): [(description, count)], most
+        frequent first."""
+        with self._lock:
+            found = Counter()
+            for at, owner, text in self._events:
+                if owner == root and at >= since and (until is None or at <= until):
+                    found[text] += 1
+        return found.most_common()
+
+    def wait_for(self, root: int, since: float, timeout: float) -> list[tuple[str, int]]:
+        """collect(), waiting up to `timeout` for the first line: the kernel's
+        lines arrive from at once to about 1.5 s after the denial."""
+        deadline = time.monotonic() + timeout
+        while True:
+            found = self.collect(root, since)
+            if found or time.monotonic() >= deadline:
+                return found
+            time.sleep(0.05)
+
+
+class SeccompWatcher(_Events):
+    """Linux: the network attempts each served tool's sandbox refused,
+    reported by its seccomp listener (seccomp_notify.py). Each tool has its
+    own listener, so attribution is exact, and a paused call is recorded
+    before it returns: no waiting for lines."""
+
+    latency = (0.0, 0.0)
+
+    @staticmethod
+    def available() -> bool:
+        return (platform.system() == "Linux" and seccomp_notify.filter_program() is not None
+                and os.environ.get(RECORD_ENV, "").strip().lower() != "off")
+
+    def start(self) -> None:
+        pass
+
+    def watch(self, pid: int) -> None:
+        pass
+
+    def adopt(self, root: int, listener: int, alive=lambda: True) -> None:
+        """Answer `listener` for the tool whose process is `root`."""
+        def report(text: str) -> None:
+            with self._lock:
+                self._events.append((time.monotonic(), root, text))
+
+        threading.Thread(target=seccomp_notify.serve, args=(listener, report, alive), daemon=True).start()
+
+    def close(self) -> None:
+        pass  # each listener closes when its sandbox exits
+
+
+def watcher() -> Watcher | SeccompWatcher:
+    """This system's watcher."""
+    return SeccompWatcher() if platform.system() == "Linux" else Watcher()
+
+
+class Watcher(_Events):
+    """One `log stream` for a hub; tools register their process ids."""
+
+    def __init__(self) -> None:
+        super().__init__()
         self._roots: set[int] = set()
         self._parent: dict[int, int] = {}
         self._snapshot_at = 0.0
-        self._events: deque[tuple[float, int, str]] = deque(maxlen=20000)
         self._foreign: set[int] = set()
         self._foreign_since = time.monotonic()
         self._proc: subprocess.Popen | None = None
@@ -103,27 +176,6 @@ class Watcher:
     def watch(self, pid: int) -> None:
         with self._lock:
             self._roots.add(pid)
-
-    def collect(self, root: int, since: float, until: float | None = None) -> list[tuple[str, int]]:
-        """What was blocked for `root`'s processes between `since` and `until`
-        (monotonic, by when the line arrived): [(description, count)], most
-        frequent first."""
-        with self._lock:
-            found = Counter()
-            for at, owner, text in self._events:
-                if owner == root and at >= since and (until is None or at <= until):
-                    found[text] += 1
-        return found.most_common()
-
-    def wait_for(self, root: int, since: float, timeout: float) -> list[tuple[str, int]]:
-        """collect(), waiting up to `timeout` for the first line: the kernel's
-        lines arrive from at once to about 1.5 s after the denial."""
-        deadline = time.monotonic() + timeout
-        while True:
-            found = self.collect(root, since)
-            if found or time.monotonic() >= deadline:
-                return found
-            time.sleep(0.05)
 
     def close(self) -> None:
         with self._lock:
