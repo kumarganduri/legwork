@@ -24,6 +24,7 @@ docs/designs/legwork-live-runs-2026-09-25.md.
 
 from __future__ import annotations
 
+import platform
 import shlex
 import shutil
 import subprocess
@@ -66,6 +67,20 @@ MIN_VENV_PYTHON = (3, 10)
 # Newest versions sometimes lack wheels for compiled deps, so prefer
 # established ones when several are installed.
 _VENV_PYTHON_CANDIDATES = ("python3.12", "python3.13", "python3.11", "python3.14", "python3.10", "python3")
+
+# cryptography has shipped only arm64 macOS wheels since 49.0.0 (June 2026),
+# and every Python wrapper needs it (mcp -> pyjwt[crypto]). On an Intel Mac
+# pip built it from source: its backend downloaded a Rust toolchain into the
+# build (the sandbox hides ~/.cargo), needed Homebrew's OpenSSL, took minutes
+# and failed CI's Intel job once (2026-10-25). Wheels only, pip takes the
+# newest version that has one (48.0.1 then); elsewhere that's the newest.
+_INTEL_MAC_PIP_ENV = {"PIP_ONLY_BINARY": "cryptography"}
+
+
+def _install_env() -> dict[str, str]:
+    if platform.system() == "Darwin" and platform.machine() == "x86_64":
+        return dict(_INTEL_MAC_PIP_ENV)
+    return {}
 
 # Counts as a wrapper-repair attempt: plausibly fixable by trying again,
 # whether that's the LLM producing different code or a transient infra hiccup.
@@ -235,7 +250,7 @@ def _install_and_self_test(
         installed = sandbox_runner.install(
             ["/bin/sh", "-c", combined_install_cmd],
             attempt_dir,
-            extra_env=venv_env,
+            extra_env={**venv_env, **_install_env()},
             cache_dir=attempt_dir.parent / DOWNLOAD_CACHE_DIR,
         )
         contacted = getattr(installed, "contacted", ())
