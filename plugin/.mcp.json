@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "legwork": {
+      "command": "uvx",
+      "args": ["legwork-mcp==0.7.18", "hub", "--allow-read", "${user_config.allowed_folder}"]
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "legwork",
+  "displayName": "Legwork",
+  "version": "0.7.18",
+  "description": "Lets Claude find the open-source tool it needs on GitHub and install it as an MCP tool on your computer, in a sandbox, after you approve.",
+  "author": {
+    "name": "Kumar Ganduri",
+    "url": "https://github.com/kumarganduri"
+  },
+  "homepage": "https://github.com/kumarganduri/legwork",
+  "repository": "https://github.com/kumarganduri/legwork",
+  "license": "MIT",
+  "keywords": ["github", "sandbox", "tools", "local files", "mcp"],
+  "documentationUrl": "https://github.com/kumarganduri/legwork#readme",
+  "supportUrl": "https://github.com/kumarganduri/legwork/issues",
+  "privacyPolicyUrl": "https://github.com/kumarganduri/legwork/blob/main/plugin/README.md#privacy",
+  "userConfig": {
+    "allowed_folder": {
+      "type": "directory",
+      "title": "Folder tools may read",
+      "description": "The most any installed tool may read, read-only. Each install asks for this folder or less. Legwork refuses your whole home folder and folders that hold credentials (~/.ssh, ~/.aws and similar).",
+      "required": true,
+      "default": "~/Downloads"
+    }
+  }
+}

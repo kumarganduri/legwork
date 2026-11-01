@@ -4,9 +4,12 @@
 
 1. `uv run pytest -q` and `uv run python scripts/e2e_hub.py` pass locally.
 2. Bump the version in `pyproject.toml`, `server.json` (twice),
-   `mcpb/manifest.json` and `mcpb/pyproject.toml` (also the
-   `legwork-mcp==` pin; `tests/test_mcpb.py` checks they match), commit,
-   push to main, and wait for CI to pass on every OS.
+   `mcpb/manifest.json`, `mcpb/pyproject.toml` (also the `legwork-mcp==`
+   pin), `plugin/.claude-plugin/plugin.json` and the `legwork-mcp==` pin in
+   `plugin/.mcp.json` (`tests/test_mcpb.py` and `tests/test_plugin.py`
+   check they match), commit, push to main, and wait for CI to pass on
+   every OS. Anthropic's directory picks up the plugin from main once it
+   passes their scan.
 3. Tag that commit and push the tag: `git tag -a v0.7.9 -m "..." && git push origin v0.7.9`.
    The `publish` workflow tests again, builds, and publishes to PyPI with
    trusted publishing.
