@@ -1,6 +1,7 @@
 """The Claude plugin (plugin/), for Claude Code and Cowork and Anthropic's
 directory: it runs the released Legwork from PyPI, pinned to an exact version
-(the directory refuses an unpinned uvx), so the pin must follow each release."""
+(the directory refuses an unpinned uvx). The directory reads main, so the pin
+follows a release once PyPI has it, never before (docs/RELEASING.md)."""
 
 from __future__ import annotations
 
@@ -12,12 +13,18 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugin"
 
 
-def test_the_plugin_runs_the_version_being_released():
+def _release(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def test_the_plugin_runs_a_released_version():
+    """The release commit bumps pyproject.toml alone; the plugin catches up in
+    a later commit, so it can trail the version on main but never lead it."""
     [version] = re.findall(r'^version = "(.+)"$', (ROOT / "pyproject.toml").read_text(), re.M)
     manifest = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
     server = json.loads((PLUGIN / ".mcp.json").read_text())["mcpServers"]["legwork"]
-    assert manifest["version"] == version
-    assert server["command"] == "uvx" and server["args"][0] == f"legwork-mcp=={version}"
+    assert server["command"] == "uvx" and server["args"][0] == f"legwork-mcp=={manifest['version']}"
+    assert _release(manifest["version"]) <= _release(version)
 
 
 def test_the_folder_setting_is_required_and_is_the_only_grant():
