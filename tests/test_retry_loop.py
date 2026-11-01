@@ -432,3 +432,24 @@ def test_a_build_with_no_one_to_ask_runs_nothing(tmp_path):
     assert result.success is False and result.attempts[0].outcome == "InstallNotApproved"
     with pytest.raises(TypeError):
         run("owner/repo", tmp_path, CONFIG)  # approve is required
+
+
+@pytest.mark.parametrize("system, machine, wheels_only", [
+    ("Darwin", "x86_64", True),
+    ("Darwin", "arm64", False),
+    ("Linux", "x86_64", False),
+])
+def test_intel_macs_install_cryptography_from_a_wheel(tmp_path, system, machine, wheels_only):
+    """cryptography 49+ has no Intel Mac wheel; building it there fetched a
+    Rust toolchain mid-install and failed CI (2026-10-25). Elsewhere the
+    newest version has wheels, so nothing changes."""
+    patches = _patched(tmp_path, complete=patch("legwork.retry_loop.complete", return_value="raw"),
+                       system=patch("legwork.retry_loop.platform.system", return_value=system),
+                       machine=patch("legwork.retry_loop.platform.machine", return_value=machine))
+    with _MultiPatch(patches) as patched:
+        with patch("legwork.retry_loop.codegen.parse_response", return_value=VALID_DRAFT):
+            result = run("owner/repo", tmp_path, CONFIG, approve=APPROVE_ALL)
+        env = patched["sandbox_install"].call_args.kwargs["extra_env"]
+    assert result.success is True
+    assert env["PATH"].split(":")[0].endswith(".venv/bin")
+    assert (env.get("PIP_ONLY_BINARY") == "cryptography") is wheels_only
