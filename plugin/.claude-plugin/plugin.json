@@ -10,7 +10,13 @@
   "homepage": "https://github.com/kumarganduri/legwork",
   "repository": "https://github.com/kumarganduri/legwork",
   "license": "MIT",
-  "keywords": ["github", "sandbox", "tools", "local files", "mcp"],
+  "keywords": [
+    "github",
+    "sandbox",
+    "tools",
+    "local files",
+    "mcp"
+  ],
   "documentationUrl": "https://github.com/kumarganduri/legwork#readme",
   "supportUrl": "https://github.com/kumarganduri/legwork/issues",
   "privacyPolicyUrl": "https://github.com/kumarganduri/legwork/blob/main/plugin/README.md#privacy",
@@ -18,7 +24,7 @@
     "allowed_folder": {
       "type": "directory",
       "title": "Folder tools may read",
-      "description": "The most any installed tool may read, read-only. Each install asks for this folder or less. Legwork refuses your whole home folder and folders that hold credentials (~/.ssh, ~/.aws and similar).",
+      "description": "The most any installed tool may read, read-only. Each install asks for this folder or less. Legwork refuses your whole home folder and any folder that holds keys or passwords.",
       "required": true,
       "default": "~/Downloads"
     }

@@ -11,7 +11,7 @@ This plugin starts Legwork's MCP server, `legwork-mcp` from PyPI, pinned to one 
 
 ## Settings
 
-- **Folder tools may read**: the most any installed tool may read, read-only. It defaults to `~/Downloads`. Legwork refuses your whole home folder and folders that hold credentials, such as `~/.ssh` and `~/.aws`.
+- **Folder tools may read**: the most any installed tool may read, read-only. It defaults to `~/Downloads`. Legwork refuses your whole home folder and any folder that holds keys or passwords.
 
 ## Tools
 
