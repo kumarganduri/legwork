@@ -1,7 +1,7 @@
 {
   "name": "legwork",
   "displayName": "Legwork",
-  "version": "0.7.18",
+  "version": "0.7.19",
   "description": "Lets Claude find the open-source tool it needs on GitHub and install it as an MCP tool on your computer, in a sandbox, after you approve.",
   "author": {
     "name": "Kumar Ganduri",
