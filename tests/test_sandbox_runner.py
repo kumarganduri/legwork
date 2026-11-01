@@ -511,6 +511,15 @@ def test_grants_refuse_paths_that_do_not_exist(tmp_path):
         sandbox_runner.check_read_grants([str(tmp_path / "missing")])
 
 
+@pytest.mark.parametrize("empty", ["", "   ", "\t"])
+def test_an_empty_grant_is_refused_not_read_as_the_current_folder(empty, tmp_path, monkeypatch):
+    """A cleared plugin setting passes `--allow-read ""`, which resolved to
+    the folder the client started in (2026-11-01)."""
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(sandbox_runner.SandboxGrantError, match="empty path"):
+        sandbox_runner.check_read_grants([empty])
+
+
 @pytest.mark.skipif(not _network_reachable(), reason="no network in this environment")
 @pytest.mark.parametrize("allow_net", [False, True])
 def test_served_tools_get_network_only_when_granted(tmp_path, allow_net):

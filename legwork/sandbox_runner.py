@@ -450,6 +450,11 @@ def check_read_grants(paths: list[str] | tuple[str, ...]) -> tuple[Path, ...]:
     home = Path.home().resolve()
     granted = []
     for raw in paths:
+        # An empty path resolved to the current folder, so a cleared setting
+        # (`--allow-read ""` from a plugin's config) granted whatever folder
+        # the client started in (found 2026-11-01).
+        if not raw.strip():
+            raise SandboxGrantError("--allow-read was given an empty path. Name the folder tools may read, e.g. ~/Downloads.")
         path = _without_data_volume(Path(raw).expanduser().resolve())
         # Refusals come before the existence check: a secret folder is refused
         # as such whether or not it exists here.
