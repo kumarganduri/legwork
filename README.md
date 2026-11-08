@@ -108,6 +108,15 @@ pick the folders tools may read (Downloads by default) and whether they
 may use the internet, under Settings → Extensions → Legwork → Configure.
 It runs the released `legwork-mcp` from PyPI, pinned to that release.
 
+For Claude Code, you can instead install it as a plugin from this
+repository, which asks for the folder tools may read and keeps the pinned
+release current as new ones come out:
+
+```sh
+claude plugin marketplace add kumarganduri/legwork
+claude plugin install legwork@legwork
+```
+
 Or, for Cursor or Claude Desktop without the extension, add this to the
 MCP config (for Claude Desktop, while the app is quit), with your own user
 name in the path: a folder that doesn't exist stops the hub from starting.

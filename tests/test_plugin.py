@@ -45,3 +45,12 @@ def test_the_readme_discloses_what_it_contacts():
         assert needed in readme, needed
     assert len(re.sub(r"```.*?```", "", readme, flags=re.S).split()) >= 40
     assert not list(PLUGIN.rglob(".DS_Store"))
+
+
+def test_the_repository_is_a_marketplace_for_the_plugin():
+    """`claude plugin marketplace add kumarganduri/legwork` reads this; the
+    entry name must match the plugin's own or the install can't find it."""
+    marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    manifest = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
+    [entry] = marketplace["plugins"]
+    assert entry["source"] == "./plugin" and entry["name"] == manifest["name"]

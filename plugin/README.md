@@ -4,6 +4,13 @@ When you ask Claude for something it has no tool for, such as transcribing a voi
 
 This plugin starts Legwork's MCP server, `legwork-mcp` from PyPI, pinned to one release. It runs in Claude Code and in Cowork tasks that run on your computer. Full documentation: <https://github.com/kumarganduri/legwork>.
 
+To install it in Claude Code from this repository:
+
+```sh
+claude plugin marketplace add kumarganduri/legwork
+claude plugin install legwork@legwork
+```
+
 ## Requirements
 
 - macOS or Linux. On Linux, bubblewrap (`bwrap`) must be installed.

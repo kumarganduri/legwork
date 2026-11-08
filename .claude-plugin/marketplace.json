@@ -1,0 +1,15 @@
+{
+  "name": "legwork",
+  "description": "Legwork, as a Claude Code plugin, straight from its repository.",
+  "owner": {
+    "name": "Kumar Ganduri",
+    "url": "https://github.com/kumarganduri"
+  },
+  "plugins": [
+    {
+      "name": "legwork",
+      "source": "./plugin",
+      "description": "Lets Claude find the open-source tool it needs on GitHub and install it as an MCP tool on your computer, in a sandbox, after you approve."
+    }
+  ]
+}
