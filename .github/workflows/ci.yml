@@ -7,6 +7,9 @@ on:
   workflow_dispatch:
   workflow_call:  # publish.yml runs the same tests before releasing
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test (${{ matrix.os }})
@@ -19,6 +22,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       LEGWORK_REQUIRE_SANDBOX: "1"  # fail, don't skip, if the sandbox can't start
+      # GitHub searches with the job's read-only token get 30 a minute, not
+      # 10. The hub never passes it to tools (hub._child_env).
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - name: Install bubblewrap (Linux sandbox)

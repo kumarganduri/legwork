@@ -131,9 +131,11 @@ def check_repo(url: str) -> RepoRef:
         raise RepoAccessError(
             f"Unexpected GitHub API response ({exc.code}) for {ref.slug}"
         ) from exc
-    except urllib.error.URLError as exc:
+    except (urllib.error.URLError, TimeoutError) as exc:
+        # A timeout while reading the reply isn't a URLError (a GitHub
+        # incident, 2026-11-08), so catch it here too.
         raise RepoAccessError(
-            f"Couldn't reach GitHub to check {ref.slug}: {exc.reason}"
+            f"Couldn't reach GitHub to check {ref.slug}: {getattr(exc, 'reason', exc)}"
         ) from exc
 
 

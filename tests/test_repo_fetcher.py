@@ -95,9 +95,14 @@ def test_rate_limited_api_falls_back_to_git(code):
     ls_remote.assert_called_once_with("https://github.com/owner/repo.git")
 
 
-def test_network_failure_raises_repo_access_error():
-    url_error = urllib.error.URLError("DNS lookup failed")
-    with patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=url_error):
+@pytest.mark.parametrize(
+    "failure",
+    [urllib.error.URLError("DNS lookup failed"), TimeoutError("The read operation timed out")],
+)
+def test_network_failure_raises_repo_access_error(failure):
+    """A read timeout isn't a URLError; it must still say GitHub was
+    unreachable rather than escape as a bare TimeoutError."""
+    with patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=failure):
         with pytest.raises(RepoAccessError, match="Couldn't reach GitHub"):
             check_repo("owner/repo")
 
