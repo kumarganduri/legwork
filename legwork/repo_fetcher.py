@@ -132,11 +132,16 @@ def check_repo(url: str) -> RepoRef:
             f"Unexpected GitHub API response ({exc.code}) for {ref.slug}"
         ) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
-        # A timeout while reading the reply isn't a URLError (a GitHub
-        # incident, 2026-11-08), so catch it here too.
-        raise RepoAccessError(
-            f"Couldn't reach GitHub to check {ref.slug}: {getattr(exc, 'reason', exc)}"
-        ) from exc
+        # A timeout while reading the reply isn't a URLError. During GitHub's
+        # 2026-11-08 incident the anonymous API timed out for hours while git
+        # still answered, so ask git before giving up, as for a rate limit.
+        try:
+            remote_head_sha(ref.clone_url)
+        except RepoAccessError:
+            raise RepoAccessError(
+                f"Couldn't reach GitHub to check {ref.slug}: {getattr(exc, 'reason', exc)}"
+            ) from exc
+        return ref
 
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
