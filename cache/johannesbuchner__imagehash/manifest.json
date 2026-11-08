@@ -1,0 +1,28 @@
+{
+  "source_repo_url": "https://github.com/JohannesBuchner/imagehash",
+  "commit_sha": "a906ed9f7d13c5e1eb2b75da85e7918769d9bb9a",
+  "synthesis_date": "2026-11-08T11:33:38+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-2-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:36:50+00:00"
+  },
+  "entrypoint": "Find duplicate or similar images by comparing perceptual hashes (aHash, pHash, dHash, wHash, colorhash, crop-resistant) with the imagehash Python library",
+  "install_command": "pip install ImageHash==4.3.2",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "compare_images",
+    "arguments": {
+      "image_path_a": "{fixtures}/stripes.png",
+      "image_path_b": "{fixtures}/stripes-copy.png"
+    },
+    "expect_contains": [
+      "\"distance\": 0"
+    ],
+    "derived_from": "stripes-copy.png is a byte-for-byte copy of stripes.png, so their hashes are equal and the distance is 0"
+  }
+}

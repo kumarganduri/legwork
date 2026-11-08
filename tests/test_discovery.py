@@ -176,6 +176,17 @@ def test_odd_index_entries_are_cleaned_or_skipped_and_never_break_search(monkeyp
         ("pull the tables out of report.pdf", "jsvine/pdfplumber"),
         ("make a qr code", "lincolnloop/python-qrcode"),
         ("text readability", "textstat/textstat"),
+        # The same words in the other order is the other tool (cache growth, 2026-11-08)
+        ("markdown to html", "Python-Markdown/markdown"),
+        ("read exif from photo", "ianare/exif-py"),
+        ("find duplicate images", "JohannesBuchner/imagehash"),
+        ("spell check text", "barrust/pyspellchecker"),
+        ("detect language", "pemistahl/lingua-py"),
+        ("parse phone number", "daviddrysdale/python-phonenumbers"),
+        ("open 7z archive", "miurahr/py7zr"),
+        ("read epub", "aerkalov/ebooklib"),
+        ("parse dates in text", "scrapinghub/dateparser"),
+        ("summarize csv", "pandas-dev/pandas"),
     ],
 )
 def test_the_right_cached_tool_ranks_first_for_common_needs(need, first):

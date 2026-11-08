@@ -257,16 +257,28 @@ def cache_matches(terms: list[str], index: list[dict], limit: int = MAX_CACHE_MA
         # "make qr code" gave ruff (fresh QA, 2026-10-03).
         share = sum(idf[t] for w, t in zip(weights, terms) if w) / sum(idf.values())
         if share >= 0.5 and 2 in weights:
-            scored.append((matched, sum(w * idf[t] for w, t in zip(weights, terms)), entry.get("stars", 0), entry))
-    scored.sort(key=lambda x: (-x[0], -x[1], -x[2]))
+            score = sum(w * idf[t] for w, t in zip(weights, terms))
+            scored.append((matched, score, _in_order(terms, entry.get("what", "")), entry.get("stars", 0), entry))
+    scored.sort(key=lambda x: (-x[0], -x[1], -x[2], -x[3]))
     return [
         Candidate(
             slug=e["repo"], stars=int(e.get("stars") or 0), description=" ".join(e.get("what", "").split())[:160],
             license=e.get("license") or "none", language=e.get("language") or "-", pushed_at=e.get("pushed_at") or "",
             created_at=e.get("created_at") or "", topics=[], in_cache=True,
         )
-        for _, _, _, e in scored[:limit]
+        for *_, e in scored[:limit]
     ]
+
+
+def _in_order(terms: list[str], what: str) -> bool:
+    """Whether Legwork's description of a tool names the search terms in the
+    order they were asked: "html to markdown" is markdownify ("Convert HTML
+    ... to Markdown"), not Python-Markdown ("Markdown text to HTML"), which
+    matches the same words (cache growth, 2026-11-08)."""
+    words = re.findall(r"[a-z0-9]+", what.lower())
+    firsts = [next((i for i, w in enumerate(words) if _word_matches(t, w)), None) for t in terms]
+    found = [i for i in firsts if i is not None]
+    return len(found) >= 2 and found == sorted(found)
 
 
 def _word_matches(term: str, word: str) -> bool:
