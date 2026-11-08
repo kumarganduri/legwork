@@ -64,7 +64,7 @@ jobs:
       - name: Install what a user would (bubblewrap, Python, git, Node)
         run: |
           if command -v dnf >/dev/null; then
-            dnf install -y -q bubblewrap python3 git curl nodejs npm which findutils procps-ng shadow-utils
+            dnf install -y -q bubblewrap python3 git curl nodejs npm which findutils procps-ng shadow-utils util-linux
           else
             apt-get update -q && apt-get install -y -q bubblewrap python3 python3-venv git curl nodejs npm ca-certificates passwd
           fi
