@@ -222,3 +222,17 @@ def test_cached_matches_survive_a_github_search_failure(monkeypatch):
     assert "search limit" in discovery.describe(found) and "Legwork cache only" in discovery.describe(found)
     with pytest.raises(discovery.DiscoveryError):
         discovery.find("something nobody caches zzzz")
+
+
+def test_the_same_words_in_the_other_order_rank_the_other_tool():
+    """Two cached tools that match "html to markdown" equally: the one whose
+    description goes that way ranks first, whatever their stars (cache
+    growth, 2026-11-08: Python-Markdown beat markdownify on stars)."""
+    from legwork.discovery import cache_matches
+
+    index = [
+        {"repo": "a/md-to-html", "what": "Convert Markdown text to HTML", "stars": 9000},
+        {"repo": "b/html-to-md", "what": "Convert HTML pages to Markdown", "stars": 10},
+    ]
+    assert [c.slug for c in cache_matches(search_terms("html to markdown").split(), index)] == ["b/html-to-md", "a/md-to-html"]
+    assert [c.slug for c in cache_matches(search_terms("markdown to html").split(), index)] == ["a/md-to-html", "b/html-to-md"]
