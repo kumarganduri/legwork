@@ -1,21 +1,26 @@
 # Legwork public cache
 
 Wrappers here are used by `legwork owner/repo` without a model call, so
-these 37 repos build with no API key. Every entry was reviewed by hand and
+these 47 repos build with no API key. Every entry was reviewed by hand and
 tried with a real call before it was merged, and each is still scanned, installed and
 self-tested on your machine before it's used.
 
 | Repo | What the wrapper does | Install | License |
 |---|---|---|---|
 | [adbar/trafilatura](https://github.com/adbar/trafilatura) | Extract main text and metadata from HTML strings or local HTML files using Trafilatura | `pip install trafilatura==2.3.0` | Apache-2.0 |
+| [aerkalov/ebooklib](https://github.com/aerkalov/ebooklib) | Read EPUB metadata, list/extract items, and create simple EPUBs using EbookLib | `pip install EbookLib==0.21` | AGPL-3.0 |
 | [ast-grep/ast-grep](https://github.com/ast-grep/ast-grep) | Run the ast-grep CLI for AST-based code search and rewrite | `pip install ast-grep-cli==0.45.3` | MIT |
 | [astral-sh/ruff](https://github.com/astral-sh/ruff) | Ruff CLI to lint (check) and format Python code | `pip install ruff==0.16.10` | MIT |
+| [barrust/pyspellchecker](https://github.com/barrust/pyspellchecker) | Offline spellchecking for words/text (find misspellings, best correction, and candidate suggestions) using pyspellchecker | `pip install pyspellchecker==0.9.1` | MIT |
 | [collective/icalendar](https://github.com/collective/icalendar) | Parse and generate iCalendar (.ics) files: list events from ICS text or file, and create/append events to ICS files | `pip install icalendar==7.3.0` | BSD-2-Clause |
-| [danielgatis/rembg](https://github.com/danielgatis/rembg) | Remove image backgrounds from local images using rembg’s Python API (models cached under ./models) | `pip install "rembg[cpu,cli]==2.0.85"` + model/data download | MIT |
+| [danielgatis/rembg](https://github.com/danielgatis/rembg) | Remove image backgrounds from local images using rembg’s Python API (models cached under ./models) | platform-specific binary download | MIT |
+| [daviddrysdale/python-phonenumbers](https://github.com/daviddrysdale/python-phonenumbers) | Parse, validate, format, and look up phone numbers (geocoder/carrier/timezone) via the phonenumbers library | `pip install phonenumbers==9.0.43` | Apache-2.0 |
 | [duckdb/duckdb](https://github.com/duckdb/duckdb) | Execute SQL queries with DuckDB (in-memory or file-backed) and return results | `pip install duckdb==1.5.6` | MIT |
 | [gitleaks/gitleaks](https://github.com/gitleaks/gitleaks) | Scan directories, git repositories, or stdin for secrets using the Gitleaks CLI and return findings as JSON | platform-specific binary download | MIT |
 | [hgrecco/pint](https://github.com/hgrecco/pint) | Convert quantities between units using the Pint Python library (exposes conversion and conversion-factor tools) | `pip install pint==0.26.1` | BSD-3-Clause |
+| [ianare/exif-py](https://github.com/ianare/exif-py) | Read EXIF metadata (camera, date taken, GPS) from photos and image files, and extract embedded thumbnails, using the ExifRead library | `pip install ExifRead==3.5.1` | BSD-3-Clause |
 | [jdepoix/youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) | Retrieve, list, and translate YouTube video transcripts using the youtube-transcript-api library | `pip install youtube-transcript-api==1.2.4` | MIT |
+| [JohannesBuchner/imagehash](https://github.com/JohannesBuchner/imagehash) | Find duplicate or similar images by comparing perceptual hashes (aHash, pHash, dHash, wHash, colorhash, crop-resistant) with the imagehash Python library | `pip install ImageHash==4.3.2` | BSD-2-Clause |
 | [joke2k/faker](https://github.com/joke2k/faker) | Generate arbitrary fake data fields by provider name via the Faker Python API, with optional locales, seeding, repeats, and custom providers | `pip install Faker==40.40.0` | MIT |
 | [jsvine/pdfplumber](https://github.com/jsvine/pdfplumber) | Extract text, tables, and low-level page objects from local PDFs using pdfplumber’s Python API | `pip install pdfplumber==0.11.10` | MIT |
 | [jupyter/nbconvert](https://github.com/jupyter/nbconvert) | Convert Jupyter .ipynb notebooks to static formats (e.g., HTML, Markdown) via nbconvert’s Python API | `pip install nbconvert==7.17.1` | BSD-3-Clause |
@@ -26,14 +31,19 @@ self-tested on your machine before it's used.
 | [matthewwithanm/python-markdownify](https://github.com/matthewwithanm/python-markdownify) | Convert HTML (string or file) to Markdown using the python-markdownify library | `pip install markdownify==1.2.3` | MIT |
 | [microsoft/markitdown](https://github.com/microsoft/markitdown) | Convert local files or URLs to Markdown using the MarkItDown Python API, plus a tool to list available plugins | `pip install "markitdown[all]==0.1.8"` | MIT |
 | [mikefarah/yq](https://github.com/mikefarah/yq) | Run yq to query and transform YAML/JSON/XML/INI/etc via jq-like expressions (evaluate expressions against files or stdin, and convert formats) | platform-specific binary download | MIT |
+| [miurahr/py7zr](https://github.com/miurahr/py7zr) | Create, list, and extract .7z archives using the py7zr library | `pip install py7zr==1.1.4` | LGPL-2.1 |
+| [pandas-dev/pandas](https://github.com/pandas-dev/pandas) | Inspect, summarize, and query local CSV files using pandas | `pip install pandas==3.1.1` | BSD-3-Clause |
+| [pemistahl/lingua-py](https://github.com/pemistahl/lingua-py) | Offline language detection (single or mixed-language) for given text using Lingua | `pip install lingua-language-detector==2.2.0` | Apache-2.0 |
 | [plotly/plotly.py](https://github.com/plotly/plotly.py) | Generate interactive Plotly bar charts as HTML from x/y data using plotly.graph_objects | `pip install plotly==7.1.0` | MIT |
 | [prettier/prettier](https://github.com/prettier/prettier) | Run Prettier’s CLI to format code (format from string via stdin or operate on files) using ./node_modules/.bin/prettier | `npm install prettier@3.9.9` | MIT |
 | [py-pdf/pypdf](https://github.com/py-pdf/pypdf) | PDF text extraction, metadata reading, splitting, and merging using pypdf | `pip install pypdf[crypto]==6.19.0` | BSD-3-Clause |
 | [python-jsonschema/jsonschema](https://github.com/python-jsonschema/jsonschema) | Validate JSON data against JSON Schema using the jsonschema Python library | `pip install "jsonschema[format]==4.26.0"` | MIT |
+| [Python-Markdown/markdown](https://github.com/Python-Markdown/markdown) | Convert Markdown text to HTML using Python-Markdown. | `pip install Markdown==3.11.3` | BSD-3-Clause |
 | [python-openxml/python-docx](https://github.com/python-openxml/python-docx) | Create, read, and modify .docx files using python-docx (create new documents, extract paragraphs, and append text into a new copy) | `pip install python-docx==1.2.0` | MIT |
 | [python-pillow/Pillow](https://github.com/python-pillow/Pillow) | Perform common image operations (inspect, resize, rotate, convert, crop, grayscale, overlay text) via Pillow's Python API | `pip install pillow==12.3.0` | MIT-CMU |
-| [RapidAI/RapidOCR](https://github.com/RapidAI/RapidOCR) | Offline OCR on local images using RapidOCR (ONNX Runtime), with optional visualization output | `pip install rapidocr==3.9.2 onnxruntime==1.30.0` + model/data download | Apache-2.0 |
+| [RapidAI/RapidOCR](https://github.com/RapidAI/RapidOCR) | Offline OCR on local images using RapidOCR (ONNX Runtime), with optional visualization output | platform-specific binary download | Apache-2.0 |
 | [scanny/python-pptx](https://github.com/scanny/python-pptx) | Create, update, and extract text from PowerPoint (.pptx) files using the python-pptx library | `pip install python-pptx==1.0.2` | MIT |
+| [scrapinghub/dateparser](https://github.com/scrapinghub/dateparser) | Parse natural-language dates and search for dates in text using the dateparser library | `pip install "dateparser[calendars]==1.5.0"` | BSD-3-Clause |
 | [simonw/sqlite-utils](https://github.com/simonw/sqlite-utils) | Run SQLite queries and modify tables using the sqlite-utils Python library | `pip install sqlite-utils==4.2.1` | Apache-2.0 |
 | [sqlfluff/sqlfluff](https://github.com/sqlfluff/sqlfluff) | Lint SQL strings using the sqlfluff CLI (and report the installed sqlfluff version) | `pip install sqlfluff==4.4.0` | MIT |
 | [svg/svgo](https://github.com/svg/svgo) | Optimize SVG files using the local svgo CLI (minify a file or an SVG string) | `npm install svgo@4.1.0` | MIT |

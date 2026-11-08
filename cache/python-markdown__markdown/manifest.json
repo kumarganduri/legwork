@@ -1,0 +1,28 @@
+{
+  "source_repo_url": "https://github.com/Python-Markdown/markdown",
+  "commit_sha": "40eca048f57456d855a491e7f94ba215594f3f57",
+  "synthesis_date": "2026-11-08T11:37:39+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-3-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:38:57+00:00"
+  },
+  "entrypoint": "Convert Markdown text to HTML using Python-Markdown.",
+  "install_command": "pip install Markdown==3.11.3",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "render_markdown",
+    "arguments": {
+      "text": "# Tide tables\n\nHigh water is at **06:12**."
+    },
+    "expect_contains": [
+      "<h1>Tide tables</h1>",
+      "<strong>06:12</strong>"
+    ],
+    "derived_from": "a # line is a level-one heading and **text** is strong emphasis in Markdown"
+  }
+}

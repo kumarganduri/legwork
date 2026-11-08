@@ -1,0 +1,28 @@
+{
+  "source_repo_url": "https://github.com/miurahr/py7zr",
+  "commit_sha": "0687821a549e234887fdbf53d3fb5808545a4156",
+  "synthesis_date": "2026-11-08T11:37:08+00:00",
+  "wrapper_language": "python",
+  "source_license": "LGPL",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:38:54+00:00"
+  },
+  "entrypoint": "Create, list, and extract .7z archives using the py7zr library",
+  "install_command": "pip install py7zr==1.1.4",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "list_7z",
+    "arguments": {
+      "archive_path": "{fixtures}/trip-notes.7z"
+    },
+    "expect_contains": [
+      "trip/packing-list.txt",
+      "trip/ferry.txt"
+    ],
+    "derived_from": "trip-notes.7z was made for Legwork with exactly these two files under trip/"
+  }
+}

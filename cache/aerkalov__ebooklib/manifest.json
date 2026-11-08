@@ -1,0 +1,28 @@
+{
+  "source_repo_url": "https://github.com/aerkalov/ebooklib",
+  "commit_sha": "98eda5692bc6bc1f290c89da01f556b9ea134435",
+  "synthesis_date": "2026-11-08T11:31:21+00:00",
+  "wrapper_language": "python",
+  "source_license": "AGPL-3.0",
+  "license_flag": "copyleft: AGPL-3.0; confirm redistribution is OK",
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:36:47+00:00"
+  },
+  "entrypoint": "Read EPUB metadata, list/extract items, and create simple EPUBs using EbookLib",
+  "install_command": "pip install EbookLib==0.21",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "read_epub_metadata",
+    "arguments": {
+      "epub_path": "{fixtures}/field-notes.epub"
+    },
+    "expect_contains": [
+      "Field Notes from the Salt Flats",
+      "Legwork Tests"
+    ],
+    "derived_from": "field-notes.epub was generated for Legwork with this title and author set in its metadata"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source_repo_url": "https://github.com/daviddrysdale/python-phonenumbers",
+  "commit_sha": "cff5495e734886b7f65411bc24b3bc98a56e9acf",
+  "synthesis_date": "2026-11-08T11:37:09+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:38:53+00:00"
+  },
+  "entrypoint": "Parse, validate, format, and look up phone numbers (geocoder/carrier/timezone) via the phonenumbers library",
+  "install_command": "pip install phonenumbers==9.0.43",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "format_number",
+    "arguments": {
+      "number": "(650) 253-0000",
+      "fmt": "E164",
+      "region": "US"
+    },
+    "expect_contains": [
+      "+16502530000"
+    ],
+    "derived_from": "a US number written nationally; E.164 is +1 followed by its ten digits"
+  }
+}

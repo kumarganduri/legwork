@@ -1,0 +1,27 @@
+{
+  "source_repo_url": "https://github.com/scrapinghub/dateparser",
+  "commit_sha": "90544c0b0955e2c479e15cabecb8e7a1448b0476",
+  "synthesis_date": "2026-11-08T11:33:37+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-3-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:36:53+00:00"
+  },
+  "entrypoint": "Parse natural-language dates and search for dates in text using the dateparser library",
+  "install_command": "pip install \"dateparser[calendars]==1.5.0\"",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "parse_date",
+    "arguments": {
+      "text": "8 November 2026 at 14:30"
+    },
+    "expect_contains": [
+      "2026-11-08T14:30:00"
+    ],
+    "derived_from": "an unambiguous written date and time; its ISO form follows directly"
+  }
+}

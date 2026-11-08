@@ -1,0 +1,29 @@
+{
+  "source_repo_url": "https://github.com/ianare/exif-py",
+  "commit_sha": "a69bf74770caf6b333221658f5092ed69f99faac",
+  "synthesis_date": "2026-11-08T11:33:39+00:00",
+  "wrapper_language": "python",
+  "source_license": "BSD-3-Clause",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:36:49+00:00"
+  },
+  "entrypoint": "Read EXIF metadata (camera, date taken, GPS) from photos and image files, and extract embedded thumbnails, using the ExifRead library",
+  "install_command": "pip install ExifRead==3.5.1",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "read_exif",
+    "arguments": {
+      "file_path": "{fixtures}/field-photo.jpg"
+    },
+    "expect_contains": [
+      "LegworkCam",
+      "Field Rig 7",
+      "2026-11-08 09:30:00"
+    ],
+    "derived_from": "field-photo.jpg was generated for Legwork with Make, Model and DateTime (2026:11:08 09:30:00) written into its EXIF; ExifRead 3.5 prints that date with dashes"
+  }
+}

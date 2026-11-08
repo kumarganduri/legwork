@@ -1,0 +1,27 @@
+{
+  "source_repo_url": "https://github.com/pemistahl/lingua-py",
+  "commit_sha": "754ce21122c083a7200763015fdaf7cda8d85453",
+  "synthesis_date": "2026-11-08T11:37:18+00:00",
+  "wrapper_language": "python",
+  "source_license": "Apache-2.0",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:38:56+00:00"
+  },
+  "entrypoint": "Offline language detection (single or mixed-language) for given text using Lingua",
+  "install_command": "pip install lingua-language-detector==2.2.0",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "detect_language",
+    "arguments": {
+      "text": "Le chat dort sur le canapé depuis ce matin, et il ne veut pas se réveiller."
+    },
+    "expect_contains": [
+      "FRENCH"
+    ],
+    "derived_from": "the sentence was written in French for this test"
+  }
+}

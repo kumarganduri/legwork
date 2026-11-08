@@ -1,0 +1,29 @@
+{
+  "source_repo_url": "https://github.com/barrust/pyspellchecker",
+  "commit_sha": "14ec86570f5cebb5ee2f57499493471fe670dadb",
+  "synthesis_date": "2026-11-08T11:33:55+00:00",
+  "wrapper_language": "python",
+  "source_license": "MIT",
+  "license_flag": null,
+  "llm_model": "gpt-5",
+  "smoke_test": {
+    "result": "passed",
+    "check": "wrapper self-test (python wrapper.py) in the Legwork sandbox, network off",
+    "ran_at": "2026-11-08T11:36:51+00:00"
+  },
+  "entrypoint": "Offline spellchecking for words/text (find misspellings, best correction, and candidate suggestions) using pyspellchecker",
+  "install_command": "pip install pyspellchecker==0.9.1",
+  "mcp_sdk": "mcp<2",
+  "known_answer": {
+    "tool": "misspellings_in_text",
+    "arguments": {
+      "text": "Please recieve the pakage before the meeting on Wensday."
+    },
+    "expect_contains": [
+      "recieve",
+      "pakage",
+      "wensday"
+    ],
+    "derived_from": "the sentence was written with recieve, pakage and Wensday misspelled on purpose; the checker lowercases words"
+  }
+}
