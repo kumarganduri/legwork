@@ -102,9 +102,23 @@ def test_rate_limited_api_falls_back_to_git(code):
 def test_network_failure_raises_repo_access_error(failure):
     """A read timeout isn't a URLError; it must still say GitHub was
     unreachable rather than escape as a bare TimeoutError."""
-    with patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=failure):
-        with pytest.raises(RepoAccessError, match="Couldn't reach GitHub"):
-            check_repo("owner/repo")
+    with (
+        patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=failure),
+        patch("legwork.repo_fetcher.remote_head_sha", side_effect=RepoAccessError("no")),
+        pytest.raises(RepoAccessError, match="Couldn't reach GitHub"),
+    ):
+        check_repo("owner/repo")
+
+
+def test_api_timeout_falls_back_to_git():
+    """GitHub's anonymous API timed out for hours on 2026-11-08 while git
+    still answered; a reachable public repo is still confirmed."""
+    with (
+        patch("legwork.repo_fetcher.urllib.request.urlopen", side_effect=TimeoutError("The read operation timed out")),
+        patch("legwork.repo_fetcher.remote_head_sha", return_value="a" * 40) as ls_remote,
+    ):
+        assert check_repo("owner/repo") == RepoRef("owner", "repo")
+    ls_remote.assert_called_once_with("https://github.com/owner/repo.git")
 
 
 def test_200_returns_repo_ref():
