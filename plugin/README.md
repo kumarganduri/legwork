@@ -32,7 +32,7 @@ claude plugin install legwork@legwork
 
 - **Runs**: code from the GitHub repos you approve. Each repo's install step runs in the sandbox with network on, so it can download packages, and with no access to your files. The installed tool runs in the sandbox with only the folder above and no network.
 - **Contacts**: the GitHub API (`api.github.com`) to search; `github.com` to clone the repos you approve; `raw.githubusercontent.com` for the Legwork cache of reviewed wrappers; and whatever package indexes a repo's install step uses, such as PyPI or npm. Legwork records the hosts each install reached.
-- **For a repo not in the cache**: Legwork sends that repo's README and any build errors to the model provider you configure yourself (an OpenAI-compatible endpoint and key in `~/.legwork.env`; see the main README). Without a key, only the 37 cached tools can be installed.
+- **For a repo not in the cache**: Legwork sends that repo's README and any build errors to the model provider you configure yourself (an OpenAI-compatible endpoint and key in `~/.legwork.env`; see the main README). Without a key, only the 47 cached tools can be installed.
 - **Stores**: builds and records in `~/.legwork`, and files the tools make in `~/Legwork/outputs`, on your computer.
 
 ## Privacy
