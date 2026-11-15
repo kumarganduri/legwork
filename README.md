@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/legwork-mcp)](https://pypi.org/project/legwork-mcp/)
 [![CI](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml/badge.svg)](https://github.com/kumarganduri/legwork/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Listed on mcpservers.org](https://mcpservers.org/badge.svg)](https://mcpservers.org/servers/kumarganduri/legwork)
 
 **Your AI finds the open-source tool it needs on GitHub. Legwork installs it in a sandbox.**
 
