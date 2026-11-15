@@ -245,13 +245,18 @@ def scan_file(path: Path) -> list[Finding]:
     """Parse and scan one Python file. Returns an empty list for files that
     fail to parse (a file that isn't valid Python isn't in scope for a
     Python-AST scanner — noted as a scope limit, not silently ignored)."""
+    return _scan_python(path)[0]
+
+
+def _scan_python(path: Path) -> tuple[list[Finding], str | None]:
+    """(findings, why the file wasn't analysed, if it wasn't)."""
     try:
         source = path.read_text(encoding="utf-8", errors="replace")
         with warnings.catch_warnings():  # the repo's own SyntaxWarnings are noise here
             warnings.simplefilter("ignore")
             tree = ast.parse(source, filename=str(path))
     except (SyntaxError, ValueError, UnicodeDecodeError, RecursionError, MemoryError):
-        return []
+        return [], "this Python can't parse it"
     visitor = _Visitor(path)
     try:
         visitor.visit(tree)
@@ -260,8 +265,8 @@ def scan_file(path: Path) -> list[Finding]:
         # resolvent_lookup.py crashed the scan, 2026-10-01). Retry with room.
         visitor = _Visitor(path)
         if not _visit_deep(visitor, tree):
-            return [Finding(path, 0, "too-deep-to-scan", "nested too deeply to scan")]
-    return visitor.finalize()
+            return [Finding(path, 0, "too-deep-to-scan", "nested too deeply to scan")], None
+    return visitor.finalize(), None
 
 
 def _visit_deep(visitor: ast.NodeVisitor, tree: ast.AST) -> bool:
@@ -345,8 +350,13 @@ def _looks_bundled(path: Path, text: str) -> bool:
 
 
 def scan_js_file(path: Path) -> list[Finding]:
+    return _scan_js(path)[0]
+
+
+def _scan_js(path: Path) -> tuple[list[Finding], str | None]:
+    """(findings, why the file wasn't analysed, if it wasn't)."""
     if path.stat().st_size > _JS_MAX_BYTES:
-        return []
+        return [], f"larger than {_JS_MAX_BYTES // (1024 * 1024)} MB"
     text = path.read_text(encoding="utf-8", errors="replace")
     findings: list[Finding] = []
 
@@ -373,7 +383,7 @@ def scan_js_file(path: Path) -> list[Finding]:
             add(pattern, match, detail)
     if _looks_bundled(path, text):
         findings = [f for f in findings if f.pattern in _STRONG_PATTERNS]
-    return findings
+    return findings, None
 
 
 def _iter_python_files(root: Path):
@@ -389,7 +399,7 @@ def _iter_python_files(root: Path):
 
 def _iter_source_files(root: Path):
     """(path, scanner) for every Python and JS/TS file worth scanning."""
-    yield from ((path, scan_file) for path in _iter_python_files(root))
+    yield from ((path, _scan_python) for path in _iter_python_files(root))
     for path in sorted(root.rglob("*")):
         if (
             path.suffix in _JS_SUFFIXES
@@ -397,7 +407,7 @@ def _iter_source_files(root: Path):
             and not path.is_symlink()
             and not any(part in _SKIP_DIRS for part in path.relative_to(root).parts)
         ):
-            yield path, scan_js_file
+            yield path, _scan_js
 
 
 def is_blocking(findings: list[Finding]) -> bool:
@@ -414,8 +424,37 @@ def scan_repo(root: Path) -> list[Finding]:
     files (not just blocking ones) — callers decide what to do with them."""
     all_findings: list[Finding] = []
     for path, scanner in _iter_source_files(root):
-        all_findings.extend(scanner(path))
+        all_findings.extend(scanner(path)[0])
     return all_findings
+
+
+@dataclass(frozen=True)
+class FileResult:
+    """What the scan did with one file: `skipped` says why it wasn't
+    analysed (and then it has no findings, which is not the same as clean)."""
+
+    file: Path
+    kind: str  # "python" or "javascript"
+    findings: tuple[Finding, ...]
+    skipped: str | None
+
+    @property
+    def blocks(self) -> bool:
+        return is_blocking(list(self.findings))
+
+
+def scan_files(root: Path) -> list[FileResult]:
+    """Every Python and JS/TS file under `root`, each with its own result,
+    for a receipt (`legwork scan`): the same files and the same blocking
+    rule as scan(), which stops at the first file that blocks."""
+    return [
+        FileResult(path, "python" if scanner is _scan_python else "javascript", *_as_result(scanner(path)))
+        for path, scanner in _iter_source_files(root)
+    ]
+
+
+def _as_result(scanned: tuple[list[Finding], str | None]) -> tuple[tuple[Finding, ...], str | None]:
+    return tuple(scanned[0]), scanned[1]
 
 
 def scan(root: Path) -> None:
@@ -424,7 +463,7 @@ def scan(root: Path) -> None:
     file so the error names the specific offending file, not just "somewhere
     in this repo"."""
     for path, scanner in _iter_source_files(root):
-        findings = scanner(path)
+        findings, _skipped = scanner(path)
         if is_blocking(findings):
             patterns = ", ".join(sorted({f.pattern for f in findings}))
             # Relative to the repo: the build folder's absolute path is noise.

@@ -14,6 +14,9 @@
     legwork contribute <repo> [--out DIR]
                             write the built wrapper + manifest as a public-cache
                             entry (default DIR: ./cache), ready for a PR
+    legwork scan <repo> [--commit SHA] [--json]
+                            what the pre-install scan finds in a repo, as a
+                            receipt; installs and runs nothing
 
 `build` needs LEGWORK_LLM_ENDPOINT / LEGWORK_LLM_API_KEY / LEGWORK_LLM_MODEL
 set (an OpenAI-compatible endpoint). `serve` needs no model at all — it's
@@ -34,6 +37,8 @@ import re
 import shlex
 import shutil
 import sys
+import tempfile
+import time
 import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
@@ -43,6 +48,7 @@ from legwork import (  # noqa: F401 — cache_reader/repo_fetcher kept as patch 
     cache_reader,
     cache_writer,
     local_store,
+    receipts,
     repo_fetcher,
     retry_loop,
     sandbox_runner,
@@ -50,6 +56,7 @@ from legwork import (  # noqa: F401 — cache_reader/repo_fetcher kept as patch 
 from legwork.repo_fetcher import (
     InvalidRepoURLError,
     RepoAccessError,
+    RepoNotFoundError,
     RepoRef,
     parse_repo_url,
 )
@@ -385,6 +392,32 @@ def cmd_clean(repo: str | None, everything: bool, dry_run: bool) -> int:
     return 0
 
 
+def cmd_scan(repo: str, commit: str | None, as_json: bool) -> int:
+    """Clone a repo and print what the pre-install scan finds in it: the
+    check an install runs, without installing anything or running any of the
+    repo's code. The receipt goes to stdout; see receipts.exit_code."""
+    try:
+        ref = parse_repo_url(repo)
+    except InvalidRepoURLError as exc:
+        _err(str(exc))
+        return 1
+    version, now = _installed_version(), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with tempfile.TemporaryDirectory(prefix="legwork-scan-") as work:
+        try:
+            clone = repo_fetcher.fetch(repo, Path(work) / "repo", commit).path
+            receipt = receipts.build(clone, ref.slug, repo_fetcher.head_sha(clone), version, now)
+        except (RepoAccessError, RepoNotFoundError, InvalidRepoURLError) as exc:
+            receipt = receipts.incomplete(ref.slug, commit, version, now, str(exc))
+    print(json.dumps(receipt.to_dict(), indent=2) if as_json else receipts.render_text(receipt))
+    return receipts.exit_code(receipt)
+
+
+def _full_sha(value: str) -> str:
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", value):
+        raise argparse.ArgumentTypeError("give the full 40-character commit SHA")
+    return value.lower()
+
+
 def _installed_version() -> str:
     try:
         return importlib.metadata.version(DIST_NAME)
@@ -394,7 +427,7 @@ def _installed_version() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "show", "log")
+    commands = ("build", "serve", "contribute", "clean", "find", "hub", "doctor", "show", "log", "scan")
     if argv and argv[0] not in (*commands, "-h", "--help", "-V", "--version"):
         if not argv[0].startswith("-") and "/" not in argv[0]:
             # "legwork doctr" said "Invalid repo URL: 'doctr'" (fresh QA, 2026-10-03)
@@ -447,6 +480,13 @@ def main(argv: list[str] | None = None) -> int:
     show.add_argument("repo", help="github.com URL or owner/repo")
     log = sub.add_parser("log", help="a tool's record: hosts its installs reached, what the sandbox blocked; kept outside the sandbox")
     log.add_argument("repo", help="github.com URL or owner/repo")
+    scan = sub.add_parser(
+        "scan", help="what the pre-install scan finds in a repo: a receipt, with nothing installed or run",
+        description="Exits 0 unless the scan would block an install (3) or could not complete (1).",
+    )
+    scan.add_argument("repo", help="github.com URL or owner/repo")
+    scan.add_argument("--commit", type=_full_sha, metavar="SHA", help="scan this commit (full SHA) instead of the default branch as it is now")
+    scan.add_argument("--json", action="store_true", help="print the receipt as JSON")
     args = parser.parse_args(argv)
 
     if args.command == "build":
@@ -467,6 +507,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_show(args.repo)
     if args.command == "log":
         return cmd_log(args.repo)
+    if args.command == "scan":
+        return cmd_scan(args.repo, args.commit, args.json)
     return cmd_serve(args.repo, args.allow_read, args.allow_net)
 
 
