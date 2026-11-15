@@ -421,12 +421,17 @@ class Hub:
             arguments = _expand_home(arguments)
             watching = self._denials.available()
             if watching:  # what the sandbox blocks during this call (#5)
+                root = item.client.proc.pid
                 self._denials.start()
-                self._denials.watch(item.client.proc.pid)
+                self._denials.watch(root)
                 since = time.monotonic()
                 with self._lock:
-                    self._call_starts.setdefault(item.client.proc.pid, []).append(since)
-            result = _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
+                    self._call_starts.setdefault(root, []).append(since)
+            try:
+                result = _cap_text(item.client.call_tool(tool, arguments, timeout=TOOL_TIMEOUT_SECONDS))
+            finally:
+                if watching:
+                    self._denials.done(root)
             if watching:
                 self._report_denials(item, tool, since, result)
             # A failed call's leftovers aren't results: a failed moviepy trim

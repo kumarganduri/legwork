@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import subprocess
@@ -69,8 +70,57 @@ def test_a_tools_blocked_network_attempt_is_attributed_to_it(tmp_path, monkeypat
     watcher.watch(child.pid)
     since = time.monotonic()
     child.wait(timeout=60)
+    watcher.done(child.pid)
     time.sleep(1)
     found = dict(watcher.collect(child.pid, since))
     watcher.close()
     assert "a network connection (port 443)" in found
     assert watcher.collect(999999, since) == []
+
+
+def _denied(pid: int) -> str:
+    return json.dumps({"eventMessage": f"Sandbox: curl({pid}) deny(1) network-outbound remote:*:443"})
+
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="noting a tool's children uses macOS's libproc")
+def test_a_denial_from_a_child_that_already_exited_is_still_attributed():
+    """The line for a blocked curl arrives about 10 ms before curl is gone on
+    a fast Mac and after it on a slow one, when no process list has it any
+    more and the denial was dropped (a CI failure, 2026-11-14). Children
+    noted while the call was in flight still say whose it was."""
+    watcher = denials.Watcher()  # no log stream: the line is fed in below
+    tool = subprocess.Popen(
+        [sys.executable, "-c", "import subprocess, time\nc = subprocess.Popen(['/bin/sleep', '0.3'])\n"
+                               "print(c.pid, flush=True)\nc.wait()\ntime.sleep(30)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        since = time.monotonic()
+        watcher.watch(tool.pid)
+        child = int(tool.stdout.readline())
+        deadline = time.monotonic() + 10
+        while subprocess.run(["/bin/ps", "-p", str(child)], capture_output=True).returncode == 0:
+            assert time.monotonic() < deadline, "the child never exited"
+            time.sleep(0.05)
+        watcher.done(tool.pid)
+        watcher._handle(_denied(child))
+        assert watcher.collect(tool.pid, since) == [("a network connection (port 443)", 1)]
+    finally:
+        watcher.close()
+        tool.kill()
+
+
+def test_a_child_noted_long_ago_is_not_believed():
+    """Process ids are reused: a note older than the keep time must not pin
+    another program's denial on a tool."""
+    watcher = denials.Watcher()
+    gone = 999_999  # no such process
+    with watcher._lock:
+        watcher._roots.add(4242)
+        watcher._seen[gone] = (4242, time.monotonic() - denials.SAMPLE_KEEP_SECONDS - 1)
+    watcher._handle(_denied(gone))
+    assert watcher.collect(4242, 0.0) == []
+    with watcher._lock:
+        watcher._seen[gone] = (4242, time.monotonic())
+    watcher._handle(_denied(gone))
+    assert watcher.collect(4242, 0.0) == [("a network connection (port 443)", 1)]

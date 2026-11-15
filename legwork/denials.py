@@ -13,13 +13,18 @@ parent-process chain), and drops the noise every sandboxed program makes
 network attempt, a read or write outside what the tool may touch, a signal
 to another process, goes into the reply and the tool's record.
 
-It's best effort: a child process that exits before Legwork looks up its
-parent can't be attributed. Linux has no such log: SeccompWatcher below
-records network attempts there instead (seccomp_notify.py).
+A denial's line arrives after the process that was denied may have exited
+(a blocked `curl` is gone about 10 ms later), so while a call is in flight
+the watcher notes each tool's child processes as they come and go. It's
+still best effort: a child that lives less than a few milliseconds can be
+missed. Linux has no such log: SeccompWatcher below records network
+attempts there instead (seccomp_notify.py).
 """
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.util
 import json
 import os
 import platform
@@ -38,6 +43,12 @@ _PREDICATE = 'process == "kernel" AND (eventMessage BEGINSWITH "Sandbox: " OR ev
 _NOISE_WRITES = ("/dev/dtracehelper", "/dev/tty", "/dev/null")
 _NOISE_READ_PARTS = ("/.CFUserTextEncoding", "/Library/Preferences/")
 RECORD_ENV = "LEGWORK_RECORD_DENIALS"  # "off" to not watch
+# While a call is in flight, how often a tool's child processes are noted,
+# and how long a noted one is believed after it was last seen. Lines arrive
+# up to about 1.5 s late; process ids are reused eventually, and a stale one
+# would pin another app's denial on a tool.
+SAMPLE_SECONDS = 0.005
+SAMPLE_KEEP_SECONDS = 10.0
 
 
 def describe(op: str, target: str) -> str | None:
@@ -116,6 +127,9 @@ class SeccompWatcher(_Events):
     def watch(self, pid: int) -> None:
         pass
 
+    def done(self, pid: int) -> None:
+        pass
+
     def adopt(self, root: int, listener: int, alive=lambda: True) -> None:
         """Answer `listener` for the tool whose process is `root`."""
         def report(text: str) -> None:
@@ -126,6 +140,28 @@ class SeccompWatcher(_Events):
 
     def close(self) -> None:
         pass  # each listener closes when its sandbox exits
+
+
+_libproc = None
+
+
+def _children(pid: int) -> list[int] | None:
+    """The process ids of `pid`'s children right now, from macOS's libproc
+    (about 10 microseconds), or None where that isn't available."""
+    global _libproc
+    if _libproc is None:
+        try:
+            lib = ctypes.CDLL(ctypes.util.find_library("proc") or "libproc.dylib")
+            lib.proc_listchildpids.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+            lib.proc_listchildpids.restype = ctypes.c_int
+            _libproc = lib
+        except (OSError, AttributeError):
+            _libproc = False
+    if not _libproc:
+        return None
+    buffer = (ctypes.c_int * 256)()
+    count = _libproc.proc_listchildpids(pid, buffer, ctypes.sizeof(buffer))
+    return [child for child in buffer[:max(0, min(count, 256))] if child > 0]
 
 
 def watcher() -> Watcher | SeccompWatcher:
@@ -146,6 +182,12 @@ class Watcher(_Events):
         self._proc: subprocess.Popen | None = None
         self._stream = None
         self._ready = threading.Event()
+        # Calls in flight per tool, and the children seen under them:
+        # pid -> (parent, when last seen).
+        self._busy: Counter[int] = Counter()
+        self._seen: dict[int, tuple[int, float]] = {}
+        self._sampling = False
+        self._closed = False
 
     @staticmethod
     def available() -> bool:
@@ -174,11 +216,61 @@ class Watcher(_Events):
         self._ready.wait(timeout=5)
 
     def watch(self, pid: int) -> None:
+        """A call to the tool whose process is `pid` is starting."""
         with self._lock:
             self._roots.add(pid)
+            self._busy[pid] += 1
+            start = not self._sampling and not self._closed and _children(os.getpid()) is not None
+            self._sampling = self._sampling or start
+        if start:
+            threading.Thread(target=self._sample, daemon=True).start()
+
+    def done(self, pid: int) -> None:
+        """That call has returned."""
+        with self._lock:
+            self._busy[pid] -= 1
+            if self._busy[pid] <= 0:
+                del self._busy[pid]
+
+    def _sample(self) -> None:
+        """Note the processes under each tool with a call in flight, until
+        none has had one for a moment: the last children are exiting then."""
+        idle_since = None
+        while True:
+            with self._lock:
+                roots = list(self._busy)
+                if self._closed:
+                    self._sampling = False
+                    return
+            now = time.monotonic()
+            if roots:
+                idle_since = None
+            else:
+                idle_since = idle_since or now
+                if now - idle_since > 0.25:
+                    with self._lock:
+                        if not self._busy:
+                            self._sampling = False
+                            self._seen = {p: v for p, v in self._seen.items() if now - v[1] < SAMPLE_KEEP_SECONDS}
+                            return
+                time.sleep(SAMPLE_SECONDS)
+                continue
+            found = {}
+            queue = list(roots)
+            while queue and len(found) < 4096:
+                parent = queue.pop()
+                for child in _children(parent) or ():
+                    if child not in found:
+                        found[child] = (parent, now)
+                        queue.append(child)
+            if found:
+                with self._lock:
+                    self._seen.update(found)
+            time.sleep(SAMPLE_SECONDS)
 
     def close(self) -> None:
         with self._lock:
+            self._closed = True
             proc, self._proc = self._proc, None
             stream, self._stream = self._stream, None
         if proc is not None:
@@ -238,12 +330,18 @@ class Watcher(_Events):
         return root
 
     def _walk(self, pid: int) -> int | None:
-        seen, current = set(), pid
+        seen, current, now = set(), pid, time.monotonic()
         while current and current not in seen:
             if current in self._roots:
                 return current
             seen.add(current)
-            current = self._parent.get(current, 0)
+            # A child noted during a call first: it may have exited before
+            # this line arrived, and then no `ps` snapshot has it.
+            noted = self._seen.get(current)
+            if noted is not None and now - noted[1] < SAMPLE_KEEP_SECONDS:
+                current = noted[0]
+            else:
+                current = self._parent.get(current, 0)
         return None
 
     def _refresh(self) -> bool:
