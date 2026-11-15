@@ -91,6 +91,16 @@ Four days earlier, before the scan existed, one of the first eight repos
 tried by hand had run a hidden payload from the same template on the
 author's Mac. That makes three of the first 18: [the story](https://dev.to/kumarganduri/three-of-the-first-18-github-repos-i-tested-were-malware-4gco).
 
+To check a repo yourself, with nothing installed and none of its code run:
+
+```sh
+uvx legwork-mcp scan owner/repo
+```
+
+It prints which files it analysed, which it couldn't, and each file and
+pattern it found. A result with no findings means no covered patterns were
+found, not that the repo is safe.
+
 The scan has to stay quiet on ordinary code too. Run over the 150
 most-starred Python, JavaScript and TypeScript repos on GitHub
 (2026-10-01), it blocks one: lodash, for a vendored 2009 debugging script
@@ -506,6 +516,7 @@ found so far with the test that keeps it fixed.
 | `legwork owner/repo` | Build a wrapper (also `legwork build`), from the cache when possible. Accepts `owner/repo` or a github.com URL. `--no-cache` always writes a fresh one |
 | `legwork serve owner/repo` | Run the built wrapper as an MCP server over stdio. Needs no model key. `--allow-read PATH`, `--allow-net` grant access (see Permissions) |
 | `legwork contribute owner/repo [--out DIR]` | Write the build as a public-cache entry, ready for a PR (below) |
+| `legwork scan owner/repo [--commit SHA] [--json]` | What the pre-install scan finds in a repo, as a receipt: the commit, the files analysed and skipped, and each file and pattern found. Installs and runs nothing, and needs no model key. Exits 3 if an install would be blocked, 1 if the scan couldn't complete |
 | `legwork doctor` | Check this machine is ready: sandbox, cache, key, search limit, client configs. Read-only; prints no keys. Paste it into bug reports |
 | `legwork show owner/repo` | What a built tool came from: the commit that was scanned, the wrapper's hash, the install command and every package it installed |
 | `legwork log owner/repo` | A tool's record, written by Legwork outside the sandbox: the hosts each install reached, and what the sandbox blocked while it ran (on Linux, network attempts) |

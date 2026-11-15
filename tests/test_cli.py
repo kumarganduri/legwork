@@ -279,3 +279,76 @@ def test_build_with_no_answer_runs_nothing(capsys):
     with patch("legwork.cli.retry_loop.run", side_effect=_run_asking), patch("builtins.input", side_effect=EOFError):
         assert cli.cmd_build("owner/repo") == 1
     assert "you declined it" in capsys.readouterr().err
+
+
+# --- scan ----------------------------------------------------------------------
+
+
+def _fake_clone(files: dict[str, str]):
+    """Stands in for the fetcher: writes `files` where the clone would be."""
+    from legwork.repo_fetcher import ClonedRepo
+
+    def fetch(url, dest, commit=None):
+        dest.mkdir(parents=True)
+        for name, text in files.items():
+            (dest / name).write_text(text)
+        return ClonedRepo(ref=REF, path=dest)
+
+    return fetch
+
+
+def _scan(argv: list[str], files: dict[str, str], capsys) -> tuple[int, dict]:
+    with (
+        patch("legwork.cli.repo_fetcher.fetch", side_effect=_fake_clone(files)) as fetch,
+        patch("legwork.cli.repo_fetcher.head_sha", return_value="b" * 40),
+    ):
+        code = cli.main(["scan", *argv, "--json"])
+    _scan.fetch = fetch
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_scan_prints_a_receipt_and_installs_nothing(tmp_path, capsys):
+    code, receipt = _scan(["owner/repo"], {"a.py": "x = 1\n"}, capsys)
+    assert code == 0 and receipt["verdict"] == "clean" and receipt["commit"] == "b" * 40
+    assert receipt["repo"] == "owner/repo" and receipt["analysed"] == {"python": 1, "javascript": 0}
+    assert not (tmp_path / "wrappers").exists()  # nothing was built or recorded
+
+
+def test_scan_exits_3_for_a_repo_an_install_would_refuse(capsys):
+    payload = (Path(__file__).parent / "fixtures" / "ai_data_extractor_payload.py").read_text()
+    code, receipt = _scan(["owner/repo"], {"extract.py": payload}, capsys)
+    assert code == 3 and receipt["verdict"] == "blocked"
+    assert receipt["summary"] == "blocked: Legwork would refuse to install this commit"
+
+
+def test_scan_at_a_commit_scans_that_commit(capsys):
+    sha = "C" * 40
+    code, _ = _scan(["owner/repo", "--commit", sha], {"a.py": "x = 1\n"}, capsys)
+    assert code == 0 and _scan.fetch.call_args.args[2] == sha.lower()
+
+
+def test_scan_wants_a_full_commit_sha(capsys):
+    """A short SHA or a branch name could mean a different commit tomorrow."""
+    with pytest.raises(SystemExit) as stopped:
+        cli.main(["scan", "owner/repo", "--commit", "abc123"])
+    assert stopped.value.code == 2 and "40-character" in capsys.readouterr().err
+
+
+def test_scan_of_a_repo_it_cannot_reach_is_incomplete_not_clean(capsys):
+    from legwork.repo_fetcher import RepoNotFoundError
+
+    with patch("legwork.cli.repo_fetcher.fetch", side_effect=RepoNotFoundError("Repo not found or private: owner/repo")):
+        code = cli.main(["scan", "owner/repo", "--json"])
+    receipt = json.loads(capsys.readouterr().out)
+    assert code == 1 and receipt["verdict"] == "incomplete" and receipt["commit"] is None
+    assert receipt["summary"] == "scan could not complete: Repo not found or private: owner/repo"
+
+
+def test_scan_as_text_names_the_file_and_pattern(capsys):
+    with (
+        patch("legwork.cli.repo_fetcher.fetch", side_effect=_fake_clone({"setup.py": "exec(open('v.py').read())\n"})),
+        patch("legwork.cli.repo_fetcher.head_sha", return_value="b" * 40),
+    ):
+        assert cli.main(["scan", "owner/repo"]) == 0
+    out = capsys.readouterr().out
+    assert "not blocked: 1 weaker pattern noted" in out and "setup.py:1: literal-exec-eval" in out
