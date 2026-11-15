@@ -8,6 +8,10 @@
 
 **Your AI finds the open-source tool it needs on GitHub. Legwork installs it in a sandbox.**
 
+Three of the first 18 GitHub repos we tried while building it carried hidden
+malware, two of them among that week's ten most-starred new AI repos.
+Legwork's scan blocked those two in about a second. [The story](https://dev.to/kumarganduri/three-of-the-first-18-github-repos-i-tested-were-malware-4gco).
+
 https://github.com/user-attachments/assets/9e9b80b5-99ff-4d21-b689-74655418f23d
 
 <p align="center"><sub>A real run in Claude Desktop. The 25-second install is sped up; the malware repos' names are masked.</sub></p>
@@ -23,30 +27,34 @@ the folders you allow.
 claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads
 ```
 
-Then just ask. Four to try first, all from the [public cache](cache/), so
-they need no API key:
+It needs macOS or Linux and [uv](https://docs.astral.sh/uv/). It's free and
+MIT-licensed, and the 47 tools in the [public cache](cache/) need no API
+key. For Claude Desktop, Cursor, Codex and other clients, and whether each
+asks before an install, see [below](#let-your-ai-find-its-own-tools-hub).
+
+Then just ask. Four to try first:
 
 - *"Use Legwork to transcribe ~/Downloads/memo.m4a."* Any voice memo, mp3 or
-  video, offline. Best in English and other widely spoken languages; its
-  small built-in model is unreliable for languages like Telugu.
+  video, offline. Best in English and other widely spoken languages.
 - *"Use Legwork to remove the background from ~/Downloads/photo.jpg."*
 - *"Use Legwork to pull the tables out of ~/Downloads/report.pdf."*
 - *"Use Legwork to make a QR code for https://github.com/kumarganduri/legwork."*
-
-Saying "use Legwork" matters in Claude Desktop: without it, Claude may reach
-for its own cloud code sandbox, which can't see the files on your computer
-unless you attach them.
 
 Your AI finds the tool ([faster-whisper](https://github.com/SYSTRAN/faster-whisper),
 [rembg](https://github.com/danielgatis/rembg),
 [pdfplumber](https://github.com/jsvine/pdfplumber),
 [qrcode](https://github.com/lincolnloop/python-qrcode)), you approve the
 install, and about a minute later it does the job. Files a tool makes are
-copied to `~/Legwork/outputs/`. On macOS, the first time a tool reads
-Downloads, macOS asks whether `uvx` may access it; allow it once. If
-something doesn't work, `uvx legwork-mcp doctor` checks your setup. Or
-build one tool yourself: `uvx legwork-mcp owner/repo` (a model key for repos
-not in the cache).
+copied to `~/Legwork/outputs/`.
+
+- **In Claude Desktop, say "use Legwork".** Without it, Claude may reach
+  for its own cloud code sandbox, which can't see the files on your
+  computer unless you attach them.
+- **On macOS**, the first time a tool reads Downloads, macOS asks whether
+  `uvx` may access it; allow it once.
+- **If something doesn't work**, `uvx legwork-mcp doctor` checks your setup.
+- **To remove it**, run `claude mcp remove legwork`, then delete
+  `~/.legwork` (its builds and records) and, if you like, `~/Legwork/outputs`.
 
 ## Why not just ask your AI to install it?
 
@@ -78,7 +86,11 @@ at the time, carried the same byte-identical obfuscated dropper under different
 file names. Legwork's pre-install scan refused both in about a second.
 Nothing from them was installed or run. Stars are not a trust signal.
 
-The tripwire has to stay quiet on ordinary code too. Run over the 150
+Four days earlier, before the scan existed, one of the first eight repos
+tried by hand had run a hidden payload from the same template on the
+author's Mac. That makes three of the first 18: [the story](https://dev.to/kumarganduri/three-of-the-first-18-github-repos-i-tested-were-malware-4gco).
+
+The scan has to stay quiet on ordinary code too. Run over the 150
 most-starred Python, JavaScript and TypeScript repos on GitHub
 (2026-10-01), it blocks one: lodash, for a vendored 2009 debugging script
 that really does run `eval(unescape(...))`.
@@ -195,7 +207,7 @@ acts), and the clients marked "asks" use those labels.
 | Client | Tested | Add Legwork | Before an install |
 |---|---|---|---|
 | Claude Code | ✅ | `claude mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
-| Claude Desktop | ✅ | JSON above | asks |
+| Claude Desktop | ✅ | [legwork.mcpb](https://github.com/kumarganduri/legwork/releases/latest/download/legwork.mcpb) (double-click), or the JSON above | asks |
 | Cursor | ✅ | JSON above | its default Auto-review mode lets an AI decide, and ran installs without asking in our test; to approve every install, set Settings → Agents → Approvals & Execution to Allowlist and leave `install_tool` off the list |
 | opencode | ✅ 1.18 | JSON above | asks only with the `permission` line above |
 | Codex CLI | ✅ 0.159 | `codex mcp add legwork -- uvx legwork-mcp hub --allow-read ~/Downloads` | asks |
@@ -214,7 +226,7 @@ legwork-mcp` and use the full path that `which legwork` prints, plus
 `hub ...`, as the command (desktop apps don't see your shell's `PATH`);
 `uv tool upgrade legwork-mcp` updates it.
 
-## Quick start
+## Build one tool from the command line
 
 You need **macOS or Linux** and [uv](https://docs.astral.sh/uv/). Tools in
 the [public cache](cache/) need nothing else. For any other repo you also
